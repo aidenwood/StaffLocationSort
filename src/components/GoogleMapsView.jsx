@@ -145,10 +145,10 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         icon: markerIcon,
         title: appointment.subject,
         label: {
-          text: shortAddress,
-          color: isHovered ? '#FF0505' : '#FFA600', // Red when hovered, orange normally
+          text: shortAddress.toUpperCase(),
+          color: isHovered ? '#FF0505' : '#000000', // Red when hovered, black normally
           fontSize: '11px',
-          fontWeight: '500',
+          fontWeight: 'bold',
           className: 'marker-label'
         },
         zIndex: 1000 + index
