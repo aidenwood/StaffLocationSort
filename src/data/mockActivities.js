@@ -59,12 +59,12 @@ export const loganLocations = [
   { address: "Algester Village Shopping Centre, Algester Road, Algester QLD 4115", lat: -27.6589, lng: 153.0445 }
 ];
 
-// Specific real addresses for Ross Mitchell's appointments today
+// Specific real addresses for Ross Mitchell's appointments today with corrected coordinates
 export const rossTodayAddresses = [
-  { address: "22 Arafura Avenue, Loganholme QLD 4129, Australia", lat: -27.6785, lng: 153.2019 },
-  { address: "14 Girralong Street, Eagleby QLD 4207, Australia", lat: -27.6925, lng: 153.2156 },
-  { address: "76 Kent St, Beenleigh QLD 4207, Australia", lat: -27.7089, lng: 153.2034 },
-  { address: "40 Sambit Street, Tanah Merah QLD 4128, Australia", lat: -27.6234, lng: 153.1789 }
+  { address: "22 Arafura Avenue, Loganholme QLD 4129, Australia", lat: -27.6773, lng: 153.2087 },
+  { address: "14 Girralong Street, Eagleby QLD 4207, Australia", lat: -27.6948, lng: 153.2144 },
+  { address: "76 Kent St, Beenleigh QLD 4207, Australia", lat: -27.7108, lng: 153.2034 },
+  { address: "40 Sambit Street, Tanah Merah QLD 4128, Australia", lat: -27.6029, lng: 153.1615 }
 ];
 
 // Generate activities for today and next 7 days

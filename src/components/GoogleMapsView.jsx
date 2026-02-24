@@ -35,6 +35,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       const newMap = new window.google.maps.Map(mapRef.current, {
         center: { lat: -27.6378, lng: 153.1094 }, // Logan Central
         zoom: 12,
+        gestureHandling: 'cooperative', // Prevent accidental panning
         styles: [
           {
             featureType: "all",
@@ -92,6 +93,8 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       // Initialize DirectionsRenderer for routes
       const renderer = new window.google.maps.DirectionsRenderer({
         suppressMarkers: true,
+        suppressInfoWindows: true,
+        preserveViewport: true, // Don't auto-fit the route to viewport
         polylineOptions: {
           strokeColor: '#3B82F6',
           strokeWeight: 3,
