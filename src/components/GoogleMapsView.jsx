@@ -129,7 +129,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       const isHovered = hoveredAppointment && hoveredAppointment.id === appointment.id;
       const markerIcon = {
         path: window.google.maps.SymbolPath.CIRCLE,
-        fillColor: isHovered ? '#EF4444' : '#3B82F6',
+        fillColor: '#00D3DD', // Cyan color for markers
         fillOpacity: 1,
         strokeColor: '#ffffff',
         strokeWeight: isHovered ? 4 : 3,
@@ -146,7 +146,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         title: appointment.subject,
         label: {
           text: shortAddress,
-          color: '#1f2937',
+          color: isHovered ? '#FF0505' : '#FFA600', // Red when hovered, orange normally
           fontSize: '11px',
           fontWeight: '500',
           className: 'marker-label'
@@ -202,7 +202,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         map,
         icon: {
           path: window.google.maps.SymbolPath.CIRCLE,
-          fillColor: '#EF4444',
+          fillColor: '#FF0505', // Red for potential booking
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 3,
