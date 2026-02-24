@@ -16,7 +16,7 @@ import GoogleMapsView from './GoogleMapsView';
 import { inspectors, getActivitiesByDate, mockActivities } from '../data/mockActivities';
 
 const InspectionDashboard = () => {
-  const [selectedInspector, setSelectedInspector] = useState(1); // Default to first inspector (Ross)
+  const [selectedInspector, setSelectedInspector] = useState(2); // Default to Ben Thompson for testing
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);

@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign
 import { 
   inspectors, 
   getActivitiesByInspectorAndDate, 
+  getActivitiesByInspector,
   getActivityTypeByKey,
   getInspectorById 
 } from '../data/mockActivities';
@@ -53,7 +54,14 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
   }, []);
 
   const getActivityForSlot = (inspector, date, timeSlot) => {
-    const activities = getActivitiesByInspectorAndDate(inspector.id, date);
+    // Use the same approach as GoogleMapsView - get all activities and filter
+    const allActivities = getActivitiesByInspector(inspector.id);
+    const dateString = format(date, 'yyyy-MM-dd');
+    const activities = allActivities.filter(activity => 
+      activity.due_date === dateString && !activity.done
+    );
+    
+    
     return activities.find(activity => {
       const activityTime = activity.due_time.substring(0, 5);
       const activityEndTime = calculateEndTime(activityTime, activity.duration.substring(0, 5));
@@ -78,7 +86,8 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
       return false; // Lunch break - unavailable
     }
     
-    return !getActivityForSlot(inspector, date, timeSlot);
+    const activity = getActivityForSlot(inspector, date, timeSlot);
+    return !activity;
   };
 
   const isLunchBreak = (timeSlot) => {
@@ -268,6 +277,7 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
   const currentInspector = selectedInspector 
     ? inspectors.find(inspector => inspector.id === selectedInspector)
     : inspectors[0];
+    
 
   // Calculate current time position
   const getCurrentTimePosition = () => {
@@ -379,6 +389,8 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
                     {/* Day Columns */}
                     {weekDays.map(day => {
                       const isToday = isSameDay(day, new Date());
+                      
+                      
                       return (
                         <div key={day.toISOString()} className="bg-white relative">
                           {/* Current Time Indicator */}

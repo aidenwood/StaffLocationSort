@@ -59,6 +59,7 @@ export const generateMockActivities = () => {
   const activities = [];
   const today = new Date();
   
+  
   // Generate activities for each inspector over the next 7 days
   inspectors.forEach((inspector, inspectorIndex) => {
     for (let day = 0; day < 7; day++) {
@@ -163,6 +164,7 @@ export const generateMockActivities = () => {
 
 export const mockActivities = generateMockActivities();
 
+
 // Helper functions for the UI
 export const getActivitiesByInspector = (inspectorId) => {
   return mockActivities.filter(activity => activity.owner_id === inspectorId);
@@ -175,9 +177,12 @@ export const getActivitiesByDate = (date) => {
 
 export const getActivitiesByInspectorAndDate = (inspectorId, date) => {
   const dateString = date.toISOString().split('T')[0];
-  return mockActivities.filter(
+  const filtered = mockActivities.filter(
     activity => activity.owner_id === inspectorId && activity.due_date === dateString
   );
+  
+  
+  return filtered;
 };
 
 export const getInspectorById = (id) => {
