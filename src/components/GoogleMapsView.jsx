@@ -144,12 +144,13 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         zIndex: 1000 + index
       });
 
-      // Add address label
+      // Add minimal address label (Google Maps style)
       const addressLabel = new window.google.maps.InfoWindow({
-        content: `<div style="background: none; border: none; box-shadow: none; padding: 2px 4px; font-size: 11px; font-weight: 500; color: #1f2937; background: rgba(255,255,255,0.9); border-radius: 3px;">${appointment.location.value.split(',')[0]}</div>`,
+        content: `<div style="background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.1); border-radius: 2px; padding: 1px 4px; font-size: 10px; font-family: Arial, sans-serif; color: #3c4043; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">${appointment.location.value.split(',')[0]}</div>`,
         disableAutoPan: true,
         closeBoxURL: "",
-        enableEventPropagation: true
+        enableEventPropagation: true,
+        pixelOffset: new window.google.maps.Size(0, -35) // Position above marker
       });
       addressLabel.open(map, marker);
 
