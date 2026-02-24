@@ -11,6 +11,14 @@ import {
 // Google Maps API Key - Must be set in environment variables
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
+// Debug logging for troubleshooting
+console.log('🗺️ Google Maps API Key Status:', {
+  hasKey: !!GOOGLE_MAPS_API_KEY,
+  keyLength: GOOGLE_MAPS_API_KEY?.length || 0,
+  keyPreview: GOOGLE_MAPS_API_KEY ? `${GOOGLE_MAPS_API_KEY.substring(0, 10)}...` : 'Not found',
+  environment: import.meta.env.MODE
+});
+
 if (!GOOGLE_MAPS_API_KEY) {
   console.error('❌ VITE_GOOGLE_MAPS_API_KEY environment variable is required');
 }
