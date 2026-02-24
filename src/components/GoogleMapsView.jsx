@@ -136,23 +136,23 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         scale: isHovered ? 15 : 12
       };
 
+      // Extract short address for label (first part before comma)
+      const shortAddress = appointment.location.value.split(',')[0];
+      
       const marker = new window.google.maps.Marker({
         position,
         map,
         icon: markerIcon,
         title: appointment.subject,
+        label: {
+          text: shortAddress,
+          color: '#1f2937',
+          fontSize: '11px',
+          fontWeight: '500',
+          className: 'marker-label'
+        },
         zIndex: 1000 + index
       });
-
-      // Add minimal address label (Google Maps style)
-      const addressLabel = new window.google.maps.InfoWindow({
-        content: `<div style="background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.1); border-radius: 2px; padding: 1px 4px; font-size: 10px; font-family: Arial, sans-serif; color: #3c4043; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">${appointment.location.value.split(',')[0]}</div>`,
-        disableAutoPan: true,
-        closeBoxURL: "",
-        enableEventPropagation: true,
-        pixelOffset: new window.google.maps.Size(0, -35) // Position above marker
-      });
-      addressLabel.open(map, marker);
 
       // Create info window
       const infoWindow = new window.google.maps.InfoWindow({
@@ -183,14 +183,12 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       });
 
       marker.addListener('mouseover', () => {
-        addressLabel.close(); // Hide address label when showing detailed info
         infoWindow.open(map, marker);
         onAppointmentHover?.(appointment);
       });
       
       marker.addListener('mouseout', () => {
         infoWindow.close();
-        addressLabel.open(map, marker); // Show address label again
         onAppointmentLeave?.();
       });
 
