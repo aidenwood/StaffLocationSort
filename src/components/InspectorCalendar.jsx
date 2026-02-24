@@ -385,7 +385,9 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
               <ChevronLeft className="w-5 h-5" />
             </button>
             <span className="font-medium text-lg min-w-48 text-center">
-              {format(weekStart, 'MMM d')} - {format(weekEnd, 'MMM d, yyyy')}
+              {weekDays.length > 0 && (
+                `${format(weekDays[0], 'MMM d')} - ${format(weekDays[weekDays.length - 1], 'MMM d, yyyy')}`
+              )}
             </span>
             <button 
               onClick={() => navigateWeek('next')}
