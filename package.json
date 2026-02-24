@@ -19,11 +19,9 @@
     "@googlemaps/react-wrapper": "^1.2.0",
     "axios": "^1.6.2",
     "date-fns": "^2.30.0",
-    "leaflet": "^1.9.4",
     "lucide-react": "^0.303.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-leaflet": "^4.2.1"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

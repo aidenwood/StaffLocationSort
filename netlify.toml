@@ -1,15 +1,8 @@
 [build]
-  # Directory to change to before starting a build
-  base = ""
-  
-  # Directory that contains the build output to deploy
   publish = "dist"
-  
-  # Default build command
-  command = "npm run build"
+  command = "npm install && npm run build"
 
 [build.environment]
-  # Node.js version
   NODE_VERSION = "18"
 
 # Redirect rules for SPA routing
@@ -26,12 +19,6 @@
     X-XSS-Protection = "1; mode=block"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
-
-[[headers]]
-  for = "/static/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
 
 [[headers]]
   for = "*.js"
@@ -42,13 +29,3 @@
   for = "*.css"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
-
-# Environment variables for production
-[context.production.environment]
-  NODE_ENV = "production"
-
-[context.deploy-preview.environment]
-  NODE_ENV = "development"
-
-[context.branch-deploy.environment]
-  NODE_ENV = "development"
