@@ -8,8 +8,8 @@ import {
   getActivityTypeByKey 
 } from '../data/mockActivities';
 
-// Google Maps API Key - Must be set in environment variables
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyCMzl7FEizPoEordMy_wHwbnBVeh2XcPfk';
+// Google Maps API Key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyCMzl7FEizPoEordMy_wHwbnBVeh2XcPfk';
 
 // Debug logging for troubleshooting
 console.log('🗺️ Google Maps API Key Status:', {
