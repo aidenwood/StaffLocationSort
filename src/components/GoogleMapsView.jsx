@@ -165,7 +165,8 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
               </span>
             </div>
           </div>
-        `
+        `,
+        disableAutoPan: true
       });
 
       marker.addListener('mouseover', () => {
@@ -208,7 +209,8 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
               ${format(potentialBooking.datetime, 'HH:mm')} - Roof Inspection
             </div>
           </div>
-        `
+        `,
+        disableAutoPan: true
       });
 
       marker.addListener('mouseover', () => {
