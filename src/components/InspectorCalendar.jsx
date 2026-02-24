@@ -14,6 +14,7 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [viewMode, setViewMode] = useState(5); // 1, 3, or 5 days
 
   // Update current time every minute
   React.useEffect(() => {
@@ -31,8 +32,37 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
   }, [selectedDate]);
   
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  
+  // Calculate days to show based on viewMode (only weekdays)
+  const getViewDays = () => {
+    const days = [];
+    const start = new Date(weekStart);
+    
+    // Find the first weekday (Monday) from current date
+    const baseDate = selectedDate || currentWeek;
+    const currentDay = baseDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    
+    let startDate;
+    if (currentDay === 0) { // Sunday
+      startDate = addDays(baseDate, 1); // Move to Monday
+    } else if (currentDay === 6) { // Saturday
+      startDate = addDays(baseDate, 2); // Move to Monday
+    } else {
+      startDate = subDays(baseDate, currentDay - 1); // Move to Monday of current week
+    }
+    
+    for (let i = 0; i < viewMode; i++) {
+      const day = addDays(startDate, i);
+      // Only add weekdays (Monday to Friday)
+      if (day.getDay() >= 1 && day.getDay() <= 5) {
+        days.push(day);
+      }
+    }
+    
+    return days.slice(0, viewMode);
+  };
+  
+  const weekDays = getViewDays();
 
   const navigateWeek = (direction) => {
     if (direction === 'prev') {
@@ -329,6 +359,23 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
                 ))}
               </select>
             </div>
+            
+            {/* Day View Buttons */}
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              {[1, 3, 5].map(days => (
+                <button
+                  key={days}
+                  onClick={() => setViewMode(days)}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                    viewMode === days
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {days}D
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <button 
@@ -354,7 +401,10 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
         <div className={`${fullScreen ? 'flex-1 min-h-0' : ''} overflow-auto`}>
           <div className="min-w-full">
             {/* Header Row */}
-            <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-t-lg overflow-hidden">
+            <div className={`grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
+              viewMode === 1 ? 'grid-cols-1' : 
+              viewMode === 3 ? 'grid-cols-3' : 'grid-cols-5'
+            }`}>
               {weekDays.map(day => {
                 const isSelected = selectedDate && isSameDay(day, selectedDate);
                 return (
@@ -384,7 +434,10 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
             <div className="bg-gray-200 rounded-b-lg overflow-hidden">
               {currentInspector && (
                 <div className="bg-white relative">
-                  <div className="grid grid-cols-7 gap-px bg-gray-200">
+                  <div className={`grid gap-px bg-gray-200 ${
+                    viewMode === 1 ? 'grid-cols-1' : 
+                    viewMode === 3 ? 'grid-cols-3' : 'grid-cols-5'
+                  }`}>
 
                     {/* Day Columns */}
                     {weekDays.map(day => {

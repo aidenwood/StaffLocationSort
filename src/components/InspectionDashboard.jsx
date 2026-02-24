@@ -186,10 +186,10 @@ const InspectionDashboard = () => {
         </div>
       </div>
 
-      {/* Main Content - Split Layout */}
-      <div className="flex-1 flex gap-4 p-4 min-h-0">
-        {/* Left Half - Calendar */}
-        <div className="flex-1">
+      {/* Main Content - Responsive Split Layout */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 min-h-0">
+        {/* Calendar Section */}
+        <div className="flex-1 lg:w-1/2 min-w-0">
           <InspectorCalendar
             selectedInspector={selectedInspector}
             selectedDate={selectedDate}
@@ -203,8 +203,8 @@ const InspectionDashboard = () => {
           />
         </div>
 
-        {/* Right Half - Map & Route Info */}
-        <div className="w-1/2 flex flex-col gap-4">
+        {/* Map Section */}
+        <div className="flex-1 lg:w-1/2 flex flex-col gap-4 min-w-0">
           {/* Drive Time Impact */}
           {driveTimeImpact && potentialBooking && (
             <div className="bg-white rounded-lg shadow p-4">
@@ -263,24 +263,6 @@ const InspectionDashboard = () => {
             />
           </div>
 
-          {/* Summary Stats */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="font-semibold text-gray-900 mb-3">
-              {format(selectedDate, 'MMM d')} Summary
-            </h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div className="text-center">
-                <div className="text-gray-600">Appointments</div>
-                <div className="font-semibold text-xl text-blue-600">{todaysActivities.length}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-gray-600">Inspectors</div>
-                <div className="font-semibold text-xl text-green-600">
-                  {new Set(todaysActivities.map(a => a.owner_id)).size}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 

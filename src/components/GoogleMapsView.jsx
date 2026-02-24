@@ -144,6 +144,15 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         zIndex: 1000 + index
       });
 
+      // Add address label
+      const addressLabel = new window.google.maps.InfoWindow({
+        content: `<div style="background: none; border: none; box-shadow: none; padding: 2px 4px; font-size: 11px; font-weight: 500; color: #1f2937; background: rgba(255,255,255,0.9); border-radius: 3px;">${appointment.location.value.split(',')[0]}</div>`,
+        disableAutoPan: true,
+        closeBoxURL: "",
+        enableEventPropagation: true
+      });
+      addressLabel.open(map, marker);
+
       // Create info window
       const infoWindow = new window.google.maps.InfoWindow({
         content: `
@@ -173,12 +182,14 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       });
 
       marker.addListener('mouseover', () => {
+        addressLabel.close(); // Hide address label when showing detailed info
         infoWindow.open(map, marker);
         onAppointmentHover?.(appointment);
       });
       
       marker.addListener('mouseout', () => {
         infoWindow.close();
+        addressLabel.open(map, marker); // Show address label again
         onAppointmentLeave?.();
       });
 
