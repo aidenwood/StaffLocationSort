@@ -1,30 +1,51 @@
 // Mock data matching Pipedrive Activities API format
 // Logan, QLD area coordinates and addresses
 
+// Mock inspectors based on actual Region Roster - 2026 (subset for demo)
 export const inspectors = [
   {
     id: 1,
-    name: "Ross Mitchell",
-    email: "ross@inspections.com.au",
+    name: "Benjamin Frohloff",
+    email: "benjamin.frohloff@company.com",
     active_flag: true,
-    phone: "+61 7 3123 4567",
-    region: "Logan Central"
+    phone: "+61 2 4984 1234",
+    region: "R09",
+    regionName: "R09 - NR (Newcastle/Central Coast/Maitland)",
+    location: "FLETCHER, NSW",
+    jobTitle: "Roof Inspector"
   },
   {
     id: 2,
-    name: "Ben Thompson",
-    email: "ben@inspections.com.au", 
+    name: "Benjamin Wharton",
+    email: "benjamin.wharton@company.com", 
     active_flag: true,
-    phone: "+61 7 3123 4568",
-    region: "Logan"
+    phone: "+61 7 5492 1234",
+    region: "R03",
+    regionName: "R03 - SC (Sunshine Coast)",
+    location: "GOLDEN BEACH, QLD",
+    jobTitle: "Roof Inspector"
   },
   {
     id: 3,
-    name: "Jayden Wilson",
-    email: "jayden@inspections.com.au",
+    name: "Jayden Dow",
+    email: "jayden.dow@company.com",
     active_flag: true,
-    phone: "+61 7 3123 4569",
-    region: "Beenleigh"
+    phone: "+61 7 3358 1234",
+    region: "R01",
+    regionName: "R01 - BGCI (Brisbane/Gold Coast/Logan/Ipswich)",
+    location: "NEWSTEAD, QLD", 
+    jobTitle: "Roof Inspector"
+  },
+  {
+    id: 4,
+    name: "Richard Lugert",
+    email: "richard.lugert@company.com",
+    active_flag: true,
+    phone: "+61 7 4630 1234",
+    region: "R04",
+    regionName: "R04 - GT (Gatton/Toowoomba)",
+    location: "PRESTON, QLD",
+    jobTitle: "Roof Inspector"
   }
 ];
 

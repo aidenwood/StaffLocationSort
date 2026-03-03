@@ -11,15 +11,27 @@ import {
   DollarSign,
   FileText,
   Check,
-  X 
+  X,
+  AlertTriangle,
+  Shield,
+  Eye
 } from 'lucide-react';
 import { inspectors, activityTypes } from '../data/mockActivities';
+import { 
+  ALLOWED_TIME_SLOTS, 
+  TIME_SLOT_LABELS, 
+  validateBookingData 
+} from '../utils/bookingSlots.js';
+import { safeCreateBooking } from '../api/pipedriveWrite.js';
+import { usePipedriveData } from '../hooks/usePipedriveData.js';
 
 const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpdate }) => {
+  const { isLiveData, shouldUseLiveData } = usePipedriveData();
+  
   const [bookingDetails, setBookingDetails] = useState({
     subject: '',
-    type: 'building_inspection',
-    duration: '02:00:00',
+    type: 'roof_inspection',
+    duration: '01:00:00', // Fixed 1 hour for inspections
     client_name: '',
     client_email: '',
     client_phone: '',
@@ -32,6 +44,9 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [requiresConfirmation, setRequiresConfirmation] = useState(false);
+  const [isTestMode, setIsTestMode] = useState(true); // Default to test mode for safety
 
   const handleInputChange = (field, value) => {
     setBookingDetails(prev => ({
@@ -40,15 +55,15 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
     }));
 
     // Auto-update subject when key fields change
-    if (field === 'type' || field === 'property_address') {
-      const activityType = activityTypes.find(t => t.key_string === 
-        (field === 'type' ? value : bookingDetails.type));
+    if (field === 'property_address' || field === 'client_name') {
       const address = field === 'property_address' ? value : bookingDetails.property_address;
+      const inspectorName = selectedSlot?.inspector?.name || '';
       
-      if (activityType && address) {
+      if (address && inspectorName) {
+        const suburb = address.split(',')[0] || address.substring(0, 30);
         setBookingDetails(prev => ({
           ...prev,
-          subject: `${activityType.name} - ${address.split(',')[0] || address.substring(0, 30)}`
+          subject: `Property Inspection - ${inspectorName} - ${suburb}`
         }));
       }
     }
@@ -57,74 +72,145 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
     if (field === 'property_address' && value.length > 10) {
       onLocationUpdate?.(value);
     }
+
+    // Clear validation errors when user makes changes
+    if (validationErrors.length > 0) {
+      setValidationErrors([]);
+    }
+  };
+
+  // Validate time slot is allowed
+  const validateTimeSlot = () => {
+    if (!ALLOWED_TIME_SLOTS.includes(selectedSlot.time)) {
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    
+    // Validate time slot first
+    if (!validateTimeSlot()) {
+      setValidationErrors([`Invalid time slot. Allowed times: ${ALLOWED_TIME_SLOTS.map(t => TIME_SLOT_LABELS[t]).join(', ')}`]);
+      return;
+    }
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const newActivity = {
-      id: Date.now(), // Temporary ID
-      company_id: 12345,
-      owner_id: selectedSlot.inspector.id,
-      creator_user_id: selectedSlot.inspector.id,
-      is_deleted: false,
-      done: false,
-      type: bookingDetails.type,
-      conference_meeting_client: null,
-      conference_meeting_url: null,
-      conference_meeting_id: null,
-      due_date: format(selectedSlot.date, 'yyyy-MM-dd'),
-      due_time: `${selectedSlot.time}:00`,
-      duration: bookingDetails.duration,
-      busy: true,
-      add_time: new Date().toISOString(),
-      update_time: new Date().toISOString(),
-      marked_as_done_time: null,
-      subject: bookingDetails.subject,
-      public_description: bookingDetails.public_description,
+    // Create booking data for validation
+    const bookingData = {
+      inspector: selectedSlot.inspector,
+      date: selectedSlot.date,
+      time: selectedSlot.time,
+      location: bookingDetails.property_address,
+      clientName: bookingDetails.client_name,
+      clientEmail: bookingDetails.client_email,
+      clientPhone: bookingDetails.client_phone,
+      propertyType: bookingDetails.property_type,
+      specialInstructions: bookingDetails.special_instructions,
       note: bookingDetails.note,
-      priority: 2,
-      location: {
-        value: bookingDetails.property_address,
-        country: "Australia", 
-        admin_area_level_1: "Queensland",
-        admin_area_level_2: null,
-        locality: "Logan",
-        sublocality: null,
-        route: bookingDetails.property_address.split(' ').slice(1, -3).join(' '),
-        street_number: bookingDetails.property_address.split(' ')[0],
-        subpremise: null,
-        postal_code: bookingDetails.property_address.match(/QLD (\d{4})/)?.[1] || "4114"
-      },
-      org_id: Math.floor(Math.random() * 1000) + 1,
-      person_id: Math.floor(Math.random() * 1000) + 1,
-      deal_id: Math.floor(Math.random() * 1000) + 1,
-      lead_id: `lead-${Math.random().toString(36).substr(2, 9)}`,
-      project_id: null,
-      attendees: [
-        {
-          person_id: Math.floor(Math.random() * 1000) + 1,
-          primary: true,
-          email: bookingDetails.client_email,
-          name: bookingDetails.client_name,
-          status: "accepted",
-          is_organizer: false
-        }
-      ],
-      // Custom inspection fields
-      property_type: bookingDetails.property_type,
-      inspection_fee: bookingDetails.inspection_fee,
-      client_contact: bookingDetails.client_phone,
-      special_instructions: bookingDetails.special_instructions,
-      source_timezone: "Australia/Brisbane"
+      publicDescription: bookingDetails.public_description
     };
 
-    onBookingConfirm(newActivity);
-    setIsSubmitting(false);
+    // Validate booking data
+    const validation = validateBookingData(bookingData);
+    if (!validation.isValid) {
+      setValidationErrors(validation.errors);
+      return;
+    }
+
+    // Check if confirmation is required for live data
+    if (shouldUseLiveData && !requiresConfirmation) {
+      setRequiresConfirmation(true);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setValidationErrors([]);
+
+    try {
+      if (shouldUseLiveData) {
+        // Use live Pipedrive API
+        console.log('🚨 Creating live Pipedrive booking...');
+        
+        const result = await safeCreateBooking({
+          ...bookingData,
+          confirmationRequired: true
+        });
+        
+        console.log('✅ Live booking created:', result);
+        
+        // Convert Pipedrive response to app format if needed
+        const newActivity = result.activity;
+        onBookingConfirm(newActivity);
+        
+      } else {
+        // Simulate API delay for mock data
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Create mock activity
+        const newActivity = {
+          id: Date.now(),
+          company_id: 12345,
+          owner_id: selectedSlot.inspector.id,
+          creator_user_id: selectedSlot.inspector.id,
+          is_deleted: false,
+          done: false,
+          type: bookingDetails.type,
+          due_date: format(selectedSlot.date, 'yyyy-MM-dd'),
+          due_time: `${selectedSlot.time}:00`,
+          duration: bookingDetails.duration,
+          busy: true,
+          add_time: new Date().toISOString(),
+          update_time: new Date().toISOString(),
+          marked_as_done_time: null,
+          subject: bookingDetails.subject,
+          public_description: bookingDetails.public_description,
+          note: bookingDetails.note,
+          priority: 2,
+          location: {
+            value: bookingDetails.property_address,
+            country: "Australia", 
+            admin_area_level_1: "Queensland",
+            admin_area_level_2: null,
+            locality: "Logan",
+            sublocality: null,
+            route: bookingDetails.property_address.split(' ').slice(1, -3).join(' '),
+            street_number: bookingDetails.property_address.split(' ')[0],
+            subpremise: null,
+            postal_code: bookingDetails.property_address.match(/QLD (\d{4})/)?.[1] || "4114"
+          },
+          org_id: Math.floor(Math.random() * 1000) + 1,
+          person_id: Math.floor(Math.random() * 1000) + 1,
+          deal_id: Math.floor(Math.random() * 1000) + 1,
+          lead_id: `lead-${Math.random().toString(36).substr(2, 9)}`,
+          project_id: null,
+          attendees: [
+            {
+              person_id: Math.floor(Math.random() * 1000) + 1,
+              primary: true,
+              email: bookingDetails.client_email,
+              name: bookingDetails.client_name,
+              status: "accepted",
+              is_organizer: false
+            }
+          ],
+          property_type: bookingDetails.property_type,
+          inspection_fee: bookingDetails.inspection_fee,
+          client_contact: bookingDetails.client_phone,
+          special_instructions: bookingDetails.special_instructions,
+          source_timezone: "Australia/Brisbane",
+          isFromPipedrive: false // Mark as mock data
+        };
+
+        onBookingConfirm(newActivity);
+      }
+      
+    } catch (error) {
+      console.error('❌ Booking failed:', error);
+      setValidationErrors([`Booking failed: ${error.message}`]);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!selectedSlot) {
@@ -132,13 +218,46 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
   }
 
   const selectedActivityType = activityTypes.find(t => t.key_string === bookingDetails.type);
+  
+  // Check if this is a test user booking
+  const isTestUserBooking = selectedSlot.inspector.name === "Aiden Wood" || 
+                           selectedSlot.inspector.isTestUser;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full m-4 max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900">Book New Inspection</h2>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Book New Inspection</h2>
+              {/* Safety indicators */}
+              <div className="flex items-center gap-2 mt-1">
+                {shouldUseLiveData ? (
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                    isTestUserBooking 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {isTestUserBooking ? (
+                      <>
+                        <Shield className="w-3 h-3" />
+                        TEST MODE
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-3 h-3" />
+                        LIVE DATA
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                    <Eye className="w-3 h-3" />
+                    MOCK DATA
+                  </div>
+                )}
+              </div>
+            </div>
             <button 
               onClick={onCancel}
               className="p-2 hover:bg-gray-100 rounded-lg"
@@ -149,6 +268,60 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Validation Errors */}
+          {validationErrors.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-red-900 mb-2">Validation Errors</h3>
+                  <ul className="text-sm text-red-700 space-y-1">
+                    {validationErrors.map((error, index) => (
+                      <li key={index}>• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Confirmation Required */}
+          {requiresConfirmation && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-medium text-amber-900 mb-2">Live Data Confirmation Required</h3>
+                  <p className="text-sm text-amber-700 mb-3">
+                    This will create a real booking in Pipedrive. {isTestUserBooking ? 
+                      'This is a test user, so it\'s safe to proceed.' : 
+                      'This will affect production data - please confirm this is intentional.'
+                    }
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRequiresConfirmation(false)}
+                      className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded text-sm hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className={`px-3 py-1.5 rounded text-sm text-white ${
+                        isTestUserBooking 
+                          ? 'bg-blue-600 hover:bg-blue-700' 
+                          : 'bg-red-600 hover:bg-red-700'
+                      }`}
+                    >
+                      {isTestUserBooking ? 'Proceed (Test Mode)' : 'Confirm Live Booking'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Booking Slot Info */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h3 className="font-medium text-blue-900 mb-3">Selected Time Slot</h3>
@@ -163,8 +336,12 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
               </div>
               <div className="flex items-center gap-2 text-blue-700">
                 <Clock className="w-4 h-4" />
-                <span>{selectedSlot.time}</span>
+                <span>{TIME_SLOT_LABELS[selectedSlot.time] || selectedSlot.time}</span>
               </div>
+            </div>
+            {/* Time slot restriction notice */}
+            <div className="mt-3 text-xs text-blue-600">
+              ℹ️ Booking restricted to: {ALLOWED_TIME_SLOTS.map(t => TIME_SLOT_LABELS[t]).join(', ')}
             </div>
           </div>
 
@@ -177,15 +354,12 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
               <select
                 value={bookingDetails.type}
                 onChange={(e) => handleInputChange('type', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                disabled={true} // Fixed to roof inspection only
               >
-                {activityTypes.map(type => (
-                  <option key={type.id} value={type.key_string}>
-                    {type.name}
-                  </option>
-                ))}
+                <option value="roof_inspection">Property Inspection (Roof)</option>
               </select>
+              <p className="text-xs text-gray-500 mt-1">Fixed to property inspection for safety</p>
             </div>
 
             <div>
@@ -195,15 +369,12 @@ const BookingSetter = ({ selectedSlot, onBookingConfirm, onCancel, onLocationUpd
               <select
                 value={bookingDetails.duration}
                 onChange={(e) => handleInputChange('duration', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                disabled={true} // Fixed to 1 hour
               >
-                <option value="01:00:00">1 Hour</option>
-                <option value="01:30:00">1.5 Hours</option>
-                <option value="02:00:00">2 Hours</option>
-                <option value="02:30:00">2.5 Hours</option>
-                <option value="03:00:00">3 Hours</option>
+                <option value="01:00:00">1 Hour (Standard)</option>
               </select>
+              <p className="text-xs text-gray-500 mt-1">Fixed duration for scheduling consistency</p>
             </div>
           </div>
 

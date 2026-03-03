@@ -354,7 +354,7 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
                 <option value="">All Inspectors</option>
                 {inspectors.map(inspector => (
                   <option key={inspector.id} value={inspector.id}>
-                    {inspector.name} - {inspector.region}
+                    {inspector.name} - {inspector.regionName || inspector.region}
                   </option>
                 ))}
               </select>
