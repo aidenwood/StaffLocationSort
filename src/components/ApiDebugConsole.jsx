@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const ApiDebugConsole = ({ isOpen, onClose, debugData, onPauseChange }) => {
-  const [activeTab, setActiveTab] = useState('console');
+const ApiDebugConsole = ({ 
+  isOpen, 
+  onClose, 
+  debugData, 
+  onPauseChange, 
+  activities, 
+  inspectors, 
+  selectedInspector, 
+  loading, 
+  error, 
+  isLiveData 
+}) => {
+  const [activeTab, setActiveTab] = useState('activities');
   const [isPaused, setIsPaused] = useState(false);
   const consoleRef = useRef(null);
 
@@ -14,6 +25,7 @@ const ApiDebugConsole = ({ isOpen, onClose, debugData, onPauseChange }) => {
   if (!isOpen) return null;
 
   const tabs = [
+    { id: 'activities', label: 'Activities Data', icon: '🎯' },
     { id: 'console', label: 'Console Logs', icon: '📜' },
     { id: 'api-response', label: 'API Response', icon: '🔄' },
     { id: 'transformed-map', label: 'Transformed (Map)', icon: '🗺️' },
@@ -31,6 +43,43 @@ const ApiDebugConsole = ({ isOpen, onClose, debugData, onPauseChange }) => {
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'activities':
+        const selectedInspectorInfo = inspectors?.find(i => i.id === selectedInspector);
+        return (
+          <div className="h-64 overflow-y-auto">
+            <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
+              <div className="font-semibold mb-2">Current Data Status:</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div><strong>Loading:</strong> {loading ? 'Yes' : 'No'}</div>
+                  <div><strong>Error:</strong> {error ? 'Yes' : 'No'}</div>
+                  <div><strong>Live Data:</strong> {isLiveData ? 'Yes' : 'No'}</div>
+                </div>
+                <div>
+                  <div><strong>Activities Count:</strong> {activities?.length || 0}</div>
+                  <div><strong>Selected Inspector:</strong> {selectedInspectorInfo?.name || 'None'} (ID: {selectedInspector})</div>
+                </div>
+              </div>
+              {error && (
+                <div className="mt-2 p-2 bg-red-100 text-red-700 rounded text-xs">
+                  <strong>Error:</strong> {error}
+                </div>
+              )}
+            </div>
+            <div className="mb-2 text-sm font-semibold">
+              Activities Data ({activities?.length || 0} items):
+            </div>
+            <pre className="bg-gray-100 p-4 rounded text-xs">
+              {formatJsonData(activities?.slice(0, 10))} {/* Show first 10 items */}
+            </pre>
+            {activities?.length > 10 && (
+              <div className="mt-2 text-xs text-gray-600">
+                Showing first 10 of {activities.length} activities
+              </div>
+            )}
+          </div>
+        );
+
       case 'console':
         return (
           <div 
@@ -148,6 +197,11 @@ const ApiDebugConsole = ({ isOpen, onClose, debugData, onPauseChange }) => {
             >
               <span>{tab.icon}</span>
               {tab.label}
+              {tab.id === 'activities' && activities?.length > 0 && (
+                <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5">
+                  {activities.length}
+                </span>
+              )}
               {tab.id === 'console' && debugData?.consoleLogs?.length > 0 && (
                 <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5">
                   {debugData.consoleLogs.length}

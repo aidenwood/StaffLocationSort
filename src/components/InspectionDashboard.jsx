@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { format, startOfWeek, endOfWeek, subWeeks, addWeeks } from 'date-fns';
-import { 
-  Calendar, 
-  Users, 
-  Clock, 
-  MapPin, 
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { format } from 'date-fns';
+import {
+  Calendar,
+  Users,
+  Clock,
+  MapPin,
   Plus,
   CheckCircle,
   AlertCircle,
@@ -16,13 +16,13 @@ import RoofInspectionBooking from './RoofInspectionBooking';
 import GoogleMapsView from './GoogleMapsView';
 import ApiDebugConsole from './ApiDebugConsole';
 import AppUnavailableModal from './AppUnavailableModal';
-import { inspectors, getActivitiesByDate, mockActivities } from '../data/mockActivities';
-import { usePipedriveData } from '../hooks/usePipedriveData.js';
+import { inspectors } from '../data/mockActivities';
 import { useApiDebug } from '../hooks/useApiDebug.js';
+import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
 
-const InspectionDashboard = () => {
-  const [selectedInspector, setSelectedInspector] = useState(1); // Ben Frohloff (test inspector)
-  const [selectedDate, setSelectedDate] = useState(new Date('2026-03-02'));
+const InspectionDashboard = ({ pipedriveData }) => {
+  const [selectedInspector, setSelectedInspector] = useState(2); // Ben Thompson (ID 2) for consistency with working Activities page
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [potentialBooking, setPotentialBooking] = useState(null);
@@ -41,59 +41,88 @@ const InspectionDashboard = () => {
     setIsPaused
   } = useApiDebug();
 
-  // Use Pipedrive data (V0 Proven Working Approach) - fetch for selected inspector only
-  const { 
-    activities, 
-    inspectors: pipedriveInspectors, 
-    loading, 
-    error, 
+  // USE SHARED PIPEDRIVE DATA from App.jsx (no API calls in this component)
+  const {
+    activities,
+    inspectors: pipedriveInspectors,
+    loading,
+    error,
     isLiveData,
     isTimeout,
     errorCount,
     lastError,
     isCircuitBreakerOpen,
     resetCircuitBreaker,
-    fetchActivities: originalFetchActivities 
-  } = usePipedriveData({ autoFetch: false }); // Don't auto-fetch, we'll fetch when inspector changes
+    refresh: refetch
+  } = pipedriveData;
 
-  // Wrapped fetch activities for debug tracking - remove the problematic trackApiCall wrapper
-  const fetchActivities = useCallback(async (inspectorId, startDate, endDate) => {
-    try {
-      const result = await originalFetchActivities(inspectorId, startDate, endDate);
-      
-      // Track the raw response for debugging
-      setApiResponse(result);
-      
-      // Transform data for map and calendar views
-      const mapData = result?.filter(activity => activity.location?.value);
-      const calendarData = result?.map(activity => ({
-        id: activity.id,
-        title: activity.subject,
-        date: activity.due_date,
-        time: activity.due_time,
-        inspector: activity.owner_id,
-        location: activity.location?.value
-      }));
-      
-      setTransformedData(mapData, calendarData);
-      
-      return result;
-    } catch (error) {
-      console.error('Dashboard fetch error:', error);
-      throw error;
-    }
-  }, [originalFetchActivities, setApiResponse, setTransformedData]);
+  // Address cache keyed by activity id
+  const [addressMap, setAddressMap] = useState({});
 
-  // Fetch activities when inspector or date changes (date range covers visible calendar week)
+  // Get all inspector activities (for enrichment)
+  const inspectorActivities = useMemo(() => {
+    if (!activities) return [];
+    return activities.filter(a =>
+      Number(a.owner_id) === Number(selectedInspector) && !a.done &&
+      a.due_time && a.due_time !== '00:00:00' &&
+      !(a.subject && a.subject.includes('Inspector ENG Follow up'))
+    );
+  }, [activities, selectedInspector]);
+
+  // Auto-select first date with activities for this inspector
   useEffect(() => {
-    if (selectedInspector && !isCircuitBreakerOpen) {
-      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
-      const fetchStart = format(subWeeks(weekStart, 1), 'yyyy-MM-dd');
-      const fetchEnd = format(addWeeks(weekEnd, 2), 'yyyy-MM-dd');
-      fetchActivities(selectedInspector, fetchStart, fetchEnd);
+    if (inspectorActivities.length === 0) return;
+
+    const sorted = [...inspectorActivities].sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const nextActivity = sorted.find(a => a.due_date >= today) || sorted[0];
+    if (nextActivity?.due_date) {
+      const [y, m, d] = nextActivity.due_date.split('-').map(Number);
+      setSelectedDate(new Date(y, m - 1, d));
     }
-  }, [selectedInspector, selectedDate]); // Remove fetchActivities from dependencies to prevent loop
+  }, [inspectorActivities]);
+
+  // Enrich all inspector activities with addresses (typically ~16-20 activities)
+  useEffect(() => {
+    if (inspectorActivities.length === 0) return;
+    // Skip if all already enriched
+    const unenriched = inspectorActivities.filter(a => !addressMap[a.id]);
+    if (unenriched.length === 0) return;
+
+    const doEnrich = async () => {
+      try {
+        const enriched = await enrichActivitiesWithAddresses(unenriched);
+        setAddressMap(prev => {
+          const updated = { ...prev };
+          enriched.forEach(a => {
+            if (a.personAddress) updated[a.id] = a.personAddress;
+          });
+          return updated;
+        });
+      } catch (err) {
+        console.error('Address enrichment failed:', err);
+      }
+    };
+    doEnrich();
+  }, [inspectorActivities]);
+
+  // Merge addresses into all activities for calendar + map
+  const enrichedActivities = useMemo(() => {
+    if (Object.keys(addressMap).length === 0) return activities;
+    return activities.map(a => addressMap[a.id] ? { ...a, personAddress: addressMap[a.id] } : a);
+  }, [activities, addressMap]);
+
+  // Get enriched day activities for the map
+  const dateString = format(selectedDate, 'yyyy-MM-dd');
+  const enrichedMapActivities = useMemo(() => {
+    return enrichedActivities.filter(a =>
+      Number(a.owner_id) === Number(selectedInspector) &&
+      a.due_date === dateString &&
+      !a.done &&
+      a.due_time && a.due_time !== '00:00:00' &&
+      !(a.subject && a.subject.includes('Inspector ENG Follow up'))
+    );
+  }, [enrichedActivities, selectedInspector, dateString]);
 
   const handleTimeSlotSelection = (slotData) => {
     setSelectedTimeSlot(slotData);
@@ -162,14 +191,7 @@ const InspectionDashboard = () => {
 
   const handleRetryConnection = () => {
     resetCircuitBreaker();
-    // Trigger a fresh fetch
-    if (selectedInspector) {
-      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
-      const fetchStart = format(subWeeks(weekStart, 1), 'yyyy-MM-dd');
-      const fetchEnd = format(addWeeks(weekEnd, 2), 'yyyy-MM-dd');
-      fetchActivities(selectedInspector, fetchStart, fetchEnd);
-    }
+    refetch(); // Refetch REAL data
   };
 
   // Show inspector view if selected
@@ -182,10 +204,12 @@ const InspectionDashboard = () => {
     );
   }
 
-  // Calculate dashboard stats
-  const todaysActivities = getActivitiesByDate(selectedDate);
-  const totalActivities = mockActivities.length;
-  const completedActivities = mockActivities.filter(a => a.done).length;
+  // Calculate dashboard stats using REAL data
+  const todaysActivities = activities ? activities.filter(activity => {
+    return activity.due_date === selectedDate.toISOString().split('T')[0];
+  }) : [];
+  const totalActivities = activities ? activities.length : 0;
+  const completedActivities = activities ? activities.filter(a => a.done).length : 0;
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
@@ -203,15 +227,7 @@ const InspectionDashboard = () => {
           
           {/* Stats Pills */}
           <div className="flex items-center gap-4">
-            <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-              {todaysActivities.length} Today's Bookings
-            </div>
-            <div className="bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
-              {inspectors.length} Active Inspectors
-            </div>
-            <div className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
-              {Math.round((completedActivities / totalActivities) * 100)}% Complete
-            </div>
+           
             
             {/* Inspector Quick Access */}
             <div className="border-l border-gray-300 pl-4 ml-2">
@@ -297,7 +313,7 @@ const InspectionDashboard = () => {
             hoveredAppointment={hoveredAppointment}
             onAppointmentHover={handleAppointmentHover}
             onAppointmentLeave={handleAppointmentLeave}
-            activities={activities}
+            activities={enrichedActivities}
             inspectors={pipedriveInspectors}
             isLiveData={isLiveData}
             loading={loading}
@@ -363,7 +379,8 @@ const InspectionDashboard = () => {
               hoveredAppointment={hoveredAppointment}
               onAppointmentHover={handleAppointmentHover}
               onAppointmentLeave={handleAppointmentLeave}
-              activities={activities}
+              activities={enrichedActivities}
+              enrichedDayActivities={enrichedMapActivities}
               isLiveData={isLiveData}
               loading={loading}
               isTimeout={isTimeout}
@@ -390,6 +407,12 @@ const InspectionDashboard = () => {
         onClose={() => setShowDebugConsole(false)}
         debugData={debugData}
         onPauseChange={setIsPaused}
+        activities={activities}
+        inspectors={pipedriveInspectors}
+        selectedInspector={selectedInspector}
+        loading={loading}
+        error={error}
+        isLiveData={isLiveData}
       />
 
       {/* App Unavailable Modal */}

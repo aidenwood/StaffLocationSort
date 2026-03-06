@@ -34,58 +34,39 @@ export const isNSWDaylightSaving = (date = new Date()) => {
 };
 
 /**
- * Convert UTC time to Australian local time
+ * Convert UTC time to Australian local time - SIMPLE 10 hour addition
  */
 export const convertToAustralianTime = (utcTimeString, region = 'QLD', forceDST = null) => {
-  if (!utcTimeString) return { time: '09:00', timezone: 'AEST' };
+  if (!utcTimeString || utcTimeString === '00:00:00') return { time: '09:00 AM', timezone: 'AEST' };
   
   try {
-    // Parse the UTC time (could be just "HH:MM" or full datetime)
-    let utcDate;
-    if (utcTimeString.includes('T') || utcTimeString.includes(' ')) {
-      utcDate = new Date(utcTimeString);
-    } else {
-      // Just time format like "14:30" - assume today
-      const today = new Date();
-      const [hours, minutes] = utcTimeString.split(':');
-      utcDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 
-                        parseInt(hours), parseInt(minutes), 0, 0);
+    // Extract hours and minutes from time string like "14:30:00" or "14:30"
+    const timePart = utcTimeString.split(':');
+    let hours = parseInt(timePart[0]);
+    const minutes = parseInt(timePart[1]) || 0;
+    
+    // Add 10 hours for Australian timezone
+    hours = hours + 10;
+    
+    // Handle day rollover
+    if (hours >= 24) {
+      hours = hours - 24;
     }
     
-    if (isNaN(utcDate.getTime())) {
-      return { time: utcTimeString, timezone: 'UTC' };
-    }
+    // Return 24-hour format for calendar use
+    const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     
-    // Determine timezone based on region and daylight saving
-    let timezone, timezoneCode;
-    
-    if (region === 'QLD') {
-      // Queensland - always AEST (UTC+10), no daylight saving
-      timezone = TIMEZONES.AEST;
-      timezoneCode = 'AEST';
-    } else if (region === 'NSW') {
-      // NSW - check if daylight saving is active
-      const isDST = forceDST !== null ? forceDST : isNSWDaylightSaving(utcDate);
-      timezone = TIMEZONES.AEDT; // Sydney handles DST automatically
-      timezoneCode = isDST ? 'AEDT' : 'AEST';
-    } else {
-      // Default to QLD time
-      timezone = TIMEZONES.AEST;
-      timezoneCode = 'AEST';
-    }
-    
-    // Convert to local time
-    const localTime = utcDate.toLocaleTimeString('en-AU', {
-      timeZone: timezone,
-      hour12: true,
-      hour: 'numeric',
-      minute: '2-digit'
-    });
+    // Also provide 12-hour format
+    const isPM = hours >= 12;
+    const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    const ampm = isPM ? 'PM' : 'AM';
+    const time12Hour = `${displayHours}:${minutes.toString().padStart(2, '0')} ${ampm}`;
     
     return {
-      time: localTime,
-      timezone: timezoneCode,
-      utcOffset: region === 'QLD' ? '+10' : (timezoneCode === 'AEDT' ? '+11' : '+10')
+      time: timeString, // 24-hour format
+      time12Hour: time12Hour, // 12-hour format 
+      timezone: 'AEST',
+      utcOffset: '+10'
     };
     
   } catch (error) {
@@ -95,11 +76,11 @@ export const convertToAustralianTime = (utcTimeString, region = 'QLD', forceDST 
 };
 
 /**
- * Format activity time for display
+ * Format activity time for display  
  */
 export const formatActivityTime = (dueTime, region = 'QLD', forceDST = null) => {
   const converted = convertToAustralianTime(dueTime, region, forceDST);
-  return `${converted.time} ${converted.timezone}`;
+  return `${converted.time12Hour} ${converted.timezone}`;
 };
 
 /**

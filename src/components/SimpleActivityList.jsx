@@ -1,78 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, MapPin, User, Clock, AlertCircle, Sun, Moon } from 'lucide-react';
 import { format } from 'date-fns';
-import { fetchActivitiesWithFilterV2, enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
-import { PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID } from '../config/pipedriveFilters.js';
-import { getAllInspectors } from '../config/pipedriveUsers.js';
+import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
 import ApiTestButton from './ApiTestButton.jsx';
 import { formatActivityTime, shouldShowDSTToggle, isNSWDaylightSaving } from '../utils/timezone.js';
 
-const SimpleActivityList = () => {
+const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
   const [selectedInspector, setSelectedInspector] = useState(2); // Ben Thompson
-  const [activities, setActivities] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [forceDST, setForceDST] = useState(null); // null = auto, true = force AEDT, false = force AEST
+  const [enrichedActivities, setEnrichedActivities] = useState([]);
+  const [enriching, setEnriching] = useState(false);
 
-  const inspectors = getAllInspectors();
-  const currentInspector = inspectors.find(i => i.appId === selectedInspector);
+  // Use shared Pipedrive data from App.jsx
+  const {
+    activities: allActivities,
+    inspectors,
+    loading,
+    error,
+    isLiveData
+  } = pipedriveData;
 
-  const fetchInspectorActivities = async (inspectorAppId) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      console.log(`🔍 Fetching activities for inspector ${inspectorAppId}`);
-      console.log('🔧 Environment check:');
-      console.log('   API Key exists:', !!import.meta.env.VITE_PIPEDRIVE_API_KEY);
-      console.log('   Use live data:', import.meta.env.VITE_USE_LIVE_DATA);
-      console.log('   Filter ID:', PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID);
-      console.log('   Inspector config:', inspectors.find(i => i.appId === inspectorAppId));
-      
-      // Get all activities using server-side filter (should return ~188 activities)
-      const allActivities = await fetchActivitiesWithFilterV2(
-        PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID
-        // No date limits to get all 188 activities
-      );
+  const currentInspector = inspectors.find(i => i.id === selectedInspector);
 
-      console.log(`📊 Got ${allActivities.length} total activities from filter`);
+  // Filter and sort activities for the selected inspector
+  const filteredActivities = useMemo(() => {
+    if (!allActivities || allActivities.length === 0) return [];
 
-      // Filter for this specific inspector and sort by due date
-      const inspectorActivities = allActivities
-        .filter(activity => {
-          // Match by user_id/owner_id (Pipedrive ID)
-          const pipedriveUserId = activity.user_id || activity.owner_id;
-          const inspector = inspectors.find(i => i.appId === inspectorAppId);
-          return pipedriveUserId === inspector?.id;
-        })
-        .sort((a, b) => {
-          const dateA = new Date(a.due_date || '2999-12-31');
-          const dateB = new Date(b.due_date || '2999-12-31');
-          return dateA.getTime() - dateB.getTime();
-        })
-        .slice(0, 20); // Take only first 20
+    return allActivities
+      .filter(activity => {
+        return Number(activity.owner_id) === Number(selectedInspector);
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.due_date || '2999-12-31');
+        const dateB = new Date(b.due_date || '2999-12-31');
+        return dateA.getTime() - dateB.getTime();
+      })
+      .slice(0, 20); // Take only first 20
+  }, [allActivities, selectedInspector]);
 
-      console.log(`✅ Filtered to ${inspectorActivities.length} activities for inspector ${inspectorAppId}`);
-      
-      // 🏠 Enrich activities with person addresses
-      console.log('🔍 Enriching activities with person addresses...');
-      const enrichedActivities = await enrichActivitiesWithAddresses(inspectorActivities);
-      
-      setActivities(enrichedActivities);
-    } catch (err) {
-      console.error('❌ Error fetching inspector activities:', err);
-      setError(err.message);
-      setActivities([]); // No mock data - show real error
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Enrich the filtered 20 activities with person addresses
   useEffect(() => {
-    if (selectedInspector) {
-      fetchInspectorActivities(selectedInspector);
+    if (filteredActivities.length === 0) {
+      setEnrichedActivities([]);
+      return;
     }
-  }, [selectedInspector]);
+
+    const enrich = async () => {
+      setEnriching(true);
+      try {
+        const enriched = await enrichActivitiesWithAddresses(filteredActivities);
+        setEnrichedActivities(enriched);
+        onActivitiesEnriched?.(enriched);
+      } catch (err) {
+        console.error('Address enrichment failed:', err);
+        setEnrichedActivities(filteredActivities);
+      } finally {
+        setEnriching(false);
+      }
+    };
+
+    enrich();
+  }, [filteredActivities]);
+
+  const activities = enrichedActivities;
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white">
@@ -94,9 +84,9 @@ const SimpleActivityList = () => {
           <label className="text-sm font-medium text-gray-700">
             Select Inspector:
           </label>
-          
+
           {/* Daylight Savings Toggle - only show for NSW inspectors */}
-          {currentInspector && shouldShowDSTToggle(currentInspector.region) && (
+          {currentInspector && shouldShowDSTToggle(currentInspector.region || currentInspector.regionName) && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-600">Time Zone:</span>
               <button
@@ -131,18 +121,20 @@ const SimpleActivityList = () => {
           className="block w-64 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {inspectors.map(inspector => (
-            <option key={inspector.appId} value={inspector.appId}>
-              {inspector.name} ({inspector.region})
+            <option key={inspector.id} value={inspector.id}>
+              {inspector.name} ({inspector.region || inspector.regionName})
             </option>
           ))}
         </select>
       </div>
 
       {/* Loading State */}
-      {loading && (
+      {(loading || enriching) && (
         <div className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading activities...</span>
+          <span className="ml-3 text-gray-600">
+            {loading ? 'Loading activities...' : 'Loading addresses...'}
+          </span>
         </div>
       )}
 
@@ -155,7 +147,7 @@ const SimpleActivityList = () => {
               <h3 className="text-sm font-medium text-red-800">Error Loading Activities</h3>
               <p className="text-sm text-red-700 mt-1">{error}</p>
               <button
-                onClick={() => fetchInspectorActivities(selectedInspector)}
+                onClick={() => pipedriveData.refresh?.()}
                 className="mt-3 text-sm bg-red-100 text-red-800 px-3 py-1 rounded hover:bg-red-200"
               >
                 Try Again
@@ -209,8 +201,8 @@ const SimpleActivityList = () => {
                           <Clock className="h-4 w-4 mr-2 text-green-500" />
                           <span>
                             {formatActivityTime(
-                              activity.due_time || '09:00', 
-                              currentInspector?.region || 'QLD', 
+                              activity.due_time || '09:00',
+                              currentInspector?.region || currentInspector?.regionName || 'QLD',
                               forceDST
                             )}
                           </span>
@@ -219,7 +211,7 @@ const SimpleActivityList = () => {
                         <div className="flex items-center">
                           <MapPin className="h-4 w-4 mr-2 text-red-500" />
                           <span className="truncate">
-                            {activity.personAddress || activity.location || 'No address available'}
+                            {activity.personAddress || activity.location?.value || (typeof activity.location === 'string' ? activity.location : null) || 'No address available'}
                           </span>
                         </div>
                       </div>

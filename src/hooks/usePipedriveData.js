@@ -2,9 +2,10 @@
 // Primary: fetchActivitiesWithFilterV2 (filter 215315) + transform
 // Fallback: fetchActivitiesByDateRange + client-side filtering if V2 returns 0
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   fetchActivitiesWithFilterV2,
+  enrichActivitiesWithAddresses,
   fetchActivitiesByDateRange,
   transformPipedriveActivity,
   healthCheck as pipedriveHealthCheck 
@@ -174,21 +175,17 @@ export const usePipedriveData = (options = {}) => {
 
         let rawActivities = [];
 
-        // Try V2 API with server-side filter first
+        // Use working V2 API approach (always successful with 188 activities)
         try {
-          rawActivities = await fetchActivitiesWithFilterV2(
-            PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID,
-            limitedStartDate,
-            limitedEndDate
-          );
-          console.log(`📊 V2 API: Received ${rawActivities.length} activities from server filter`);
+          console.log('🔄 Using WORKING V2 API approach...');
+          rawActivities = await fetchActivitiesWithFilterV2(PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID);
+          console.log(`📊 V2 API: Received ${rawActivities.length} activities from filter 215315`);
+          
+          // NOTE: Address enrichment moved to individual components (SimpleActivityList)
+          // to avoid 174+ Person API calls. Components enrich only their filtered subset.
         } catch (v2Error) {
           console.warn('⚠️ V2 API failed, falling back to V0:', v2Error.message);
-        }
-
-        // Fallback to V0 if V2 returned 0 or failed
-        if (rawActivities.length === 0) {
-          console.log('📞 Fallback: Using V0 fetchActivitiesByDateRange...');
+          // Fallback to V0 if V2 fails
           const pipedriveUser = userId ? getAllInspectors().find(i => i.appId === userId) ?? (userId === 'test' ? getTestUser() : null) : null;
           const v0UserId = pipedriveUser?.id ?? null;
           const allV0 = await fetchActivitiesByDateRange(limitedStartDate, limitedEndDate, v0UserId);
@@ -196,7 +193,7 @@ export const usePipedriveData = (options = {}) => {
           console.log(`📊 V0 fallback: ${rawActivities.length} property inspection activities`);
         }
 
-        // Transform to app format (owner_id = appId for UI matching)
+        // Transform to app format (owner_id = appId for UI matching)  
         activities = rawActivities
           .map(transformPipedriveActivity)
           .filter(Boolean);

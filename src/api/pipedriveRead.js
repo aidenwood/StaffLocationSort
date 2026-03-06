@@ -599,6 +599,9 @@ export const transformPipedriveActivity = (pipedriveActivity) => {
     lead_id: pipedriveActivity.lead_id,
     project_id: pipedriveActivity.project_id,
     
+    // Enriched address (from enrichActivitiesWithAddresses)
+    personAddress: pipedriveActivity.personAddress || null,
+
     // Additional metadata
     source_timezone: 'Australia/Brisbane',
     isFromPipedrive: true,

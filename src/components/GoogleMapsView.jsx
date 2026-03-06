@@ -143,41 +143,26 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
           continue;
         }
 
-        // Extract address from Pipedrive subject format: "Name - Address NSW/QLD Inspector..."
-        let locationString = appointment.subject || appointment.location?.value || appointment.location || '';
-        let extractedAddress = '';
-        
-        // Parse address from subject field
-        if (locationString.includes(' - ') && (locationString.includes('NSW') || locationString.includes('QLD'))) {
-          // Split by ' - ' and find the part with NSW/QLD
-          const parts = locationString.split(' - ');
-          for (let i = 1; i < parts.length; i++) {
-            const part = parts[i];
-            if (part.includes('NSW') || part.includes('QLD')) {
-              // Extract address up to state, before any additional text like "Inspector"
-              const beforeInspector = part.split(' Inspector')[0];
-              const beforeAustralia = beforeInspector.split(', Australia')[0];
-              extractedAddress = beforeAustralia.trim();
-              break;
-            }
-          }
-        }
-        
-        if (extractedAddress && (extractedAddress.includes('NSW') || extractedAddress.includes('QLD'))) {
-          console.log(`📍 Geocoding: ${appointment.subject.split(' - ')[0]}`);
-          console.log(`   Full subject: "${appointment.subject}"`);
-          console.log(`   Extracted address: "${extractedAddress}"`);
-          const coordinates = await geocodeAddress(extractedAddress);
+        // Use personAddress (from enrichment) or location.value as fallback
+        const enrichedAddress = appointment.personAddress || appointment.location?.value || '';
+
+        if (enrichedAddress && enrichedAddress.trim() !== '') {
+          console.log(`📍 Geocoding enriched address: ${appointment.subject?.split(' - ')[0] || 'Activity'}`);
+          console.log(`   Enriched address: "${enrichedAddress}"`);
           
+          const coordinates = await geocodeAddress(enrichedAddress);
           console.log(`   Geocoding result:`, coordinates);
           
           geocoded.push({
             ...appointment,
             coordinates,
-            locationString: extractedAddress
+            locationString: enrichedAddress
           });
         } else {
-          console.warn(`⚠️ No location data for appointment: ${appointment.subject}`);
+          console.warn(`⚠️ No enriched address for appointment: ${appointment.subject}`);
+          console.log(`   location.value: "${appointment.location?.value}"`);
+          console.log(`   Raw location object:`, appointment.location);
+          
           geocoded.push({
             ...appointment,
             coordinates: null
@@ -431,16 +416,17 @@ const ErrorComponent = ({ status }) => (
   </div>
 );
 
-const GoogleMapsView = ({ 
-  selectedInspector, 
-  selectedDate, 
-  onDateChange, 
-  potentialBooking, 
-  onDriveTimeCalculated, 
-  hoveredAppointment, 
-  onAppointmentHover, 
+const GoogleMapsView = ({
+  selectedInspector,
+  selectedDate,
+  onDateChange,
+  potentialBooking,
+  onDriveTimeCalculated,
+  hoveredAppointment,
+  onAppointmentHover,
   onAppointmentLeave,
   activities = [],
+  enrichedDayActivities = [],
   isLiveData = false,
   loading = false,
   isTimeout = false,
@@ -449,59 +435,33 @@ const GoogleMapsView = ({
   const [totalDriveTime, setTotalDriveTime] = useState(0);
   const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // Get today's appointments for the selected inspector from passed Pipedrive activities
+  // Use pre-enriched day activities from InspectionDashboard (with personAddress for geocoding)
   const todaysAppointments = React.useMemo(() => {
+    // If enriched activities are available, use them directly
+    if (enrichedDayActivities && enrichedDayActivities.length > 0) {
+      console.log(`🗺️ MAP: Using ${enrichedDayActivities.length} enriched activities for map`);
+      return enrichedDayActivities.sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
+    }
+
+    // Fallback: filter from all activities (without addresses)
     if (!selectedInspector || !selectedDate) return [];
-    
+
     const dateString = format(selectedDate, 'yyyy-MM-dd');
-    
-    // TEMP: Show all activities to debug time filtering
-    const allActivities = activities
-      .filter(activity => 
-        Number(activity.owner_id) === Number(selectedInspector) && 
-        activity.due_date === dateString && 
-        !activity.done
-      )
-      .sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
-      
-    // TEMP: More permissive filter to see what we have
+
     const filtered = activities
       .filter(activity => {
-        // Basic filters (Number() handles number/string coercion)
         if (Number(activity.owner_id) !== Number(selectedInspector)) return false;
         if (activity.due_date !== dateString) return false;
         if (activity.done) return false;
         if (!activity.due_time || activity.due_time === '00:00:00' || activity.due_time.trim() === '') return false;
-        
-        // Exclude follow-up tasks (keep this)
         if (activity.subject && activity.subject.includes('Inspector ENG Follow up')) return false;
-        
-        // TEMP: Allow all hours to see what times we have
-        // const timeHour = parseInt(activity.due_time.split(':')[0]);
-        // if (timeHour < 9 || timeHour >= 17) return false;
-        
-        // TEMP: Allow all activities with times (not just inspections)
         return true;
       })
       .sort((a, b) => a.due_time.localeCompare(b.due_time));
-    
-    console.log(`🏗️ Found ${filtered.length} property inspections for ${dateString} (filtered out ${allActivities.length - filtered.length} follow-ups/general tasks)`);
-    
-    // Debug: Show what we're filtering
-    if (allActivities.length > 0) {
-      console.log('📋 All activities for debugging:', allActivities.map(a => ({
-        subject: a.subject,
-        due_time: a.due_time,
-        timeHour: a.due_time ? parseInt(a.due_time.split(':')[0]) : 'no-time',
-        isFollowUp: a.subject?.includes('Inspector ENG Follow up'),
-        isPropertyInspection: a.subject?.includes('Property Inspection'),
-        hasInspectionKeyword: a.subject?.toLowerCase().includes('inspection')
-      })));
-    }
-    
-    // Return only timed appointments (filter out general tasks)
+
+    console.log(`🗺️ MAP: Found ${filtered.length} activities for ${dateString} (fallback, no enrichment)`);
     return filtered;
-  }, [selectedInspector, selectedDate, activities, isLiveData]);
+  }, [selectedInspector, selectedDate, activities, enrichedDayActivities]);
 
   const inspector = selectedInspector ? getInspectorById(selectedInspector) : null;
 

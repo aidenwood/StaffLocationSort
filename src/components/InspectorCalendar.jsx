@@ -1,13 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addDays, subDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign, X } from 'lucide-react';
-import { 
-  inspectors, 
-  getActivitiesByInspectorAndDate, 
-  getActivitiesByInspector,
-  getActivityTypeByKey,
-  getInspectorById 
-} from '../data/mockActivities';
+import { getActivityTypeByKey } from '../data/mockActivities';
+import { convertToAustralianTime } from '../utils/timezone';
 
 const InspectorCalendar = ({ 
   onSelectTimeSlot, 
@@ -35,29 +30,46 @@ const InspectorCalendar = ({
   // Only use real Pipedrive data - no mock fallbacks
   const effectiveActivities = activities || [];
   const effectiveInspectors = inspectors || [];
+  
+  // Get current inspector or handle "all inspectors" view
+  const isAllInspectors = selectedInspector === 'all';
+  const displayInspector = isAllInspectors 
+    ? null // No single inspector for "all" view
+    : selectedInspector 
+      ? inspectors.find(inspector => inspector.id === selectedInspector)
+      : inspectors[0];
+  
+  // For "all inspectors" view, get all inspectors that have activities
+  const visibleInspectors = isAllInspectors ? inspectors : (displayInspector ? [displayInspector] : []);
 
-  // Debug: log activity structure once when activities change
+  // Debug: log activity structure when activities change
   React.useEffect(() => {
-    if (effectiveActivities.length > 0 && selectedInspector) {
-      const sample = effectiveActivities.slice(0, 5).map(a => ({
+    console.log('📅 CALENDAR: Received', effectiveActivities.length, 'activities');
+    console.log('📅 CALENDAR: Selected inspector:', selectedInspector);
+    console.log('📅 CALENDAR: Selected date:', selectedDate?.toISOString().split('T')[0]);
+    
+    if (effectiveActivities.length > 0) {
+      console.log('📅 CALENDAR: First 3 activities:', effectiveActivities.slice(0, 3).map(a => ({
+        id: a.id,
+        subject: a.subject,
         due_date: a.due_date,
         due_time: a.due_time,
         owner_id: a.owner_id,
-        subject: (a.subject || '').substring(0, 40),
         done: a.done
-      }));
-      const inspectorMatch = effectiveInspectors.find(i => i.id === selectedInspector);
-      console.log('📅 CALENDAR DEBUG: activities count:', effectiveActivities.length, '| selectedInspector:', selectedInspector, '| inspector found:', !!inspectorMatch, '| sample:', sample);
-      // Check how many fall in 8-17:30 range
-      const inRange = effectiveActivities.filter(a => {
-        const t = a.due_time?.substring(0, 5) || '';
-        const [h, m] = t.split(':').map(Number);
-        const mins = (h || 0) * 60 + (m || 0);
-        return mins >= 8 * 60 && mins < 18 * 60; // 8:00 to 17:59
-      });
-      console.log('📅 CALENDAR DEBUG: activities in 8:00-18:00 range:', inRange.length, 'of', effectiveActivities.length);
+      })));
+      
+      // Look specifically for Ben W activities
+      const benActivities = effectiveActivities.filter(a => a.owner_id === 2 || a.owner_id === '2');
+      console.log('📅 CALENDAR: Ben W activities found:', benActivities.length);
+      if (benActivities.length > 0) {
+        console.log('📅 CALENDAR: Ben W activities:', benActivities.map(a => ({
+          subject: a.subject,
+          due_date: a.due_date,
+          due_time: a.due_time
+        })));
+      }
     }
-  }, [effectiveActivities.length, selectedInspector, effectiveInspectors]);
+  }, [effectiveActivities, selectedInspector, selectedDate]);
 
   // Update current time every minute
   React.useEffect(() => {
@@ -108,11 +120,9 @@ const InspectorCalendar = ({
   const weekDays = getViewDays();
 
   const navigateWeek = (direction) => {
-    if (direction === 'prev') {
-      setCurrentWeek(subDays(currentWeek, 7));
-    } else {
-      setCurrentWeek(addDays(currentWeek, 7));
-    }
+    const newDate = direction === 'prev' ? subDays(currentWeek, 7) : addDays(currentWeek, 7);
+    setCurrentWeek(newDate);
+    onDateChange?.(newDate);
   };
 
   const timeSlots = useMemo(() => {
@@ -218,21 +228,27 @@ const InspectorCalendar = ({
     setSelectedActivity(null);
   };
 
-  // Pipedrive API returns times in correct timezone already
+  // Get Pipedrive datetime with corrected Australian timezone
   const getPipedriveDateTime = (timeString, dateString) => {
     if (!timeString || timeString === '00:00:00') return null;
+    
+    const converted = convertToAustralianTime(timeString, 'QLD');
+    
     return {
       date: dateString,
-      time: timeString.substring(0, 5) // Just HH:MM format
+      time: converted.time // 24-hour format for calendar use
     };
   };
 
   const extractSuburb = (address) => {
+    if (!address || typeof address !== 'string') {
+      return 'Unknown Location';
+    }
     const parts = address.split(',');
     if (parts.length >= 2) {
       return parts[1].trim(); // Get the suburb part
     }
-    return address.split(' ').slice(-3, -2).join(' '); // Fallback
+    return address.split(' ').slice(-3, -2).join(' ') || 'Unknown Location'; // Fallback
   };
 
   // Extract property address from Pipedrive subject lines
@@ -265,24 +281,25 @@ const InspectorCalendar = ({
 
   // Extract suburb from address (works for both mock and Pipedrive)
   const getAddressInfo = (activity) => {
-    // Mock data format
-    if (activity.location && activity.location.value) {
-      const fullAddress = activity.location.value;
+    // Use enriched person address or fallback to activity location
+    const address = activity.personAddress || activity.location?.value || activity.location;
+    if (address && typeof address === 'string') {
+      const fullAddress = address;
       const suburb = extractSuburb(fullAddress);
       return { fullAddress, suburb };
     }
     
     // Pipedrive data format - extract from subject
     const extractedAddress = extractAddressFromPipedriveSubject(activity.subject);
-    if (extractedAddress) {
+    if (extractedAddress && typeof extractedAddress === 'string') {
       const suburb = extractSuburb(extractedAddress);
       return { 
         fullAddress: extractedAddress, 
-        suburb: suburb || extractedAddress.split(' ').slice(-2).join(' ') // Fallback to last 2 words
+        suburb: suburb
       };
     }
     
-    return { fullAddress: null, suburb: 'Inspection' };
+    return { fullAddress: null, suburb: 'Loading address...' };
   };
 
   const ActivityBlock = ({ activity, timeSlot }) => {
@@ -293,7 +310,7 @@ const InspectorCalendar = ({
       inspector.id === activity.owner_id || inspector.id === activity.creator_user_id
     );
     
-    // Get Pipedrive datetime info
+    // Get Pipedrive datetime info with timezone conversion
     const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
     if (!timeInfo) return null;
     
@@ -328,26 +345,15 @@ const InspectorCalendar = ({
         onMouseLeave={() => onAppointmentLeave?.()}
         title="Click to view appointment details"
       >
-        <div className={`font-semibold text-sm leading-tight mb-1 ${isHovered ? 'text-red-900' : 'text-blue-900'}`}>
-          {addressInfo.suburb}
+        <div className={`font-medium leading-tight ${isHovered ? 'text-red-900' : 'text-blue-900'}`} style={{ fontSize: '9px' }}>
+          {addressInfo.fullAddress || addressInfo.suburb}
         </div>
-        <div className={`text-xs leading-tight mb-1 ${isHovered ? 'text-red-700' : 'text-blue-700'}`}>
-          {activityType?.name || 'Inspection'}
-        </div>
-        {/* Show inspector name in "All Inspectors" view */}
         {isAllInspectors && activityInspector && (
-          <div className={`text-xs leading-tight mb-1 font-medium ${isHovered ? 'text-red-800' : 'text-blue-800'}`}>
-            👤 {activityInspector.name.split(' ')[0]} {/* First name only */}
+          <div className={`leading-none font-medium ${isHovered ? 'text-red-800' : 'text-blue-800'}`} style={{ fontSize: '8px' }}>
+            {activityInspector.name.split(' ')[0]}
           </div>
         )}
-        {/* Show property address if available */}
-        {addressInfo.fullAddress && (
-          <div className={`text-xs leading-tight mb-1 ${isHovered ? 'text-red-600' : 'text-blue-600'}`}>
-            <MapPin className="w-2.5 h-2.5 inline mr-1" />
-            <span className="truncate">{addressInfo.fullAddress}</span>
-          </div>
-        )}
-        <div className={`text-xs leading-tight flex items-center gap-1 ${isHovered ? 'text-red-600' : 'text-blue-600'}`}>
+        <div className={`leading-none flex items-center gap-0.5 ${isHovered ? 'text-red-600' : 'text-blue-600'}`} style={{ fontSize: '10px' }}>
           <Clock className="w-2.5 h-2.5 flex-shrink-0" />
           <span>{startTime}</span>
         </div>
@@ -359,19 +365,20 @@ const InspectorCalendar = ({
     if (!activity || !isOpen) return null;
 
     const activityType = getActivityTypeByKey(activity.type);
-    const startTime = activity.due_time.substring(0, 5);
-    const endTime = calculateEndTime(startTime, activity.duration.substring(0, 5));
-    const client = activity.attendees?.[0];
+    const startTime = (activity.due_time || '09:00:00').substring(0, 5);
+    const duration = activity.duration || '01:00:00';
+    const endTime = calculateEndTime(startTime, duration.substring(0, 5));
+    const addressInfo = getAddressInfo(activity);
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-        <div 
+        <div
           className="bg-white rounded-lg shadow-xl border border-gray-200 p-6 w-full max-w-md max-h-[80vh] overflow-y-auto m-4"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Appointment Details</h3>
-            <button 
+            <button
               onClick={onClose}
               className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
             >
@@ -394,7 +401,7 @@ const InspectorCalendar = ({
           <div className="flex items-center gap-2 text-sm">
             <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
             <span className="text-gray-700">
-              {startTime} - {endTime} ({activity.duration.substring(0, 5)})
+              {startTime} - {endTime} ({duration.substring(0, 5)})
             </span>
           </div>
 
@@ -403,49 +410,15 @@ const InspectorCalendar = ({
             <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
             <div>
               <div className="font-medium text-gray-900">
-                {extractSuburb(activity.location.value)}
+                {addressInfo.suburb}
               </div>
-              <div className="text-gray-600 text-xs leading-relaxed">
-                {activity.location.value}
-              </div>
+              {addressInfo.fullAddress && (
+                <div className="text-gray-600 text-xs leading-relaxed">
+                  {addressInfo.fullAddress}
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Property Type & Fee */}
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              <Home className="w-4 h-4 text-gray-500" />
-              <span className="text-gray-700">{activity.property_type}</span>
-            </div>
-            <div className="flex items-center gap-1 text-green-600 font-medium">
-              <DollarSign className="w-3 h-3" />
-              <span>{activity.inspection_fee}</span>
-            </div>
-          </div>
-
-          {/* Client */}
-          {client && (
-            <div className="flex items-center gap-2 text-sm">
-              <User className="w-4 h-4 text-gray-500" />
-              <div>
-                <span className="text-gray-900">{client.name}</span>
-                {activity.client_contact && (
-                  <div className="text-gray-600 text-xs flex items-center gap-1">
-                    <Phone className="w-3 h-3" />
-                    {activity.client_contact}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Special Instructions */}
-          {activity.special_instructions && (
-            <div className="text-xs bg-amber-50 border border-amber-200 rounded p-2">
-              <div className="font-medium text-amber-800 mb-1">Special Instructions:</div>
-              <div className="text-amber-700">{activity.special_instructions}</div>
-            </div>
-          )}
 
           {/* Notes */}
           {activity.note && (
@@ -460,17 +433,6 @@ const InspectorCalendar = ({
     );
   };
 
-  // Get current inspector or handle "all inspectors" view
-  const isAllInspectors = selectedInspector === 'all';
-  const currentInspector = isAllInspectors 
-    ? null // No single inspector for "all" view
-    : selectedInspector 
-      ? inspectors.find(inspector => inspector.id === selectedInspector)
-      : inspectors[0];
-  
-  // For "all inspectors" view, get all inspectors that have activities
-  const visibleInspectors = isAllInspectors ? inspectors : (currentInspector ? [currentInspector] : []);
-    
 
   // Calculate current time position
   const getCurrentTimePosition = () => {
@@ -491,61 +453,50 @@ const InspectorCalendar = ({
 
   const timePosition = getCurrentTimePosition();
 
-  const containerClass = fullScreen 
-    ? "h-screen flex flex-col bg-white" 
+  const containerClass = fullScreen
+    ? "h-full flex flex-col bg-white"
     : "bg-white rounded-lg shadow-lg";
 
   const contentClass = fullScreen
     ? "flex-1 flex flex-col min-h-0"
-    : "p-6";
+    : "p-4";
 
   return (
     <div className={containerClass}>
-      {/* Header */}
-      <div className={`${fullScreen ? 'p-6 pb-4' : ''} border-b border-gray-200`}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Inspector Calendar
-              {isAllInspectors && (
-                <span className="ml-3 text-base font-medium bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                  🌐 All Inspectors View
-                </span>
-              )}
-            </h2>
+      {/* Header - Compact */}
+      <div className={`${fullScreen ? 'px-4 py-2' : ''} border-b border-gray-200`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
             {/* Inspector Dropdown */}
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-gray-500" />
-              <select
-                value={selectedInspector || ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === 'all') {
-                    onInspectorChange?.('all');
-                  } else if (value) {
-                    onInspectorChange?.(parseInt(value));
-                  } else {
-                    onInspectorChange?.(null);
-                  }
-                }}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="all">All Inspectors</option>
-                {inspectors.map(inspector => (
-                  <option key={inspector.id} value={inspector.id}>
-                    {inspector.name} - {inspector.regionName || inspector.region}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
+            <select
+              value={selectedInspector || ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'all') {
+                  onInspectorChange?.('all');
+                } else if (value) {
+                  onInspectorChange?.(parseInt(value));
+                } else {
+                  onInspectorChange?.(null);
+                }
+              }}
+              className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            >
+              <option value="all">All Inspectors</option>
+              {inspectors.map(inspector => (
+                <option key={inspector.id} value={inspector.id}>
+                  {inspector.name} - {inspector.regionName || inspector.region}
+                </option>
+              ))}
+            </select>
+
             {/* Day View Buttons */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
               {[1, 3, 5].map(days => (
                 <button
                   key={days}
                   onClick={() => setViewMode(days)}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
                     viewMode === days
                       ? 'bg-white text-blue-600 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
@@ -556,23 +507,25 @@ const InspectorCalendar = ({
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button 
+
+          {/* Week Navigation */}
+          <div className="flex items-center gap-2">
+            <button
               onClick={() => navigateWeek('prev')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-medium text-lg min-w-48 text-center">
+            <span className="font-medium text-sm min-w-36 text-center">
               {weekDays.length > 0 && (
                 `${format(weekDays[0], 'MMM d')} - ${format(weekDays[weekDays.length - 1], 'MMM d, yyyy')}`
               )}
             </span>
-            <button 
+            <button
               onClick={() => navigateWeek('next')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -613,7 +566,7 @@ const InspectorCalendar = ({
 
             {/* Calendar Grid */}
             <div className="bg-gray-200 rounded-b-lg overflow-hidden">
-              {(currentInspector || isAllInspectors) && (
+              {(displayInspector || isAllInspectors) && (
                 <div className="bg-white relative">
                   <div className={`grid gap-px bg-gray-200 ${
                     viewMode === 1 ? 'grid-cols-1' : 
@@ -642,12 +595,12 @@ const InspectorCalendar = ({
                               // Get activity for this slot - handle both single and all inspector views
                               const activity = isAllInspectors 
                                 ? getAllActivitiesForSlot(day, timeSlot)[0] // Get first activity if multiple
-                                : getActivityForSlot(currentInspector, day, timeSlot);
+                                : getActivityForSlot(displayInspector, day, timeSlot);
                               
                               const allActivities = isAllInspectors ? getAllActivitiesForSlot(day, timeSlot) : [];
                               const isAvailable = isAllInspectors 
                                 ? allActivities.length === 0 && !isLunchBreak(timeSlot)
-                                : isSlotAvailable(currentInspector, day, timeSlot) && !activity;
+                                : isSlotAvailable(displayInspector, day, timeSlot) && !activity;
                               const isPast = day < new Date() && !isSameDay(day, new Date());
                               const isLunch = isLunchBreak(timeSlot);
 
@@ -667,7 +620,7 @@ const InspectorCalendar = ({
                                   } ${
                                     slotIndex % 2 === 0 ? 'border-r border-gray-200' : ''
                                   }`}
-                                  onClick={() => !isPast && !isAllInspectors && handleSlotClick(currentInspector, day, timeSlot)}
+                                  onClick={() => !isPast && !isAllInspectors && handleSlotClick(displayInspector, day, timeSlot)}
                                   title={
                                     isPast 
                                       ? 'Past time slot'
@@ -715,7 +668,7 @@ const InspectorCalendar = ({
         </div>
 
         {/* Legend */}
-        <div className={`${fullScreen ? 'p-6 pt-4' : 'mt-6'} flex items-center justify-center gap-6 text-sm border-t border-gray-200`}>
+        <div className={`${fullScreen ? 'px-4 py-2' : 'mt-4'} flex items-center justify-center gap-4 text-xs border-t border-gray-200`}>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-blue-50 border-l-4 border-blue-500 rounded-sm"></div>
             <span>Booked</span>

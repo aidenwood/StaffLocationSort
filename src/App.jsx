@@ -1,20 +1,52 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import InspectionDashboard from './components/InspectionDashboard'
 import SimpleActivityList from './components/SimpleActivityList'
 import ClientBooking from './components/ClientBooking'
+import { usePipedriveData } from './hooks/usePipedriveData.js'
 
 function App() {
-  const [view, setView] = useState('simple') // 'simple', 'staff' or 'client'
+  const [view, setView] = useState('staff') // 'staff', 'activities', or 'client' (changed default to staff)
+
+  // Shared Pipedrive data - fetched once, consumed by all views
+  const pipedriveData = usePipedriveData();
+
+  // Enriched address cache - populated by SimpleActivityList, read by InspectionDashboard
+  const [addressCache, setAddressCache] = useState({});
+
+  // Callback for SimpleActivityList to push enriched addresses up
+  const onActivitiesEnriched = useCallback((enrichedActivities) => {
+    setAddressCache(prev => {
+      const updated = { ...prev };
+      enrichedActivities.forEach(a => {
+        if (a.personAddress) {
+          updated[a.id] = a.personAddress;
+        }
+      });
+      return updated;
+    });
+  }, []);
+
+  // Merge address cache into activities for the dashboard
+  const enrichedPipedriveData = useMemo(() => {
+    if (Object.keys(addressCache).length === 0) return pipedriveData;
+
+    return {
+      ...pipedriveData,
+      activities: pipedriveData.activities.map(a =>
+        addressCache[a.id] ? { ...a, personAddress: addressCache[a.id] } : a
+      )
+    };
+  }, [pipedriveData, addressCache]);
 
   // Simple routing based on URL hash or view state
   React.useEffect(() => {
     const hash = window.location.hash
     if (hash === '#book' || hash === '#client') {
       setView('client')
-    } else if (hash === '#dashboard' || hash === '#staff') {
-      setView('staff')
+    } else if (hash === '#activities' || hash === '#list') {
+      setView('activities')
     } else {
-      setView('simple')
+      setView('staff') // Default to staff dashboard
     }
   }, [])
 
@@ -25,12 +57,12 @@ function App() {
 
   const switchToStaff = () => {
     setView('staff')
-    window.location.hash = '#staff'
+    window.location.hash = '#dashboard'
   }
 
-  const switchToSimple = () => {
-    setView('simple')
-    window.location.hash = '#simple'
+  const switchToActivities = () => {
+    setView('activities')
+    window.location.hash = '#activities'
   }
 
   if (view === 'client') {
@@ -38,16 +70,16 @@ function App() {
       <div>
         <div className="fixed top-4 right-4 z-50 flex gap-2">
           <button
-            onClick={switchToSimple}
-            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
+            onClick={switchToStaff}
+            className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
           >
-            Simple List
+            Dashboard
           </button>
           <button
-            onClick={switchToStaff}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
+            onClick={switchToActivities}
+            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
           >
-            Full Dashboard
+            Activities
           </button>
         </div>
         <ClientBooking />
@@ -55,15 +87,15 @@ function App() {
     )
   }
 
-  if (view === 'staff') {
+  if (view === 'activities') {
     return (
       <div>
         <div className="fixed top-4 right-4 z-50 flex gap-2">
           <button
-            onClick={switchToSimple}
-            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
+            onClick={switchToStaff}
+            className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
           >
-            Simple List
+            Dashboard
           </button>
           <button
             onClick={switchToClient}
@@ -72,20 +104,20 @@ function App() {
             Client Booking
           </button>
         </div>
-        <InspectionDashboard />
+        <SimpleActivityList pipedriveData={pipedriveData} onActivitiesEnriched={onActivitiesEnriched} />
       </div>
     )
   }
 
-  // Default: Simple view
+  // Default: Staff Dashboard view
   return (
     <div>
       <div className="fixed top-4 right-4 z-50 flex gap-2">
         <button
-          onClick={switchToStaff}
-          className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
+          onClick={switchToActivities}
+          className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
         >
-          Full Dashboard
+          Activities
         </button>
         <button
           onClick={switchToClient}
@@ -94,7 +126,7 @@ function App() {
           Client Booking
         </button>
       </div>
-      <SimpleActivityList />
+      <InspectionDashboard pipedriveData={enrichedPipedriveData} />
     </div>
   )
 }

@@ -173,7 +173,79 @@ export const generateMockActivities = () => {
           
           activities.push(activity);
         });
-      } else {
+      }
+      
+      // Special handling for Benjamin Wharton - 3PM Friday appointment
+      const isBenFriday = inspector.id === 2 && day === 4; // Benjamin Wharton (ID: 2) and Friday (day 4)
+      
+      if (isBenFriday) {
+        const fridayDate = new Date(activityDate);
+        fridayDate.setHours(15, 0, 0, 0); // 3:00 PM
+        
+        const benFridayActivity = {
+          id: activities.length + 1,
+          company_id: 12345,
+          owner_id: inspector.id,
+          creator_user_id: inspector.id,
+          is_deleted: false,
+          done: false,
+          type: "roof_inspection",
+          conference_meeting_client: null,
+          conference_meeting_url: null,
+          conference_meeting_id: null,
+          due_date: fridayDate.toISOString().split('T')[0],
+          due_time: fridayDate.toTimeString().split(' ')[0].substring(0, 8),
+          duration: "01:00:00",
+          busy: true,
+          add_time: new Date().toISOString(),
+          update_time: new Date().toISOString(),
+          marked_as_done_time: null,
+          subject: `Roof Inspection - Golden Beach Property`,
+          public_description: `Professional roof inspection for property at Golden Beach, QLD`,
+          note: "Client requested Friday 3PM specifically",
+          priority: 2,
+          location: {
+            value: "123 Golden Beach Drive, Golden Beach QLD 4551, Australia",
+            country: "Australia",
+            admin_area_level_1: "Queensland",
+            admin_area_level_2: null,
+            locality: "Golden Beach",
+            sublocality: null,
+            route: "Golden Beach Drive",
+            street_number: "123",
+            subpremise: null,
+            postal_code: "4551"
+          },
+          location_lat: -26.8167,
+          location_lng: 153.1333,
+          org_id: Math.floor(Math.random() * 1000) + 1,
+          person_id: Math.floor(Math.random() * 1000) + 1,
+          deal_id: Math.floor(Math.random() * 1000) + 1,
+          lead_id: `lead-${Math.random().toString(36).substr(2, 9)}`,
+          project_id: null,
+          attendees: [
+            {
+              person_id: Math.floor(Math.random() * 1000) + 1,
+              primary: true,
+              email: "client.friday@example.com",
+              name: "Michael Thompson",
+              status: "accepted",
+              is_organizer: false
+            }
+          ],
+          roof_type: "Metal Roof",
+          property_type: "House",
+          inspection_fee: 350,
+          client_contact: "+61 455 123 789",
+          special_instructions: "Friday 3PM appointment - Golden Beach",
+          source_timezone: "Australia/Brisbane"
+        };
+        
+        activities.push(benFridayActivity);
+      }
+      
+      // Only generate normal activities if not special case
+      if (!isRossToday && !isBenFriday) {
         // Generate 3-5 activities per inspector per day (avoiding lunch hour) - normal generation
         const activitiesPerDay = 3 + Math.floor(Math.random() * 3);
         
