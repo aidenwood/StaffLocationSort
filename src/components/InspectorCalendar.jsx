@@ -9,12 +9,55 @@ import {
   getInspectorById 
 } from '../data/mockActivities';
 
-const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, onInspectorChange, onDateChange, fullScreen = false, hoveredAppointment, onAppointmentHover, onAppointmentLeave }) => {
+const InspectorCalendar = ({ 
+  onSelectTimeSlot, 
+  selectedInspector, 
+  selectedDate, 
+  onInspectorChange, 
+  onDateChange, 
+  fullScreen = false, 
+  hoveredAppointment, 
+  onAppointmentHover, 
+  onAppointmentLeave,
+  activities = null,
+  inspectors = null,
+  isLiveData = false,
+  loading = false,
+  isTimeout = false,
+  error = null
+}) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate || new Date());
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [viewMode, setViewMode] = useState(5); // 1, 3, or 5 days
+
+  // Only use real Pipedrive data - no mock fallbacks
+  const effectiveActivities = activities || [];
+  const effectiveInspectors = inspectors || [];
+
+  // Debug: log activity structure once when activities change
+  React.useEffect(() => {
+    if (effectiveActivities.length > 0 && selectedInspector) {
+      const sample = effectiveActivities.slice(0, 5).map(a => ({
+        due_date: a.due_date,
+        due_time: a.due_time,
+        owner_id: a.owner_id,
+        subject: (a.subject || '').substring(0, 40),
+        done: a.done
+      }));
+      const inspectorMatch = effectiveInspectors.find(i => i.id === selectedInspector);
+      console.log('📅 CALENDAR DEBUG: activities count:', effectiveActivities.length, '| selectedInspector:', selectedInspector, '| inspector found:', !!inspectorMatch, '| sample:', sample);
+      // Check how many fall in 8-17:30 range
+      const inRange = effectiveActivities.filter(a => {
+        const t = a.due_time?.substring(0, 5) || '';
+        const [h, m] = t.split(':').map(Number);
+        const mins = (h || 0) * 60 + (m || 0);
+        return mins >= 8 * 60 && mins < 18 * 60; // 8:00 to 17:59
+      });
+      console.log('📅 CALENDAR DEBUG: activities in 8:00-18:00 range:', inRange.length, 'of', effectiveActivities.length);
+    }
+  }, [effectiveActivities.length, selectedInspector, effectiveInspectors]);
 
   // Update current time every minute
   React.useEffect(() => {
@@ -74,9 +117,9 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
 
   const timeSlots = useMemo(() => {
     const slots = [];
-    for (let hour = 8; hour <= 17; hour++) {
+    for (let hour = 6; hour <= 19; hour++) {
       slots.push(`${hour.toString().padStart(2, '0')}:00`);
-      if (hour < 17) {
+      if (hour < 19) {
         slots.push(`${hour.toString().padStart(2, '0')}:30`);
       }
     }
@@ -84,17 +127,46 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
   }, []);
 
   const getActivityForSlot = (inspector, date, timeSlot) => {
-    // Use the same approach as GoogleMapsView - get all activities and filter
-    const allActivities = getActivitiesByInspector(inspector.id);
     const dateString = format(date, 'yyyy-MM-dd');
-    const activities = allActivities.filter(activity => 
-      activity.due_date === dateString && !activity.done
-    );
+    const activities = effectiveActivities.filter(activity => {
+      // If inspector is provided, filter by inspector ID (handle number/string coercion)
+      if (inspector && Number(activity.owner_id) !== Number(inspector.id)) return false;
+      if (activity.due_date !== dateString) return false;
+      if (activity.done) return false;
+      // Must have a time (not 00:00:00 or empty)
+      if (!activity.due_time || activity.due_time === '00:00:00') return false;
+      // Skip follow-up tasks
+      if (activity.subject && activity.subject.includes('Inspector ENG Follow up')) return false;
+      return true;
+    });
     
     
     return activities.find(activity => {
-      const activityTime = activity.due_time.substring(0, 5);
-      const activityEndTime = calculateEndTime(activityTime, activity.duration.substring(0, 5));
+      const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
+      if (!timeInfo) return false;
+      
+      const activityTime = timeInfo.time;
+      const duration = activity.duration || '01:00:00';
+      const activityEndTime = calculateEndTime(activityTime, duration.substring(0, 5));
+      return timeSlot >= activityTime && timeSlot < activityEndTime;
+    });
+  };
+  
+  // Get all activities for a specific date and time slot across all inspectors
+  const getAllActivitiesForSlot = (date, timeSlot) => {
+    const dateString = format(date, 'yyyy-MM-dd');
+    return effectiveActivities.filter(activity => {
+      if (activity.due_date !== dateString) return false;
+      if (activity.done) return false;
+      if (!activity.due_time || activity.due_time === '00:00:00') return false;
+      if (activity.subject && activity.subject.includes('Inspector ENG Follow up')) return false;
+      
+      const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
+      if (!timeInfo) return false;
+      
+      const activityTime = timeInfo.time;
+      const duration = activity.duration || '01:00:00';
+      const activityEndTime = calculateEndTime(activityTime, duration.substring(0, 5));
       return timeSlot >= activityTime && timeSlot < activityEndTime;
     });
   };
@@ -146,6 +218,15 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
     setSelectedActivity(null);
   };
 
+  // Pipedrive API returns times in correct timezone already
+  const getPipedriveDateTime = (timeString, dateString) => {
+    if (!timeString || timeString === '00:00:00') return null;
+    return {
+      date: dateString,
+      time: timeString.substring(0, 5) // Just HH:MM format
+    };
+  };
+
   const extractSuburb = (address) => {
     const parts = address.split(',');
     if (parts.length >= 2) {
@@ -154,10 +235,72 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
     return address.split(' ').slice(-3, -2).join(' '); // Fallback
   };
 
+  // Extract property address from Pipedrive subject lines
+  const extractAddressFromPipedriveSubject = (subject) => {
+    if (!subject) return null;
+    
+    // Look for address pattern after "- " and before " Inspector" or ending with "NSW/QLD/etc"
+    const patterns = [
+      // Pattern 1: "Name - Address, State" 
+      /- ([^-]+(?:NSW|QLD|VIC|SA|WA|TAS|NT|ACT)[^-]*)/i,
+      // Pattern 2: "Property Inspection - Ben W - address details"
+      /Property Inspection[^-]*-[^-]*- ([^-]+)/i,
+      // Pattern 3: After last person name, before "Inspector"
+      /- ([^-]+) Inspector/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = subject.match(pattern);
+      if (match) {
+        let address = match[1].trim();
+        // Clean up common suffixes
+        address = address.replace(/, Australia$|, australia$/i, '');
+        address = address.replace(/\s+Inspector ENG Follow up.*$/i, '');
+        return address;
+      }
+    }
+    
+    return null;
+  };
+
+  // Extract suburb from address (works for both mock and Pipedrive)
+  const getAddressInfo = (activity) => {
+    // Mock data format
+    if (activity.location && activity.location.value) {
+      const fullAddress = activity.location.value;
+      const suburb = extractSuburb(fullAddress);
+      return { fullAddress, suburb };
+    }
+    
+    // Pipedrive data format - extract from subject
+    const extractedAddress = extractAddressFromPipedriveSubject(activity.subject);
+    if (extractedAddress) {
+      const suburb = extractSuburb(extractedAddress);
+      return { 
+        fullAddress: extractedAddress, 
+        suburb: suburb || extractedAddress.split(' ').slice(-2).join(' ') // Fallback to last 2 words
+      };
+    }
+    
+    return { fullAddress: null, suburb: 'Inspection' };
+  };
+
   const ActivityBlock = ({ activity, timeSlot }) => {
     const activityType = getActivityTypeByKey(activity.type);
-    const startTime = activity.due_time.substring(0, 5);
-    const endTime = calculateEndTime(startTime, activity.duration.substring(0, 5));
+    
+    // Get inspector info for "All Inspectors" view
+    const activityInspector = inspectors.find(inspector => 
+      inspector.id === activity.owner_id || inspector.id === activity.creator_user_id
+    );
+    
+    // Get Pipedrive datetime info
+    const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
+    if (!timeInfo) return null;
+    
+    const startTime = timeInfo.time;
+    // Handle duration - default to 1 hour for Pipedrive activities
+    const duration = activity.duration || '01:00:00';
+    const endTime = calculateEndTime(startTime, duration.substring(0, 5));
     
     if (timeSlot !== startTime) {
       const isHovered = hoveredAppointment && hoveredAppointment.id === activity.id;
@@ -165,10 +308,11 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
     }
 
     const durationSlots = Math.ceil(
-      (parseInt(activity.duration.split(':')[0]) * 60 + parseInt(activity.duration.split(':')[1])) / 30
+      (parseInt(duration.split(':')[0]) * 60 + parseInt(duration.split(':')[1])) / 30
     );
 
-    const suburb = extractSuburb(activity.location.value);
+    // Get address info (works for both mock and Pipedrive)
+    const addressInfo = getAddressInfo(activity);
     const isHovered = hoveredAppointment && hoveredAppointment.id === activity.id;
 
     return (
@@ -185,11 +329,24 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
         title="Click to view appointment details"
       >
         <div className={`font-semibold text-sm leading-tight mb-1 ${isHovered ? 'text-red-900' : 'text-blue-900'}`}>
-          {suburb}
+          {addressInfo.suburb}
         </div>
         <div className={`text-xs leading-tight mb-1 ${isHovered ? 'text-red-700' : 'text-blue-700'}`}>
           {activityType?.name || 'Inspection'}
         </div>
+        {/* Show inspector name in "All Inspectors" view */}
+        {isAllInspectors && activityInspector && (
+          <div className={`text-xs leading-tight mb-1 font-medium ${isHovered ? 'text-red-800' : 'text-blue-800'}`}>
+            👤 {activityInspector.name.split(' ')[0]} {/* First name only */}
+          </div>
+        )}
+        {/* Show property address if available */}
+        {addressInfo.fullAddress && (
+          <div className={`text-xs leading-tight mb-1 ${isHovered ? 'text-red-600' : 'text-blue-600'}`}>
+            <MapPin className="w-2.5 h-2.5 inline mr-1" />
+            <span className="truncate">{addressInfo.fullAddress}</span>
+          </div>
+        )}
         <div className={`text-xs leading-tight flex items-center gap-1 ${isHovered ? 'text-red-600' : 'text-blue-600'}`}>
           <Clock className="w-2.5 h-2.5 flex-shrink-0" />
           <span>{startTime}</span>
@@ -303,10 +460,16 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
     );
   };
 
-  // Get current inspector or first inspector if none selected
-  const currentInspector = selectedInspector 
-    ? inspectors.find(inspector => inspector.id === selectedInspector)
-    : inspectors[0];
+  // Get current inspector or handle "all inspectors" view
+  const isAllInspectors = selectedInspector === 'all';
+  const currentInspector = isAllInspectors 
+    ? null // No single inspector for "all" view
+    : selectedInspector 
+      ? inspectors.find(inspector => inspector.id === selectedInspector)
+      : inspectors[0];
+  
+  // For "all inspectors" view, get all inspectors that have activities
+  const visibleInspectors = isAllInspectors ? inspectors : (currentInspector ? [currentInspector] : []);
     
 
   // Calculate current time position
@@ -342,16 +505,32 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
       <div className={`${fullScreen ? 'p-6 pb-4' : ''} border-b border-gray-200`}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold text-gray-900">Inspector Calendar</h2>
+            <h2 className="text-2xl font-bold text-gray-900">
+              Inspector Calendar
+              {isAllInspectors && (
+                <span className="ml-3 text-base font-medium bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                  🌐 All Inspectors View
+                </span>
+              )}
+            </h2>
             {/* Inspector Dropdown */}
             <div className="flex items-center gap-2">
               <User className="w-5 h-5 text-gray-500" />
               <select
                 value={selectedInspector || ''}
-                onChange={(e) => onInspectorChange?.(e.target.value ? parseInt(e.target.value) : null)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'all') {
+                    onInspectorChange?.('all');
+                  } else if (value) {
+                    onInspectorChange?.(parseInt(value));
+                  } else {
+                    onInspectorChange?.(null);
+                  }
+                }}
                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                <option value="">All Inspectors</option>
+                <option value="all">All Inspectors</option>
                 {inspectors.map(inspector => (
                   <option key={inspector.id} value={inspector.id}>
                     {inspector.name} - {inspector.regionName || inspector.region}
@@ -434,7 +613,7 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
 
             {/* Calendar Grid */}
             <div className="bg-gray-200 rounded-b-lg overflow-hidden">
-              {currentInspector && (
+              {(currentInspector || isAllInspectors) && (
                 <div className="bg-white relative">
                   <div className={`grid gap-px bg-gray-200 ${
                     viewMode === 1 ? 'grid-cols-1' : 
@@ -460,8 +639,15 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
                           )}
                           <div className="min-h-96">
                             {timeSlots.map((timeSlot, slotIndex) => {
-                              const activity = getActivityForSlot(currentInspector, day, timeSlot);
-                              const isAvailable = isSlotAvailable(currentInspector, day, timeSlot) && !activity;
+                              // Get activity for this slot - handle both single and all inspector views
+                              const activity = isAllInspectors 
+                                ? getAllActivitiesForSlot(day, timeSlot)[0] // Get first activity if multiple
+                                : getActivityForSlot(currentInspector, day, timeSlot);
+                              
+                              const allActivities = isAllInspectors ? getAllActivitiesForSlot(day, timeSlot) : [];
+                              const isAvailable = isAllInspectors 
+                                ? allActivities.length === 0 && !isLunchBreak(timeSlot)
+                                : isSlotAvailable(currentInspector, day, timeSlot) && !activity;
                               const isPast = day < new Date() && !isSameDay(day, new Date());
                               const isLunch = isLunchBreak(timeSlot);
 
@@ -481,12 +667,14 @@ const InspectorCalendar = ({ onSelectTimeSlot, selectedInspector, selectedDate, 
                                   } ${
                                     slotIndex % 2 === 0 ? 'border-r border-gray-200' : ''
                                   }`}
-                                  onClick={() => !isPast && handleSlotClick(currentInspector, day, timeSlot)}
+                                  onClick={() => !isPast && !isAllInspectors && handleSlotClick(currentInspector, day, timeSlot)}
                                   title={
                                     isPast 
                                       ? 'Past time slot'
                                       : isLunch
                                         ? 'Lunch Break (12:00-13:00)'
+                                        : isAllInspectors && allActivities.length > 1
+                                          ? `${allActivities.length} activities at ${timeSlot}`
                                         : isAvailable 
                                           ? `Available - Click to book at ${timeSlot}` 
                                           : activity?.subject

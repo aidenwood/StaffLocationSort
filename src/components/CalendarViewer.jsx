@@ -119,9 +119,10 @@ const CalendarViewer = ({ onSelectTimeSlot, selectedInspector }) => {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigateWeek('prev')}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 Ihover:bg-gray-100 rounded-lg"
           >
             <ChevronLeft className="w-5 h-5" />
+
           </button>
           <span className="font-medium text-lg">
             {format(weekStart, 'MMM d')} - {format(weekEnd, 'MMM d, yyyy')}

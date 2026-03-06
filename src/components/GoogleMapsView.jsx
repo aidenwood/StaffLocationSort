@@ -7,9 +7,21 @@ import {
   getInspectorById, 
   getActivityTypeByKey 
 } from '../data/mockActivities';
+import { geocodeAddress, getCenterPoint, getZoomLevel, clearGeocodeCache } from '../services/geocoding';
 
 // Google Maps API Key
 const GOOGLE_MAPS_API_KEY = 'AIzaSyCMzl7FEizPoEordMy_wHwbnBVeh2XcPfk';
+
+// TEMPORARY: Suppress DirectionsService deprecation spam to see Pipedrive logs
+const originalWarn = console.warn;
+console.warn = (...args) => {
+  const message = args.join(' ');
+  if (message.includes('DirectionsService is deprecated') || 
+      message.includes('google.maps.routes.Route.computeRoutes')) {
+    return; // Skip DirectionsService warnings
+  }
+  originalWarn.apply(console, args);
+};
 
 // Debug logging for troubleshooting
 console.log('🗺️ Google Maps API Key Status:', {
@@ -23,11 +35,12 @@ if (!GOOGLE_MAPS_API_KEY) {
   console.error('❌ VITE_GOOGLE_MAPS_API_KEY environment variable is required');
 }
 
-const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave }) => {
+const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding }) => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [markers, setMarkers] = useState([]);
   const [directionsRenderer, setDirectionsRenderer] = useState(null);
+  const [geocodedAppointments, setGeocodedAppointments] = useState([]);
 
   // Initialize map
   useEffect(() => {
@@ -106,7 +119,96 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
     }
   }, [map]);
 
-  // Update markers when appointments change
+  // Geocode appointments when they change
+  useEffect(() => {
+    const geocodeAppointments = async () => {
+      if (!appointments || appointments.length === 0) {
+        setGeocodedAppointments([]);
+        return;
+      }
+
+      setIsGeocoding?.(true);
+      
+      // Note: Cache cleared on first load to ensure fresh geocoding
+      
+      const geocoded = [];
+
+      for (const appointment of appointments) {
+        // Check if already has coordinates
+        if (appointment.location_lat && appointment.location_lng) {
+          geocoded.push({
+            ...appointment,
+            coordinates: { lat: appointment.location_lat, lng: appointment.location_lng }
+          });
+          continue;
+        }
+
+        // Extract address from Pipedrive subject format: "Name - Address NSW/QLD Inspector..."
+        let locationString = appointment.subject || appointment.location?.value || appointment.location || '';
+        let extractedAddress = '';
+        
+        // Parse address from subject field
+        if (locationString.includes(' - ') && (locationString.includes('NSW') || locationString.includes('QLD'))) {
+          // Split by ' - ' and find the part with NSW/QLD
+          const parts = locationString.split(' - ');
+          for (let i = 1; i < parts.length; i++) {
+            const part = parts[i];
+            if (part.includes('NSW') || part.includes('QLD')) {
+              // Extract address up to state, before any additional text like "Inspector"
+              const beforeInspector = part.split(' Inspector')[0];
+              const beforeAustralia = beforeInspector.split(', Australia')[0];
+              extractedAddress = beforeAustralia.trim();
+              break;
+            }
+          }
+        }
+        
+        if (extractedAddress && (extractedAddress.includes('NSW') || extractedAddress.includes('QLD'))) {
+          console.log(`📍 Geocoding: ${appointment.subject.split(' - ')[0]}`);
+          console.log(`   Full subject: "${appointment.subject}"`);
+          console.log(`   Extracted address: "${extractedAddress}"`);
+          const coordinates = await geocodeAddress(extractedAddress);
+          
+          console.log(`   Geocoding result:`, coordinates);
+          
+          geocoded.push({
+            ...appointment,
+            coordinates,
+            locationString: extractedAddress
+          });
+        } else {
+          console.warn(`⚠️ No location data for appointment: ${appointment.subject}`);
+          geocoded.push({
+            ...appointment,
+            coordinates: null
+          });
+        }
+      }
+
+      setGeocodedAppointments(geocoded);
+      setIsGeocoding?.(false);
+
+      // Auto-center and zoom map based on geocoded locations
+      if (map && geocoded.length > 0) {
+        const validCoordinates = geocoded
+          .map(a => a.coordinates)
+          .filter(coord => coord !== null);
+
+        if (validCoordinates.length > 0) {
+          const center = getCenterPoint(validCoordinates);
+          const zoom = getZoomLevel(validCoordinates);
+          
+          console.log(`🗺️ Auto-centering map:`, { center, zoom, locations: validCoordinates.length });
+          map.setCenter(center);
+          map.setZoom(zoom);
+        }
+      }
+    };
+
+    geocodeAppointments();
+  }, [appointments, map]);
+
+  // Update markers when geocoded appointments change
   useEffect(() => {
     if (!map || !window.google) return;
 
@@ -116,14 +218,14 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
 
     const newMarkers = [];
 
-    // Add appointment markers
-    appointments.forEach((appointment, index) => {
-      if (!appointment.location_lat || !appointment.location_lng) return;
+    // Add geocoded appointment markers
+    geocodedAppointments.forEach((appointment, index) => {
+      if (!appointment.coordinates) {
+        console.log(`⚠️ No coordinates for: ${appointment.subject.substring(0, 50)}...`);
+        return;
+      }
 
-      const position = {
-        lat: appointment.location_lat,
-        lng: appointment.location_lng
-      };
+      const position = appointment.coordinates;
 
       // Create custom marker icon
       const isHovered = hoveredAppointment && hoveredAppointment.id === appointment.id;
@@ -137,7 +239,8 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       };
 
       // Extract short address for label (first part before comma)
-      const shortAddress = appointment.location.value.split(',')[0];
+      const locationText = appointment.locationString || appointment.location?.value || 'Location';
+      const shortAddress = locationText.split(',')[0];
       
       const marker = new window.google.maps.Marker({
         position,
@@ -163,18 +266,18 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
             </h4>
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: #6b7280; font-size: 12px;">
               <span>🕐</span>
-              <span>${appointment.due_time.substring(0, 5)} (${appointment.duration.substring(0, 5)})</span>
+              <span>${appointment.due_time?.substring(0, 5) || 'Time TBA'}${appointment.duration ? ` (${appointment.duration.substring(0, 5)})` : ''}</span>
             </div>
             <div style="display: flex; align-items: start; gap: 6px; margin-bottom: 8px; color: #6b7280; font-size: 12px;">
               <span>📍</span>
-              <span>${appointment.location.value}</span>
+              <span>${locationText}</span>
             </div>
             <div style="display: flex; justify-content: between; align-items: center;">
               <span style="color: #059669; font-weight: 600; font-size: 12px;">
-                $${appointment.inspection_fee}
+                ${appointment.inspection_fee ? `$${appointment.inspection_fee}` : 'Fee TBA'}
               </span>
               <span style="color: #6b7280; font-size: 11px; margin-left: 8px;">
-                ${appointment.roof_type || 'Metal Roof'}
+                ${appointment.roof_type || appointment.type || 'Property Inspection'}
               </span>
             </div>
           </div>
@@ -238,36 +341,46 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
     }
 
     setMarkers(newMarkers);
-  }, [map, appointments, potentialBooking, hoveredAppointment]);
+  }, [map, geocodedAppointments, potentialBooking, hoveredAppointment]);
 
   // Calculate and display route
   useEffect(() => {
-    if (!map || !directionsRenderer || appointments.length < 2) {
+    if (!map || !directionsRenderer || geocodedAppointments.length < 2) {
       if (directionsRenderer) {
         directionsRenderer.setDirections({ routes: [] });
       }
       return;
     }
 
-    const waypoints = appointments.slice(1, -1).map(appointment => ({
-      location: {
-        lat: appointment.location_lat,
-        lng: appointment.location_lng
-      },
+    // Filter to appointments with valid coordinates
+    const validAppointments = geocodedAppointments.filter(appointment => 
+      appointment.coordinates && 
+      typeof appointment.coordinates.lat === 'number' && 
+      typeof appointment.coordinates.lng === 'number'
+    );
+
+    if (validAppointments.length < 2) {
+      console.log('⚠️ Not enough appointments with valid coordinates for route calculation');
+      console.log(`Valid: ${validAppointments.length}, Total: ${geocodedAppointments.length}`);
+      if (directionsRenderer) {
+        directionsRenderer.setDirections({ routes: [] });
+      }
+      return;
+    }
+
+    const waypoints = validAppointments.slice(1, -1).map(appointment => ({
+      location: appointment.coordinates,
       stopover: true
     }));
 
+    // TODO: URGENT - Migrate to google.maps.routes.Route.computeRoutes
+    // DirectionsService is deprecated as of Feb 25, 2026
+    // See: https://developers.google.com/maps/documentation/javascript/routes/routes-js-migration
     const directionsService = new window.google.maps.DirectionsService();
     
     directionsService.route({
-      origin: {
-        lat: appointments[0].location_lat,
-        lng: appointments[0].location_lng
-      },
-      destination: {
-        lat: appointments[appointments.length - 1].location_lat,
-        lng: appointments[appointments.length - 1].location_lng
-      },
+      origin: validAppointments[0].coordinates,
+      destination: validAppointments[validAppointments.length - 1].coordinates,
       waypoints,
       travelMode: window.google.maps.TravelMode.DRIVING,
       optimizeWaypoints: false // Keep in time order
@@ -284,7 +397,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         onRouteCalculated?.(Math.ceil(totalDuration / 60)); // Convert to minutes
       }
     });
-  }, [map, directionsRenderer, appointments, onRouteCalculated]);
+  }, [map, directionsRenderer, geocodedAppointments, onRouteCalculated]);
 
   return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
 };
@@ -318,28 +431,77 @@ const ErrorComponent = ({ status }) => (
   </div>
 );
 
-const GoogleMapsView = ({ selectedInspector, selectedDate, onDateChange, potentialBooking, onDriveTimeCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave }) => {
+const GoogleMapsView = ({ 
+  selectedInspector, 
+  selectedDate, 
+  onDateChange, 
+  potentialBooking, 
+  onDriveTimeCalculated, 
+  hoveredAppointment, 
+  onAppointmentHover, 
+  onAppointmentLeave,
+  activities = [],
+  isLiveData = false,
+  loading = false,
+  isTimeout = false,
+  error = null
+}) => {
   const [totalDriveTime, setTotalDriveTime] = useState(0);
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // Get today's appointments for the selected inspector
+  // Get today's appointments for the selected inspector from passed Pipedrive activities
   const todaysAppointments = React.useMemo(() => {
     if (!selectedInspector || !selectedDate) return [];
     
-    const activities = getActivitiesByInspector(selectedInspector);
     const dateString = format(selectedDate, 'yyyy-MM-dd');
     
+    // TEMP: Show all activities to debug time filtering
+    const allActivities = activities
+      .filter(activity => 
+        Number(activity.owner_id) === Number(selectedInspector) && 
+        activity.due_date === dateString && 
+        !activity.done
+      )
+      .sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
+      
+    // TEMP: More permissive filter to see what we have
     const filtered = activities
-      .filter(activity => activity.due_date === dateString && !activity.done)
+      .filter(activity => {
+        // Basic filters (Number() handles number/string coercion)
+        if (Number(activity.owner_id) !== Number(selectedInspector)) return false;
+        if (activity.due_date !== dateString) return false;
+        if (activity.done) return false;
+        if (!activity.due_time || activity.due_time === '00:00:00' || activity.due_time.trim() === '') return false;
+        
+        // Exclude follow-up tasks (keep this)
+        if (activity.subject && activity.subject.includes('Inspector ENG Follow up')) return false;
+        
+        // TEMP: Allow all hours to see what times we have
+        // const timeHour = parseInt(activity.due_time.split(':')[0]);
+        // if (timeHour < 9 || timeHour >= 17) return false;
+        
+        // TEMP: Allow all activities with times (not just inspections)
+        return true;
+      })
       .sort((a, b) => a.due_time.localeCompare(b.due_time));
     
-    console.log('GoogleMapsView - Inspector:', selectedInspector);
-    console.log('GoogleMapsView - Date:', dateString);
-    console.log('GoogleMapsView - Total activities for inspector:', activities.length);
-    console.log('GoogleMapsView - Today\'s appointments:', filtered.length);
-    console.log('GoogleMapsView - Appointments:', filtered);
+    console.log(`🏗️ Found ${filtered.length} property inspections for ${dateString} (filtered out ${allActivities.length - filtered.length} follow-ups/general tasks)`);
     
+    // Debug: Show what we're filtering
+    if (allActivities.length > 0) {
+      console.log('📋 All activities for debugging:', allActivities.map(a => ({
+        subject: a.subject,
+        due_time: a.due_time,
+        timeHour: a.due_time ? parseInt(a.due_time.split(':')[0]) : 'no-time',
+        isFollowUp: a.subject?.includes('Inspector ENG Follow up'),
+        isPropertyInspection: a.subject?.includes('Property Inspection'),
+        hasInspectionKeyword: a.subject?.toLowerCase().includes('inspection')
+      })));
+    }
+    
+    // Return only timed appointments (filter out general tasks)
     return filtered;
-  }, [selectedInspector, selectedDate]);
+  }, [selectedInspector, selectedDate, activities, isLiveData]);
 
   const inspector = selectedInspector ? getInspectorById(selectedInspector) : null;
 
@@ -362,6 +524,7 @@ const GoogleMapsView = ({ selectedInspector, selectedDate, onDateChange, potenti
         hoveredAppointment={hoveredAppointment}
         onAppointmentHover={onAppointmentHover}
         onAppointmentLeave={onAppointmentLeave}
+        setIsGeocoding={setIsGeocoding}
       />
     );
   };
@@ -402,7 +565,16 @@ const GoogleMapsView = ({ selectedInspector, selectedDate, onDateChange, potenti
             </div>
             <span>•</span>
             <span>{todaysAppointments.length} appointments</span>
-            {totalDriveTime > 0 && (
+            {isGeocoding && (
+              <>
+                <span>•</span>
+                <div className="flex items-center gap-1">
+                  <div className="animate-spin rounded-full h-3 w-3 border border-blue-600 border-t-transparent"></div>
+                  <span>Loading locations...</span>
+                </div>
+              </>
+            )}
+            {!isGeocoding && totalDriveTime > 0 && (
               <>
                 <span>•</span>
                 <div className="flex items-center gap-1">

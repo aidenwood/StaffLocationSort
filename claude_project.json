@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "pipedrive": {
+      "command": "npx",
+      "args": ["-y", "@iamsamuelfraga/mcp-pipedrive"],
+      "env": {
+        "PIPEDRIVE_API_TOKEN": "51097810cd3328e8bc27ee01352b287d4d9f39a1",
+        "PIPEDRIVE_READ_ONLY": "true"
+      }
+    }
+  }
+}

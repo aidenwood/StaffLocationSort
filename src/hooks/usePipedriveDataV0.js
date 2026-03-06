@@ -1,15 +1,13 @@
-// Pipedrive Data Hook - V2 API with server-side filter
-// Primary: fetchActivitiesWithFilterV2 (filter 215315) + transform
-// Fallback: fetchActivitiesByDateRange + client-side filtering if V2 returns 0
+// Pipedrive Data Hook
+// Manages the toggle between live Pipedrive data and mock data
+// Provides caching and error handling for API calls
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  fetchActivitiesWithFilterV2,
-  fetchActivitiesByDateRange,
-  transformPipedriveActivity,
+  fetchTransformedActivities,
+  fetchUserActivities,
   healthCheck as pipedriveHealthCheck 
 } from '../api/pipedriveRead.js';
-import { PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID } from '../config/pipedriveFilters.js';
 import { 
   mockActivities, 
   inspectors, 
@@ -39,10 +37,7 @@ export const usePipedriveData = (options = {}) => {
     isLiveData: false,
     lastFetch: null,
     healthStatus: null,
-    isTimeout: false,
-    errorCount: 0,
-    lastError: null,
-    isCircuitBreakerOpen: false
+    isTimeout: false
   });
 
   const [cache, setCache] = useState(new Map());
@@ -62,11 +57,10 @@ export const usePipedriveData = (options = {}) => {
     console.log('🔍 Pipedrive ID validation:', validation);
     
     const result = validation.testUser || validation.inspectors;
-    console.log(result ? '✅ Using live Pipedrive data (V2 API + filter fallback)' : '❌ No valid Pipedrive IDs - using mock data');
+    console.log(result ? '✅ Using live Pipedrive data' : '❌ No valid Pipedrive IDs - using mock data');
     
     return result;
   }, [enableLiveData]);
-
 
   // Health check for Pipedrive API
   const checkHealth = useCallback(async () => {
@@ -101,15 +95,8 @@ export const usePipedriveData = (options = {}) => {
     }
   }, [shouldUseLiveData]);
 
-  // Add rate limit tracking and circuit breaker
-  const lastFetchTime = useRef(null);
-  const isCurrentlyFetching = useRef(false);
-  const consecutiveErrors = useRef(0);
-  const circuitBreakerTimeout = useRef(null);
-  
-  // Fetch activities with caching - V0 PROVEN WORKING approach
+  // Fetch activities with caching
   const fetchActivities = useCallback(async (userId = null, startDate = null, endDate = null) => {
-    const now = Date.now();
     const cacheKey = `activities_${userId}_${startDate}_${endDate}`;
     const cachedData = cache.get(cacheKey);
     
@@ -119,32 +106,6 @@ export const usePipedriveData = (options = {}) => {
       return cachedData.data;
     }
 
-    // Circuit breaker: Stop trying if we've had 3+ consecutive errors
-    if (consecutiveErrors.current >= 3) {
-      console.log('🔴 Circuit breaker is OPEN - API calls suspended after 3 consecutive errors');
-      setState(prev => ({ 
-        ...prev, 
-        isCircuitBreakerOpen: true,
-        error: `API unavailable after ${consecutiveErrors.current} consecutive errors`,
-        loading: false 
-      }));
-      return cachedData?.data || [];
-    }
-
-    // Prevent multiple simultaneous requests
-    if (isCurrentlyFetching.current) {
-      console.log('🚫 API call already in progress, skipping duplicate request');
-      return [];
-    }
-
-    // Rate limit: Wait at least 3 seconds between API calls
-    if (lastFetchTime.current && (now - lastFetchTime.current) < 3000) {
-      console.log('⏱️ Rate limit: Too soon since last API call, using cache or empty result');
-      return cachedData?.data || [];
-    }
-
-    isCurrentlyFetching.current = true;
-    lastFetchTime.current = now;
     setState(prev => ({ ...prev, loading: true, error: null, isTimeout: false }));
 
     // Set up 3-second timeout for rate limiting feedback
@@ -154,66 +115,65 @@ export const usePipedriveData = (options = {}) => {
         isTimeout: true,
         error: 'API request taking longer than expected - possible rate limiting'
       }));
-      console.log('⏰ PIPEDRIVE TIMEOUT: Request taking > 10 seconds, likely rate limited');
-    }, 10000);
+      console.log('⏰ PIPEDRIVE TIMEOUT: Request taking > 3 seconds, likely rate limited');
+    }, 3000);
 
     try {
       let activities = [];
       let isLiveData = false;
 
       if (shouldUseLiveData) {
-        console.log('🔄 PIPEDRIVE DEBUG: Fetching live data (V2 API primary)...');
+        console.log('🔄 PIPEDRIVE DEBUG: Fetching live Pipedrive data...');
         console.log('   userId:', userId);
         console.log('   startDate:', startDate);
         console.log('   endDate:', endDate);
-
-        const today = new Date();
-        const twoWeeksFromNow = new Date(today.getTime() + (14 * 24 * 60 * 60 * 1000));
-        const limitedStartDate = startDate || today.toISOString().split('T')[0];
-        const limitedEndDate = endDate || twoWeeksFromNow.toISOString().split('T')[0];
-
-        let rawActivities = [];
-
-        // Try V2 API with server-side filter first
-        try {
-          rawActivities = await fetchActivitiesWithFilterV2(
-            PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID,
-            limitedStartDate,
-            limitedEndDate
-          );
-          console.log(`📊 V2 API: Received ${rawActivities.length} activities from server filter`);
-        } catch (v2Error) {
-          console.warn('⚠️ V2 API failed, falling back to V0:', v2Error.message);
-        }
-
-        // Fallback to V0 if V2 returned 0 or failed
-        if (rawActivities.length === 0) {
-          console.log('📞 Fallback: Using V0 fetchActivitiesByDateRange...');
-          const pipedriveUser = userId ? getAllInspectors().find(i => i.appId === userId) ?? (userId === 'test' ? getTestUser() : null) : null;
-          const v0UserId = pipedriveUser?.id ?? null;
-          const allV0 = await fetchActivitiesByDateRange(limitedStartDate, limitedEndDate, v0UserId);
-          rawActivities = allV0.filter(a => (a.subject || '').toLowerCase().includes('property inspection'));
-          console.log(`📊 V0 fallback: ${rawActivities.length} property inspection activities`);
-        }
-
-        // Transform to app format (owner_id = appId for UI matching)
-        activities = rawActivities
-          .map(transformPipedriveActivity)
-          .filter(Boolean);
-
-        // Filter by selected inspector if specified; cap at 50 per inspector (skip when "all")
-        if (userId && userId !== 'all' && activities.length > 0) {
-          const before = activities.length;
-          activities = activities
-            .filter(a => Number(a.owner_id) === Number(userId))
-            .slice(0, 50);
-          console.log(`✅ Filtered to ${activities.length} activities for inspector (appId: ${userId}, max 50)`);
-          if (before > activities.length) {
-            console.log(`   (filtered out ${before - activities.length} from other inspectors)`);
+        
+        if (userId) {
+          // Fetch for specific user only - much more efficient
+          const pipedriveUser = getAllInspectors().find(inspector => inspector.appId === userId);
+          const testUser = getTestUser();
+          
+          console.log('🔍 PIPEDRIVE DEBUG: User lookup for specific inspector only:');
+          console.log('   requested userId (appId):', userId);
+          console.log('   found pipedriveUser:', pipedriveUser?.name, '(ID:', pipedriveUser?.id, ')');
+          
+          if (pipedriveUser?.id) {
+            console.log(`📞 PIPEDRIVE API: Fetching activities ONLY for ${pipedriveUser.name} (ID: ${pipedriveUser.id})`);
+            console.log('   📅 Date range: next 2 weeks only for performance');
+            
+            // Limit to next 2 weeks for better performance
+            const today = new Date();
+            const twoWeeksFromNow = new Date(today.getTime() + (14 * 24 * 60 * 60 * 1000));
+            const limitedStartDate = startDate || today.toISOString().split('T')[0];
+            const limitedEndDate = endDate || twoWeeksFromNow.toISOString().split('T')[0];
+            
+            activities = await fetchTransformedActivities(pipedriveUser.id, limitedStartDate, limitedEndDate);
+            console.log(`✅ PIPEDRIVE API: Received ${activities.length} activities for ${pipedriveUser.name}`);
+            isLiveData = true;
+          } else if (testUser.id && userId === 'test') {
+            console.log(`📞 PIPEDRIVE API: Fetching activities ONLY for test user ${testUser.name} (ID: ${testUser.id})`);
+            
+            // Limit to next 2 weeks for test user too
+            const today = new Date();
+            const twoWeeksFromNow = new Date(today.getTime() + (14 * 24 * 60 * 60 * 1000));
+            const limitedStartDate = startDate || today.toISOString().split('T')[0];
+            const limitedEndDate = endDate || twoWeeksFromNow.toISOString().split('T')[0];
+            
+            activities = await fetchTransformedActivities(testUser.id, limitedStartDate, limitedEndDate);
+            console.log(`✅ PIPEDRIVE API: Received ${activities.length} activities for test user`);
+            isLiveData = true;
+          } else {
+            console.warn('⚠️ PIPEDRIVE DEBUG: User not found in configuration, falling back to mock');
+            console.warn('   Available inspectors:', getAllInspectors().map(i => ({appId: i.appId, name: i.name, id: i.id})));
+            activities = getActivitiesByInspector(userId);
           }
+        } else {
+          // No specific user requested - return empty for better performance
+          console.log('📝 PIPEDRIVE DEBUG: No specific user requested - returning empty array for performance');
+          console.log('   (Use inspector selector to fetch specific inspector data)');
+          activities = [];
+          isLiveData = shouldUseLiveData;
         }
-
-        isLiveData = true;
       } else {
         console.log('📋 Using mock data (live data disabled)');
         activities = userId ? getActivitiesByInspector(userId) : mockActivities;
@@ -232,10 +192,6 @@ export const usePipedriveData = (options = {}) => {
 
       // Clear timeout and update success state
       clearTimeout(timeoutId);
-      isCurrentlyFetching.current = false;
-      
-      // Reset error count on success
-      consecutiveErrors.current = 0;
       
       setState(prev => ({
         ...prev,
@@ -244,12 +200,10 @@ export const usePipedriveData = (options = {}) => {
         isLiveData,
         lastFetch: new Date().toISOString(),
         error: null,
-        isTimeout: false,
-        errorCount: 0,
-        isCircuitBreakerOpen: false
+        isTimeout: false
       }));
 
-      // Debug: Add activities to window for testing
+      // Debug: Add activities to window for Playwright testing
       window.debugActivities = activities;
       console.log('🧪 DEBUG: Added', activities.length, 'activities to window.debugActivities');
 
@@ -258,99 +212,58 @@ export const usePipedriveData = (options = {}) => {
     } catch (error) {
       // Clear timeout on error
       clearTimeout(timeoutId);
-      isCurrentlyFetching.current = false;
       
-      // Increment consecutive error count
-      consecutiveErrors.current += 1;
-      console.error(`❌ Error fetching activities (${consecutiveErrors.current}/3):`, error);
+      console.error('❌ Error fetching activities:', error);
       
-      // Check if it's a rate limit error and use cached data if available
-      if (error.message.includes('429') || error.message.includes('rate limit')) {
-        console.log('⚠️ Rate limit hit, using cached data if available');
-        if (cachedData?.data) {
-          console.log('📋 Using stale cached data due to rate limit');
-          setState(prev => ({ 
-            ...prev, 
-            loading: false, 
-            error: 'Rate limited - using cached data',
-            isTimeout: false,
-            errorCount: consecutiveErrors.current,
-            lastError: error.message
-          }));
-          return cachedData.data;
-        }
-      }
+      // No fallback to mock data - show error state
+      console.log('❌ NO FALLBACK: Showing error state instead of mock data');
       
-      // Circuit breaker logic
-      const isCircuitBreakerTriggered = consecutiveErrors.current >= 3;
-      
-      if (isCircuitBreakerTriggered) {
-        console.log('🔴 CIRCUIT BREAKER TRIGGERED - 3 consecutive errors reached');
-        setState(prev => ({
-          ...prev,
-          activities: cachedData?.data || [],
-          loading: false,
-          isLiveData: false,
-          error: `API unavailable after ${consecutiveErrors.current} consecutive errors`,
-          isTimeout: false,
-          errorCount: consecutiveErrors.current,
-          lastError: error.message,
-          isCircuitBreakerOpen: true
-        }));
-      } else {
-        console.log('❌ NO FALLBACK: Showing error state instead of mock data');
-        setState(prev => ({
-          ...prev,
-          activities: [], // Empty array, no mock fallback
-          loading: false,
-          isLiveData: false,
-          error: error.message,
-          isTimeout: false,
-          errorCount: consecutiveErrors.current,
-          lastError: error.message,
-          isCircuitBreakerOpen: false
-        }));
-      }
+      setState(prev => ({
+        ...prev,
+        activities: [], // Empty array, no mock fallback
+        loading: false,
+        isLiveData: false,
+        error: error.message,
+        isTimeout: false
+      }));
 
-      return cachedData?.data || [];
+      return [];
     }
   }, [shouldUseLiveData, cache, cacheTimeout]);
 
   // Get activities for specific inspector and date
   const getInspectorActivities = useCallback(async (inspectorId, date = null) => {
     try {
-      if (!shouldUseLiveData) {
-        return date
+      let activities;
+
+      if (shouldUseLiveData) {
+        const inspector = getAllInspectors().find(inspector => inspector.appId === inspectorId);
+        const testUser = getTestUser();
+        
+        if (inspector?.id) {
+          const dateString = date ? date : null;
+          activities = await fetchTransformedActivities(inspector.id, dateString, dateString);
+        } else if (testUser.id && inspectorId === 'test') {
+          const dateString = date ? date : null;
+          activities = await fetchTransformedActivities(testUser.id, dateString, dateString);
+        } else {
+          // Fallback to mock data
+          activities = date 
+            ? getActivitiesByInspectorAndDate(inspectorId, new Date(date))
+            : getActivitiesByInspector(inspectorId);
+        }
+      } else {
+        activities = date 
           ? getActivitiesByInspectorAndDate(inspectorId, new Date(date))
           : getActivitiesByInspector(inspectorId);
-      }
-
-      let rawActivities = [];
-      const dateString = date || null;
-
-      try {
-        rawActivities = await fetchActivitiesWithFilterV2(
-          PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID
-        );
-      } catch {
-        const pipedriveUser = getAllInspectors().find(i => i.appId === inspectorId) ?? (inspectorId === 'test' ? getTestUser() : null);
-        const v0Data = await fetchActivitiesByDateRange(dateString, dateString, pipedriveUser?.id);
-        rawActivities = v0Data.filter(a => (a.subject || '').toLowerCase().includes('property inspection'));
-      }
-
-      let activities = rawActivities
-        .map(transformPipedriveActivity)
-        .filter(Boolean)
-        .filter(a => a.owner_id === inspectorId);
-
-      if (dateString) {
-        activities = activities.filter(a => a.due_date === dateString);
       }
 
       return activities;
     } catch (error) {
       console.error('❌ Error fetching inspector activities:', error);
-      return date
+      
+      // Fallback to mock data
+      return date 
         ? getActivitiesByInspectorAndDate(inspectorId, new Date(date))
         : getActivitiesByInspector(inspectorId);
     }
@@ -362,24 +275,11 @@ export const usePipedriveData = (options = {}) => {
     console.log('🧹 Pipedrive data cache cleared');
   }, []);
 
-  // Reset circuit breaker and retry
-  const resetCircuitBreaker = useCallback(() => {
-    console.log('🟢 Circuit breaker RESET - attempting API reconnection');
-    consecutiveErrors.current = 0;
-    setState(prev => ({
-      ...prev,
-      errorCount: 0,
-      isCircuitBreakerOpen: false,
-      error: null
-    }));
-  }, []);
-
   // Refresh data (bypass cache)
   const refresh = useCallback(async (userId = null, startDate = null, endDate = null) => {
     clearCache();
-    resetCircuitBreaker(); // Reset circuit breaker on manual refresh
     return await fetchActivities(userId, startDate, endDate);
-  }, [fetchActivities, clearCache, resetCircuitBreaker]);
+  }, [fetchActivities, clearCache]);
 
   // Get inspector list (mix of configured Pipedrive users and mock data)
   const getInspectorList = useCallback(() => {
@@ -437,9 +337,6 @@ export const usePipedriveData = (options = {}) => {
     lastFetch: state.lastFetch,
     healthStatus: state.healthStatus,
     isTimeout: state.isTimeout,
-    errorCount: state.errorCount,
-    lastError: state.lastError,
-    isCircuitBreakerOpen: state.isCircuitBreakerOpen,
     
     // Configuration
     shouldUseLiveData,
@@ -451,7 +348,6 @@ export const usePipedriveData = (options = {}) => {
     checkHealth,
     refresh,
     clearCache,
-    resetCircuitBreaker,
     
     // Cache info
     cacheSize: cache.size,

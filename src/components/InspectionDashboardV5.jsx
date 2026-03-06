@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { format, startOfWeek, endOfWeek, subWeeks, addWeeks } from 'date-fns';
+import { format } from 'date-fns';
 import { 
   Calendar, 
   Users, 
@@ -7,21 +7,18 @@ import {
   MapPin, 
   Plus,
   CheckCircle,
-  AlertCircle,
-  Bug
+  AlertCircle
 } from 'lucide-react';
 import InspectorCalendar from './InspectorCalendar';
 import InspectorView from './InspectorView';
 import RoofInspectionBooking from './RoofInspectionBooking';
 import GoogleMapsView from './GoogleMapsView';
-import ApiDebugConsole from './ApiDebugConsole';
-import AppUnavailableModal from './AppUnavailableModal';
 import { inspectors, getActivitiesByDate, mockActivities } from '../data/mockActivities';
-import { usePipedriveData } from '../hooks/usePipedriveData.js';
-import { useApiDebug } from '../hooks/useApiDebug.js';
+import { usePipedriveDataV5 } from '../hooks/usePipedriveDataV5.js';
 
-const InspectionDashboard = () => {
-  const [selectedInspector, setSelectedInspector] = useState(1); // Ben Frohloff (test inspector)
+const InspectionDashboardV5 = () => {
+  const [selectedInspector, setSelectedInspector] = useState(2); // Benjamin Wharton for testing
+  // Start on March 2nd, 2026 to show real Benjamin Wharton activities
   const [selectedDate, setSelectedDate] = useState(new Date('2026-03-02'));
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -30,18 +27,8 @@ const InspectionDashboard = () => {
   const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' or 'inspector'
   const [viewingInspectorId, setViewingInspectorId] = useState(null);
   const [hoveredAppointment, setHoveredAppointment] = useState(null);
-  const [showDebugConsole, setShowDebugConsole] = useState(false);
 
-  // API Debug functionality
-  const {
-    debugData,
-    setApiResponse,
-    setTransformedData,
-    trackApiCall,
-    setIsPaused
-  } = useApiDebug();
-
-  // Use Pipedrive data (V0 Proven Working Approach) - fetch for selected inspector only
+  // Use Pipedrive V5 data (Server-Side Filtering with filter_id 215256) - fetch for selected inspector only
   const { 
     activities, 
     inspectors: pipedriveInspectors, 
@@ -49,51 +36,16 @@ const InspectionDashboard = () => {
     error, 
     isLiveData,
     isTimeout,
-    errorCount,
-    lastError,
-    isCircuitBreakerOpen,
-    resetCircuitBreaker,
-    fetchActivities: originalFetchActivities 
-  } = usePipedriveData({ autoFetch: false }); // Don't auto-fetch, we'll fetch when inspector changes
+    fetchActivities,
+    filterInfo
+  } = usePipedriveDataV5({ autoFetch: false }); // Don't auto-fetch, we'll fetch when inspector changes
 
-  // Wrapped fetch activities for debug tracking - remove the problematic trackApiCall wrapper
-  const fetchActivities = useCallback(async (inspectorId, startDate, endDate) => {
-    try {
-      const result = await originalFetchActivities(inspectorId, startDate, endDate);
-      
-      // Track the raw response for debugging
-      setApiResponse(result);
-      
-      // Transform data for map and calendar views
-      const mapData = result?.filter(activity => activity.location?.value);
-      const calendarData = result?.map(activity => ({
-        id: activity.id,
-        title: activity.subject,
-        date: activity.due_date,
-        time: activity.due_time,
-        inspector: activity.owner_id,
-        location: activity.location?.value
-      }));
-      
-      setTransformedData(mapData, calendarData);
-      
-      return result;
-    } catch (error) {
-      console.error('Dashboard fetch error:', error);
-      throw error;
-    }
-  }, [originalFetchActivities, setApiResponse, setTransformedData]);
-
-  // Fetch activities when inspector or date changes (date range covers visible calendar week)
+  // Fetch activities when inspector changes
   useEffect(() => {
-    if (selectedInspector && !isCircuitBreakerOpen) {
-      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
-      const fetchStart = format(subWeeks(weekStart, 1), 'yyyy-MM-dd');
-      const fetchEnd = format(addWeeks(weekEnd, 2), 'yyyy-MM-dd');
-      fetchActivities(selectedInspector, fetchStart, fetchEnd);
+    if (selectedInspector) {
+      fetchActivities(selectedInspector);
     }
-  }, [selectedInspector, selectedDate]); // Remove fetchActivities from dependencies to prevent loop
+  }, [selectedInspector, fetchActivities]);
 
   const handleTimeSlotSelection = (slotData) => {
     setSelectedTimeSlot(slotData);
@@ -160,18 +112,6 @@ const InspectionDashboard = () => {
     setSelectedDate(newDate);
   };
 
-  const handleRetryConnection = () => {
-    resetCircuitBreaker();
-    // Trigger a fresh fetch
-    if (selectedInspector) {
-      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
-      const fetchStart = format(subWeeks(weekStart, 1), 'yyyy-MM-dd');
-      const fetchEnd = format(addWeeks(weekEnd, 2), 'yyyy-MM-dd');
-      fetchActivities(selectedInspector, fetchStart, fetchEnd);
-    }
-  };
-
   // Show inspector view if selected
   if (viewMode === 'inspector' && viewingInspectorId) {
     return (
@@ -194,15 +134,20 @@ const InspectionDashboard = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Inspection Scheduler V4
+              Inspection Scheduler V5
             </h1>
-            <p className="text-gray-600 text-sm">
-              V4: Raw Pipedrive Calendar (No Filters) - Debug view for Logan, QLD area
+            <p className="text-gray-600 text-xs">
+              V5: Server-Side Filtering (Filter ID: 215256) - 197 Property Inspection Activities
             </p>
+            {filterInfo && (
+              <p className="text-xs text-gray-500 mt-1">
+                Filter: "{filterInfo.name}" | Type: {filterInfo.type} | Status: {filterInfo.valid ? '✅ Valid' : '❌ Invalid'}
+              </p>
+            )}
           </div>
           
-          {/* Stats Pills */}
-          <div className="flex items-center gap-4">
+          {/* Stats Pills
+          <div className="flex items-center gap-4 hidden">
             <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
               {todaysActivities.length} Today's Bookings
             </div>
@@ -212,6 +157,11 @@ const InspectionDashboard = () => {
             <div className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm font-medium">
               {Math.round((completedActivities / totalActivities) * 100)}% Complete
             </div>
+            {isLiveData && activities && (
+              <div className="bg-red-50 text-red-700 px-3 py-1 rounded-full text-sm font-medium">
+                {activities.length} Filtered Activities
+              </div>
+            )}  */}
             
             {/* Inspector Quick Access */}
             <div className="border-l border-gray-300 pl-4 ml-2">
@@ -233,29 +183,13 @@ const InspectionDashboard = () => {
 
         {/* Header Actions */}
         <div className="flex items-center justify-between mt-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowBookingForm(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              New Booking
-            </button>
-            
-            <button
-              onClick={() => setShowDebugConsole(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-sm font-medium"
-              title="Open API Debug Console"
-            >
-              <Bug className="w-4 h-4" />
-              Debug Console
-              {debugData.consoleLogs?.length > 0 && (
-                <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5">
-                  {debugData.consoleLogs.length}
-                </span>
-              )}
-            </button>
-          </div>
+          <button
+            onClick={() => setShowBookingForm(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            New Booking
+          </button>
 
           {/* Region Filter */}
           <div className="flex items-center gap-2">
@@ -383,24 +317,8 @@ const InspectionDashboard = () => {
           onLocationUpdate={handleLocationUpdate}
         />
       )}
-
-      {/* API Debug Console */}
-      <ApiDebugConsole
-        isOpen={showDebugConsole}
-        onClose={() => setShowDebugConsole(false)}
-        debugData={debugData}
-        onPauseChange={setIsPaused}
-      />
-
-      {/* App Unavailable Modal */}
-      <AppUnavailableModal
-        isOpen={isCircuitBreakerOpen}
-        onRetry={handleRetryConnection}
-        errorCount={errorCount}
-        lastError={lastError}
-      />
     </div>
   );
 };
 
-export default InspectionDashboard;
+export default InspectionDashboardV5;

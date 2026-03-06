@@ -11,9 +11,75 @@ import {
   isTestUser
 } from '../config/pipedriveUsers.js';
 
+// Helper function for flexible inspector name matching
+const checkInspectorNameMatch = (subject, inspectorName, inspectorAliases = []) => {
+  if (!subject || !inspectorName) return false;
+  
+  const normalizedSubject = subject.toLowerCase();
+  const normalizedInspectorName = inspectorName.toLowerCase();
+  
+  // Extract the name part after "Property Inspection - "
+  const propertyInspectionPrefix = 'property inspection - ';
+  const prefixIndex = normalizedSubject.indexOf(propertyInspectionPrefix);
+  
+  if (prefixIndex === -1) return false;
+  
+  const nameInSubject = normalizedSubject.substring(prefixIndex + propertyInspectionPrefix.length).trim();
+  
+  // Helper function to check one name against the subject
+  const checkNameMatch = (name) => {
+    const normalizedName = name.toLowerCase();
+    
+    // 1. Exact match
+    if (nameInSubject === normalizedName) return true;
+    
+    // 2. Full name contains the subject name (e.g., "Ben F" matches "Ben Frohloff")  
+    if (normalizedName.includes(nameInSubject)) return true;
+    
+    // 3. Subject name contains the inspector name (e.g., "Benjamin Wharton" matches "Ben W")
+    if (nameInSubject.includes(normalizedName)) return true;
+    
+    // 4. Check for first name + last initial match (Ben F -> Ben Frohloff)
+    const nameParts = normalizedName.split(' ');
+    const subjectParts = nameInSubject.split(' ');
+    
+    if (nameParts.length >= 2 && subjectParts.length >= 2) {
+      const firstNameMatch = nameParts[0] === subjectParts[0];
+      const lastInitialMatch = nameParts[1].charAt(0) === subjectParts[1].charAt(0);
+      if (firstNameMatch && lastInitialMatch) return true;
+    }
+    
+    // 5. Check for first name + partial last name (Ben W -> Benjamin Wharton)
+    if (nameParts.length >= 2 && subjectParts.length >= 2) {
+      const firstNameSimilar = nameParts[0].startsWith(subjectParts[0]) || subjectParts[0].startsWith(nameParts[0]);
+      const lastNameInitial = nameParts[1].charAt(0) === subjectParts[1].charAt(0);
+      if (firstNameSimilar && lastNameInitial) return true;
+    }
+    
+    return false;
+  };
+  
+  // Check main name
+  if (checkNameMatch(inspectorName)) {
+    console.log(`✅ Name match found: "${nameInSubject}" matches main name "${normalizedInspectorName}"`);
+    return true;
+  }
+  
+  // Check aliases
+  for (const alias of inspectorAliases) {
+    if (checkNameMatch(alias)) {
+      console.log(`✅ Name match found: "${nameInSubject}" matches alias "${alias.toLowerCase()}"`);
+      return true;
+    }
+  }
+  
+  console.log(`🔍 Name match attempt: "${nameInSubject}" vs "${normalizedInspectorName}" + ${inspectorAliases.length} aliases - No match`);
+  return false;
+};
+
 // Base Pipedrive API configuration
 const PIPEDRIVE_BASE_URL = 'https://api.pipedrive.com/v1';
-const PIPEDRIVE_V2_BASE_URL = 'https://api.pipedrive.com/v2';
+const PIPEDRIVE_V2_BASE_URL = 'https://api.pipedrive.com/api/v2';
 
 // Create axios instance for Pipedrive API
 const createPipedriveClient = (useV2 = false) => {
@@ -33,6 +99,190 @@ const createPipedriveClient = (useV2 = false) => {
       'Content-Type': 'application/json',
     }
   });
+};
+
+// Fetch activities using server-side filtering with filter_id (V5 approach)
+export const fetchActivitiesWithFilter = async (filterId, startDate = null, endDate = null) => {
+  try {
+    const client = createPipedriveClient();
+    
+    console.log('🔍 V5 API: Fetching activities with server-side filter...');
+    console.log('   filterId:', filterId);
+    console.log('   startDate:', startDate);
+    console.log('   endDate:', endDate);
+
+    // Build query parameters
+    const params = {
+      filter_id: filterId, // This is the key - server-side filtering!
+      limit: 500, // Higher limit since we're using server-side filtering
+      start: 0
+    };
+
+    // Add date filters if provided
+    if (startDate) {
+      params.start_date = startDate;
+    }
+    if (endDate) {
+      params.end_date = endDate;
+    }
+
+    console.log('📞 V5 API: Making filtered request to /activities with params:', params);
+
+    const response = await client.get('/activities', { params });
+
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to fetch filtered activities');
+    }
+
+    const activities = response.data.data || [];
+    
+    console.log(`✅ V5 API: Server-side filter returned ${activities.length} activities`);
+    console.log('   📊 Activity breakdown:');
+    
+    // Log activity types for debugging
+    const typeBreakdown = {};
+    activities.forEach(activity => {
+      const subject = activity.subject || 'No subject';
+      const type = activity.type || 'unknown';
+      if (!typeBreakdown[type]) {
+        typeBreakdown[type] = [];
+      }
+      typeBreakdown[type].push(subject.substring(0, 50));
+    });
+    
+    Object.keys(typeBreakdown).forEach(type => {
+      console.log(`      ${type}: ${typeBreakdown[type].length} activities`);
+      if (typeBreakdown[type].length <= 3) {
+        typeBreakdown[type].forEach((subject, i) => {
+          console.log(`         ${i+1}. "${subject}${subject.length >= 50 ? '...' : ''}"`);
+        });
+      }
+    });
+
+    return activities;
+
+  } catch (error) {
+    handleApiError(error, 'fetchActivitiesWithFilter');
+    throw error;
+  }
+};
+
+// Fetch activities using API v2 with filter_id (V2 supports filter natively)
+// Uses cursor pagination; V2 returns owner_id (not user_id)
+// Capped at 1 page (500 activities) for fast load; filters by startDate/endDate client-side
+export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, endDate = null) => {
+  try {
+    const client = createPipedriveClient(true); // V2 client
+    const maxPages = 5; // Increased to get more activities
+
+    console.log('🔍 V2 API: Fetching UPCOMING activities from filter (target: 188 activities)...');
+    console.log('   filterId:', filterId);
+    console.log('   startDate:', startDate);
+    console.log('   endDate:', endDate);
+
+    const allActivities = [];
+    let cursor = null;
+    let pageCount = 0;
+
+    // Use V2 API's updated_since parameter to filter by update_time (avoids 500 limit)
+    // Remove updated_since for now to get all activities, then filter client-side
+    
+    console.log('📅 V2 API: Getting all activities (no date filter) then filtering client-side');
+
+    do {
+      const params = {
+        filter_id: filterId,
+        limit: 500, // Max limit to get more per page
+        sort_by: 'due_date',
+        sort_direction: 'desc' // ✅ FIX: Get newest first instead of 2020 activities
+      };
+
+      if (cursor) params.cursor = cursor;
+
+      console.log('📞 V2 API: GET /activities', cursor ? `(page ${pageCount + 1})` : '(first page)', params);
+
+      const response = await client.get('/activities', { params });
+
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to fetch filtered activities');
+      }
+
+      const activities = response.data.data || [];
+      allActivities.push(...activities);
+      pageCount++;
+
+      cursor = response.data.additional_data?.next_cursor || null;
+
+      console.log(`   ✅ Page ${pageCount}: ${activities.length} activities (total: ${allActivities.length})`);
+      
+      // Stop if we've gotten a reasonable number
+      if (allActivities.length >= 200 || !cursor) {
+        break;
+      }
+      
+    } while (cursor && pageCount < maxPages);
+
+    console.log(`🎯 FINAL RESULT: ${allActivities.length} total activities from filter ${filterId}`);
+
+    // Filter by due_date range client-side (V2 updated_since filters by update_time, not due_date)
+    let filtered = allActivities;
+    if (startDate || endDate) {
+      const start = startDate ? format(startOfDay(new Date(startDate)), 'yyyy-MM-dd') : null;
+      const end = endDate ? format(endOfDay(new Date(endDate)), 'yyyy-MM-dd') : null;
+      filtered = allActivities.filter(a => {
+        const d = a.due_date || '';
+        if (start && d < start) return false;
+        if (end && d > end) return false;
+        return true;
+      });
+      console.log(`✅ V2 API: ${filtered.length} activities in due_date range (from ${allActivities.length} fetched)`);
+    } else {
+      // Filter to only show upcoming activities (due_date >= today)
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      filtered = allActivities.filter(a => {
+        const dueDate = a.due_date || '';
+        return dueDate >= todayStr; // Only upcoming activities
+      });
+      console.log(`✅ V2 API: ${filtered.length} upcoming activities (from ${allActivities.length} total)`);
+    }
+
+    if (filtered.length > 0) {
+      const typeBreakdown = {};
+      filtered.slice(0, 50).forEach(activity => {
+        const type = activity.type || 'unknown';
+        if (!typeBreakdown[type]) typeBreakdown[type] = 0;
+        typeBreakdown[type]++;
+      });
+      console.log('   📊 Activity breakdown:', typeBreakdown);
+      
+      // 🔍 DEBUG: Log sample activity to find address field
+      const sampleActivity = filtered[0];
+      console.log('🏠 ADDRESS DEBUG - Sample activity fields:');
+      console.log('   location:', sampleActivity.location);
+      console.log('   address:', sampleActivity.address);
+      console.log('   location_address:', sampleActivity.location_address);
+      console.log('   formatted_address:', sampleActivity.formatted_address);
+      
+      // Check for custom fields (40-char hashes that might contain address)
+      const customFields = {};
+      Object.keys(sampleActivity).forEach(key => {
+        if (key.length === 40) {
+          customFields[key] = sampleActivity[key];
+        }
+      });
+      if (Object.keys(customFields).length > 0) {
+        console.log('   🔧 Custom fields (potential address):', customFields);
+      }
+      
+      // List all fields for investigation
+      console.log('   📝 All available fields:', Object.keys(sampleActivity).join(', '));
+    }
+
+    return filtered;
+  } catch (error) {
+    handleApiError(error, 'fetchActivitiesWithFilterV2');
+    throw error;
+  }
 };
 
 // Error handling wrapper
@@ -176,20 +426,148 @@ export const fetchActivityById = async (activityId) => {
   }
 };
 
+// GET: Fetch person address for activity (via deal -> person -> address)
+export const fetchPersonAddressForActivity = async (activity) => {
+  try {
+    const client = createPipedriveClient();
+    
+    // First try to get person directly from activity
+    let personId = activity.person_id;
+    
+    // If no person_id but has deal_id, get person from deal
+    if (!personId && activity.deal_id) {
+      const dealResponse = await client.get(`/deals/${activity.deal_id}`);
+      if (dealResponse.data.success && dealResponse.data.data.person_id) {
+        personId = dealResponse.data.data.person_id;
+      }
+    }
+    
+    // If we have a person_id, fetch their address
+    if (personId) {
+      const personResponse = await client.get(`/persons/${personId}`);
+      
+      if (personResponse.data.success && personResponse.data.data) {
+        const person = personResponse.data.data;
+        
+        
+        // Look for Address field - prioritize proper address fields
+        const priorityAddressFields = [
+          'postal_address_formatted_address',  // Most likely the full address
+          'formatted_address',
+          'address', 
+          'Address',
+          'full_address',
+          'street_address'
+        ];
+        
+        let address = null;
+        
+        // Try priority address fields first
+        for (const fieldName of priorityAddressFields) {
+          if (person[fieldName] && typeof person[fieldName] === 'string' && person[fieldName].trim()) {
+            const value = person[fieldName].trim();
+            // Skip marketing text
+            if (!value.includes('Lead Gen') && !value.includes('Advertising') && !value.includes('Region:')) {
+              address = value;
+              console.log(`   ✅ Found address in field '${fieldName}':`, address);
+              break;
+            }
+          }
+        }
+        
+        // If no standard field, check custom fields for formatted_address
+        if (!address) {
+          Object.keys(person).forEach(key => {
+            if (key.includes('formatted_address') && person[key] && typeof person[key] === 'string') {
+              const value = String(person[key]).trim();
+              if (value && !value.includes('Lead Gen') && !value.includes('Advertising') && !value.includes('Region:')) {
+                address = value;
+                console.log(`   ✅ Found address in custom formatted field '${key}':`, address);
+              }
+            }
+          });
+        }
+        
+        // Last resort: look for proper street addresses in custom fields
+        if (!address) {
+          Object.keys(person).forEach(key => {
+            if (key.length === 40 && person[key] && typeof person[key] === 'string') {
+              const value = String(person[key]).trim();
+              // More specific check for actual street addresses (QLD and NSW)
+              if (value && 
+                  // Must contain street type
+                  (value.includes('Street') || value.includes('St,') || value.includes('St ') || 
+                   value.includes('Road') || value.includes('Avenue') || value.includes('Drive') || 
+                   value.includes('Crescent') || value.includes('Place') || value.includes('Lane')) &&
+                  // Must contain Australian state (both QLD and NSW)
+                  (value.includes('QLD') || value.includes('NSW') || value.includes('Australia')) &&
+                  // Must NOT contain marketing text
+                  !value.includes('Lead Gen') && !value.includes('Advertising') && 
+                  !value.includes('Region:') && !value.includes('Landing Page')) {
+                address = value;
+                console.log(`   ✅ Found street address in custom field '${key}':`, address);
+              }
+            }
+          });
+        }
+        
+        // If address is an object, get the value
+        if (typeof address === 'object' && address) {
+          return address.value || address.formatted_address || address;
+        }
+        
+        return address || null;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn(`Could not fetch address for activity ${activity.id}:`, error.message);
+    return null;
+  }
+};
+
+// GET: Enrich activities with person addresses
+export const enrichActivitiesWithAddresses = async (activities) => {
+  try {
+    console.log(`🏠 Enriching ${activities.length} activities with person addresses...`);
+    
+    const enrichedActivities = await Promise.all(
+      activities.map(async (activity) => {
+        const address = await fetchPersonAddressForActivity(activity);
+        return {
+          ...activity,
+          personAddress: address
+        };
+      })
+    );
+    
+    const withAddresses = enrichedActivities.filter(a => a.personAddress).length;
+    console.log(`✅ Found addresses for ${withAddresses}/${activities.length} activities`);
+    
+    return enrichedActivities;
+  } catch (error) {
+    console.error('Error enriching activities with addresses:', error);
+    return activities; // Return original activities if enrichment fails
+  }
+};
+
 // Transform Pipedrive activity to app format
+// Handles both V1 (user_id) and V2 (owner_id) activity shapes
 export const transformPipedriveActivity = (pipedriveActivity) => {
   if (!pipedriveActivity) return null;
-  
-  const user = getPipedriveUserById(pipedriveActivity.user_id);
-  const isTest = isTestUser(pipedriveActivity.user_id);
-  
+
+  const pipedriveUserId = pipedriveActivity.user_id ?? pipedriveActivity.owner_id;
+  const user = getPipedriveUserById(pipedriveUserId);
+  const isTest = isTestUser(pipedriveUserId);
+
   return {
     // Keep original Pipedrive structure
     id: pipedriveActivity.id,
     company_id: pipedriveActivity.company_id,
-    owner_id: user?.appId || pipedriveActivity.user_id,
-    creator_user_id: pipedriveActivity.user_id,
-    is_deleted: pipedriveActivity.active_flag === false,
+    owner_id: user?.appId ?? pipedriveUserId,
+    creator_user_id: pipedriveUserId,
+    is_deleted: pipedriveActivity.is_deleted ?? (pipedriveActivity.active_flag === false),
     done: pipedriveActivity.done,
     type: determineActivityType(pipedriveActivity.subject || ''),
     
@@ -539,6 +917,240 @@ export const getPersonAndDealsByPhoneNumber = async (phoneNumber) => {
   } catch (error) {
     console.error('Error getting person and deals by phone:', error.message);
     return { persons: [], deals: [], error: error.message };
+  }
+};
+
+// GET: Create a filter for a specific inspector's Property Inspection activities
+export const createInspectorFilter = async (inspectorName) => {
+  try {
+    const client = createPipedriveClient();
+    
+    console.log(`🔍 Creating filter for ${inspectorName} Property Inspection activities...`);
+    
+    const filterData = {
+      name: `Property Inspections - ${inspectorName}`,
+      type: 'activity',
+      conditions: {
+        glue: 'and',
+        conditions: [
+          {
+            glue: 'and',
+            conditions: [
+              {
+                object: 'activity',
+                field_id: 'subject', // Subject field for activities
+                operator: 'LIKE',
+                value: [`Property Inspection - ${inspectorName}%`],
+                extra_value: null
+              }
+            ]
+          }
+        ]
+      }
+    };
+    
+    const response = await client.post('/filters', filterData);
+    
+    console.log(`✅ Created filter for ${inspectorName}:`, response.data.data.id);
+    
+    return response.data.data;
+  } catch (error) {
+    handleApiError(error, `create filter for ${inspectorName}`);
+  }
+};
+
+
+// GET: Search activities by subject text using ItemSearch API
+export const searchActivitiesBySubject = async (searchTerm, startDate = null, endDate = null) => {
+  try {
+    const client = createPipedriveClient();
+    
+    if (!searchTerm || searchTerm.length < 2) {
+      throw new Error('Search term must be at least 2 characters');
+    }
+    
+    console.log(`🔍 Searching activities by subject: "${searchTerm}"`);
+    
+    const params = {
+      item_types: 'activity',
+      term: searchTerm,
+      limit: 500,
+      exact_match: false
+    };
+    
+    // Note: ItemSearch doesn't support date filtering directly,
+    // we'll need to filter results after fetching
+    
+    const response = await client.get('/itemSearch', { params });
+    
+    let activities = response.data.data?.items || [];
+    console.log(`📋 ItemSearch returned ${activities.length} activities for "${searchTerm}"`);
+    
+    // Filter by date if provided
+    if (startDate || endDate) {
+      const startDateTime = startDate ? startOfDay(new Date(startDate)) : null;
+      const endDateTime = endDate ? endOfDay(new Date(endDate)) : null;
+      
+      activities = activities.filter(activity => {
+        if (!activity.item?.due_date) return false;
+        
+        const activityDate = new Date(activity.item.due_date);
+        
+        if (startDateTime && activityDate < startDateTime) return false;
+        if (endDateTime && activityDate > endDateTime) return false;
+        
+        return true;
+      });
+      
+      console.log(`📅 After date filtering: ${activities.length} activities`);
+    }
+    
+    // Transform ItemSearch results to standard activity format
+    const transformedActivities = activities.map(item => item.item).filter(Boolean);
+    
+    return transformedActivities;
+  } catch (error) {
+    handleApiError(error, `search activities by subject "${searchTerm}"`);
+  }
+};
+
+// GET: Fetch activities for inspector using V2 approach (Client-side filtering of all activities)
+export const fetchActivitiesForInspectorV2 = async (userId, inspectorName, startDate = null, endDate = null) => {
+  try {
+    console.log(`🧪 V2 (Enhanced): Fetching activities for ${inspectorName} (user ${userId})`);
+    
+    // V2: Get all activities for the user and filter client-side with pagination handling
+    const rawActivities = await fetchUserActivities(userId, startDate, endDate);
+    
+    // Filter activities to only include "Property Inspection - [InspectorName]" 
+    const filteredActivities = rawActivities.filter(activity => {
+      const subject = activity.subject || '';
+      return subject.includes(`Property Inspection - ${inspectorName}`);
+    });
+    
+    console.log(`📋 V2: Filtered ${filteredActivities.length} activities from ${rawActivities.length} total for ${inspectorName}`);
+    
+    // Transform activities to app format
+    const transformedActivities = filteredActivities
+      .map(transformPipedriveActivity)
+      .filter(activity => activity !== null);
+    
+    console.log(`✅ V2 (Enhanced): Transformed ${transformedActivities.length} activities for ${inspectorName}`);
+    
+    return transformedActivities;
+  } catch (error) {
+    console.error('❌ V2 (Enhanced) error:', error);
+    throw error;
+  }
+};
+
+// GET: Fetch activities for inspector using V3 approach (ItemSearch API)
+export const fetchActivitiesForInspectorV3 = async (userId, inspectorName, startDate = null, endDate = null) => {
+  try {
+    console.log(`🧪 V3 (ItemSearch): Fetching activities for ${inspectorName} (user ${userId})`);
+    
+    // Search for activities with "Property Inspection - [InspectorName]" pattern
+    const searchTerm = `Property Inspection - ${inspectorName}`;
+    
+    const rawActivities = await searchActivitiesBySubject(searchTerm, startDate, endDate);
+    
+    // Transform activities to app format
+    const transformedActivities = rawActivities
+      .map(transformPipedriveActivity)
+      .filter(activity => activity !== null);
+    
+    console.log(`✅ V3 (ItemSearch): Transformed ${transformedActivities.length} activities for ${inspectorName}`);
+    
+    return transformedActivities;
+  } catch (error) {
+    console.error('❌ V3 (ItemSearch) error:', error);
+    throw error;
+  }
+};
+
+// GET: Fetch activities using server-side filtering for V5 (Optimal Performance)
+export const fetchActivitiesForInspectorV5 = async (userId, inspectorName, filterId, startDate = null, endDate = null) => {
+  try {
+    console.log(`🧪 V5 (Server Filter): Fetching activities for ${inspectorName} using filter ${filterId}`);
+    
+    // Get inspector aliases from configuration  
+    const inspectorConfig = getPipedriveUserById(userId);
+    const inspectorAliases = inspectorConfig?.aliases || [];
+    
+    console.log(`🔍 V5: Inspector "${inspectorName}" has aliases:`, inspectorAliases);
+    
+    let rawActivities;
+    
+    if (!filterId) {
+      // No server filter available for this inspector, use client-side filtering
+      console.log(`📊 V5: No server filter available, using client-side filtering for ${inspectorName}...`);
+      
+      // Fetch all activities and filter client-side
+      const allActivities = await fetchActivitiesByDateRange(startDate, endDate);
+      rawActivities = allActivities.filter(activity => {
+        const subject = activity.subject || '';
+        return subject.toLowerCase().includes('property inspection');
+      });
+      
+      console.log(`✅ V5: Client-side filter successful - ${rawActivities.length} Property Inspection activities from ${allActivities.length} total`);
+    } else {
+      try {
+        // Try server-side filtering first
+        console.log(`📊 V5: Attempting server-side filter ${filterId}...`);
+        rawActivities = await fetchActivitiesWithFilter(filterId, startDate, endDate);
+        console.log(`✅ V5: Server filter successful - ${rawActivities.length} activities`);
+      } catch (filterError) {
+        // If filter fails, fallback to basic fetch + client filtering
+        console.log(`⚠️ V5: Server filter failed, falling back to client-side filtering`);
+        console.log(`   Filter error: ${filterError.message}`);
+        
+        // Fetch all activities and filter client-side
+        const allActivities = await fetchActivitiesByDateRange(startDate, endDate);
+        rawActivities = allActivities.filter(activity => {
+          const subject = activity.subject || '';
+          return subject.toLowerCase().includes('property inspection');
+        });
+        
+        console.log(`✅ V5: Client-side filter successful - ${rawActivities.length} Property Inspection activities from ${allActivities.length} total`);
+      }
+    }
+    
+    // Enhanced filtering for this specific inspector with flexible name matching
+    const inspectorActivities = rawActivities.filter(activity => {
+      const subject = activity.subject || '';
+      
+      // Check if assigned to this user ID
+      const userMatch = activity.user_id === userId;
+      
+      // Enhanced name matching for subject line (with aliases)
+      const inspectorMatch = checkInspectorNameMatch(subject, inspectorName, inspectorAliases);
+      
+      // Accept if either subject matches inspector name OR assigned to user
+      return inspectorMatch || userMatch;
+    });
+    
+    console.log(`🔍 V5 Filter Results:`);
+    console.log(`   Server filter returned: ${rawActivities.length} total activities`);
+    console.log(`   Inspector "${inspectorName}" activities: ${inspectorActivities.length}`);
+    
+    // Transform activities to app format
+    const transformedActivities = inspectorActivities
+      .map(transformPipedriveActivity)
+      .filter(activity => activity !== null);
+    
+    console.log(`✅ V5 (Server Filter): Transformed ${transformedActivities.length} activities for ${inspectorName}`);
+    
+    // Add debug info to activities for troubleshooting
+    transformedActivities.forEach((activity, index) => {
+      if (index < 3) { // Log first 3 for debugging
+        console.log(`   🔸 Activity ${index + 1}: "${activity.subject}" at ${activity.datetime}`);
+      }
+    });
+    
+    return transformedActivities;
+  } catch (error) {
+    console.error('❌ V5 (Server Filter) error:', error);
+    throw error;
   }
 };
 
