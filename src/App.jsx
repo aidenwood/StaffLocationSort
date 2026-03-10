@@ -38,18 +38,6 @@ function App() {
     };
   }, [pipedriveData, addressCache]);
 
-  // Simple routing based on URL hash or view state
-  React.useEffect(() => {
-    const hash = window.location.hash
-    if (hash === '#book' || hash === '#client') {
-      setView('client')
-    } else if (hash === '#activities' || hash === '#list') {
-      setView('activities')
-    } else {
-      setView('staff') // Default to staff dashboard
-    }
-  }, [])
-
   const switchToClient = () => {
     setView('client')
     window.location.hash = '#book'
@@ -65,70 +53,41 @@ function App() {
     window.location.hash = '#activities'
   }
 
+  // Simple routing based on URL hash or view state
+  React.useEffect(() => {
+    const updateViewFromHash = () => {
+      const hash = window.location.hash
+      if (hash === '#book' || hash === '#client') {
+        setView('client')
+      } else if (hash === '#activities' || hash === '#list') {
+        setView('activities')
+      } else {
+        setView('staff') // Default to staff dashboard
+      }
+    }
+
+    // Initial load
+    updateViewFromHash()
+
+    // Listen for hash changes
+    window.addEventListener('hashchange', updateViewFromHash)
+    
+    return () => {
+      window.removeEventListener('hashchange', updateViewFromHash)
+    }
+  }, [])
+
+
   if (view === 'client') {
-    return (
-      <div>
-        <div className="fixed top-4 right-4 z-50 flex gap-2">
-          <button
-            onClick={switchToStaff}
-            className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={switchToActivities}
-            className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
-          >
-            Activities
-          </button>
-        </div>
-        <ClientBooking />
-      </div>
-    )
+    return <ClientBooking />
   }
 
   if (view === 'activities') {
-    return (
-      <div>
-        <div className="fixed top-4 right-4 z-50 flex gap-2">
-          <button
-            onClick={switchToStaff}
-            className="px-3 py-2 bg-gray-600 text-white rounded-lg text-sm hover:bg-gray-700 transition-colors"
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={switchToClient}
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
-          >
-            Client Booking
-          </button>
-        </div>
-        <SimpleActivityList pipedriveData={pipedriveData} onActivitiesEnriched={onActivitiesEnriched} />
-      </div>
-    )
+    return <SimpleActivityList pipedriveData={pipedriveData} onActivitiesEnriched={onActivitiesEnriched} />
   }
 
   // Default: Staff Dashboard view
-  return (
-    <div>
-      <div className="fixed top-4 right-4 z-50 flex gap-2">
-        <button
-          onClick={switchToActivities}
-          className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors"
-        >
-          Activities
-        </button>
-        <button
-          onClick={switchToClient}
-          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
-        >
-          Client Booking
-        </button>
-      </div>
-      <InspectionDashboard pipedriveData={enrichedPipedriveData} />
-    </div>
-  )
+  return <InspectionDashboard pipedriveData={enrichedPipedriveData} />
 }
 
 export default App

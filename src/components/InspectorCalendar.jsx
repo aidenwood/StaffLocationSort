@@ -19,7 +19,8 @@ const InspectorCalendar = ({
   isLiveData = false,
   loading = false,
   isTimeout = false,
-  error = null
+  error = null,
+  hideNavigation = false
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate || new Date());
   const [selectedActivity, setSelectedActivity] = useState(null);
@@ -464,78 +465,80 @@ const InspectorCalendar = ({
   return (
     <div className={containerClass}>
       {/* Header - Compact */}
-      <div className={`${fullScreen ? 'px-4 py-2' : ''} border-b border-gray-200`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* Inspector Dropdown */}
-            <select
-              value={selectedInspector || ''}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === 'all') {
-                  onInspectorChange?.('all');
-                } else if (value) {
-                  onInspectorChange?.(parseInt(value));
-                } else {
-                  onInspectorChange?.(null);
-                }
-              }}
-              className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-            >
-              <option value="all">All Inspectors</option>
-              {inspectors.map(inspector => (
-                <option key={inspector.id} value={inspector.id}>
-                  {inspector.name} - {inspector.regionName || inspector.region}
-                </option>
-              ))}
-            </select>
+      {!hideNavigation && (
+        <div className={`${fullScreen ? 'px-4 py-2' : ''} border-b border-gray-200`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {/* Inspector Dropdown */}
+              <select
+                value={selectedInspector || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === 'all') {
+                    onInspectorChange?.('all');
+                  } else if (value) {
+                    onInspectorChange?.(parseInt(value));
+                  } else {
+                    onInspectorChange?.(null);
+                  }
+                }}
+                className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+              >
+                <option value="all">All Inspectors</option>
+                {inspectors.map(inspector => (
+                  <option key={inspector.id} value={inspector.id}>
+                    {inspector.name} - {inspector.regionName || inspector.region}
+                  </option>
+                ))}
+              </select>
 
-            {/* Day View Buttons */}
-            <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
-              {[1, 3, 5].map(days => (
-                <button
-                  key={days}
-                  onClick={() => setViewMode(days)}
-                  className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
-                    viewMode === days
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  {days}D
-                </button>
-              ))}
+              {/* Day View Buttons */}
+              <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
+                {[1, 3, 5].map(days => (
+                  <button
+                    key={days}
+                    onClick={() => setViewMode(days)}
+                    className={`px-2 py-0.5 text-xs font-medium rounded transition-colors ${
+                      viewMode === days
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {days}D
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Week Navigation */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigateWeek('prev')}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="font-medium text-sm min-w-36 text-center">
+                {weekDays.length > 0 && (
+                  `${format(weekDays[0], 'MMM d')} - ${format(weekDays[weekDays.length - 1], 'MMM d, yyyy')}`
+                )}
+              </span>
+              <button
+                onClick={() => navigateWeek('next')}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
-
-          {/* Week Navigation */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigateWeek('prev')}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="font-medium text-sm min-w-36 text-center">
-              {weekDays.length > 0 && (
-                `${format(weekDays[0], 'MMM d')} - ${format(weekDays[weekDays.length - 1], 'MMM d, yyyy')}`
-              )}
-            </span>
-            <button
-              onClick={() => navigateWeek('next')}
-              className="p-1 hover:bg-gray-100 rounded transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
         </div>
-      </div>
+      )}
 
       <div className={contentClass}>
         <div className={`${fullScreen ? 'flex-1 min-h-0' : ''} overflow-auto`}>
           <div className="min-w-full">
-            {/* Header Row */}
-            <div className={`grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
+            {/* Header Row - Sticky */}
+            <div className={`sticky top-0 z-10 grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
               viewMode === 1 ? 'grid-cols-1' : 
               viewMode === 3 ? 'grid-cols-3' : 'grid-cols-5'
             }`}>
