@@ -1,19 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, MapPin, DollarSign, User, Phone } from 'lucide-react';
+import { X, RefreshCw, MapPin, DollarSign, User, Phone, Navigation, Target } from 'lucide-react';
+import { format } from 'date-fns';
 import { 
   getDealsForRegion, 
   getRecommendationDeals, 
   healthCheckDeals,
+  sortDealsByDistance,
   REGIONAL_DEAL_FILTERS 
 } from '../api/pipedriveDeals.js';
 
-const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) => {
+const DealsDebugConsole = ({ 
+  isOpen, 
+  onClose, 
+  selectedInspector, 
+  inspectors, 
+  selectedDate, 
+  inspectionActivities = [] 
+}) => {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [healthStatus, setHealthStatus] = useState(null);
   const [selectedRegion, setSelectedRegion] = useState('R1');
   const [dealType, setDealType] = useState('all'); // 'all' or 'recommendations'
+  const [sortByDistance, setSortByDistance] = useState(false);
 
   // Get region for current inspector
   const currentInspector = inspectors?.find(i => i.id === selectedInspector);
@@ -33,8 +43,47 @@ const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) =
         result = await getDealsForRegion(region, { limit: 50 });
       }
       
-      setDeals(result || []);
-      console.log(`✅ Loaded ${result?.length || 0} deals`);
+      let processedDeals = result || [];
+      
+      // Apply distance sorting if enabled and we have inspection activities
+      if (sortByDistance && inspectionActivities.length > 0) {
+        console.log(`📏 Sorting ${processedDeals.length} deals by distance to ${inspectionActivities.length} inspection addresses`);
+        
+        // Debug logging
+        console.log('📊 Debug info:');
+        console.log('- Deals with coordinates:', processedDeals.filter(d => d.coordinates).length);
+        console.log('- Address sources breakdown:', {
+          deal_address_field: processedDeals.filter(d => d.addressSource === 'deal_address_field').length,
+          person_address: processedDeals.filter(d => d.addressSource === 'person_address').length,
+          org_address: processedDeals.filter(d => d.addressSource === 'org_address').length,
+          parsed_from_title: processedDeals.filter(d => d.addressSource === 'parsed_from_title').length,
+          no_address: processedDeals.filter(d => !d.address).length
+        });
+        console.log('- Inspection activities with coordinates:', inspectionActivities.filter(a => 
+          a.coordinates || a.personAddress?.coordinates || (a.lat && a.lng)
+        ).length);
+        
+        // Sample inspection activity structure
+        if (inspectionActivities.length > 0) {
+          const sample = inspectionActivities[0];
+          console.log('- Sample inspection activity:', {
+            id: sample.id,
+            subject: sample.subject,
+            hasCoordinates: !!sample.coordinates,
+            hasPersonAddress: !!sample.personAddress,
+            hasLatLng: !!(sample.lat && sample.lng)
+          });
+        }
+        
+        processedDeals = sortDealsByDistance(processedDeals, inspectionActivities);
+        
+        // Log sorted results
+        const dealsWithDistance = processedDeals.filter(d => d.distanceInfo && d.distanceInfo.minDistance !== null);
+        console.log(`✅ ${dealsWithDistance.length} deals successfully sorted by distance`);
+      }
+      
+      setDeals(processedDeals);
+      console.log(`✅ Loaded ${processedDeals.length} deals${sortByDistance ? ' (sorted by distance)' : ''}`);
       
     } catch (err) {
       console.error('❌ Error fetching deals:', err);
@@ -59,7 +108,7 @@ const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) =
       fetchDeals();
       checkHealth();
     }
-  }, [isOpen, selectedRegion, dealType]);
+  }, [isOpen, selectedRegion, dealType, sortByDistance]);
 
   // Update region when inspector changes
   useEffect(() => {
@@ -138,6 +187,26 @@ const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) =
                 <option value="recommendations">Recommendation Ready</option>
               </select>
             </div>
+            
+            {/* Distance Sorting Toggle */}
+            {inspectionActivities.length > 0 && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="sortByDistance"
+                  checked={sortByDistance}
+                  onChange={(e) => setSortByDistance(e.target.checked)}
+                  className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                />
+                <label htmlFor="sortByDistance" className="text-sm font-medium text-gray-700 cursor-pointer flex items-center gap-1">
+                  <Target className="w-4 h-4" />
+                  Sort by Distance
+                </label>
+                <span className="text-xs text-gray-500">
+                  ({inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''} on {selectedDate ? format(selectedDate, 'MMM d') : 'selected date'})
+                </span>
+              </div>
+            )}
 
             {currentInspector && (
               <div className="text-sm text-gray-600">
@@ -150,7 +219,14 @@ const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) =
             {loading ? (
               'Loading...'
             ) : (
-              `${deals.length} deals found`
+              <>
+                {deals.length} deals found
+                {sortByDistance && inspectionActivities.length > 0 && (
+                  <span className="ml-2 text-blue-600 font-medium">
+                    (sorted by distance)
+                  </span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -206,7 +282,7 @@ const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) =
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2 py-1 text-xs rounded ${
                         deal.priority === 'high' ? 'bg-red-100 text-red-700' :
                         deal.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
@@ -218,6 +294,30 @@ const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) =
                       {deal.coordinates && (
                         <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">
                           📍 Geocoded
+                        </span>
+                      )}
+                      
+                      {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
+                        <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded flex items-center gap-1">
+                          <Navigation className="w-3 h-3" />
+                          {deal.distanceInfo.minDistance.toFixed(1)}km
+                        </span>
+                      )}
+                      
+                      {deal.addressSource && (
+                        <span className={`px-2 py-1 text-xs rounded ${
+                          deal.addressSource === 'deal_address_field' ? 'bg-green-100 text-green-700' :
+                          deal.addressSource === 'person_address' ? 'bg-yellow-100 text-yellow-700' :
+                          deal.addressSource === 'org_address' ? 'bg-orange-100 text-orange-700' :
+                          deal.addressSource === 'parsed_from_title' ? 'bg-purple-100 text-purple-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {deal.addressSource === 'deal_address_field' ? '🏠 Deal Address' :
+                           deal.addressSource === 'person_address' ? '👤 Person Address' :
+                           deal.addressSource === 'org_address' ? '🏢 Org Address' :
+                           deal.addressSource === 'parsed_from_title' ? '📝 Parsed from Title' :
+                           '❓ Unknown Source'
+                          }
                         </span>
                       )}
                     </div>
@@ -233,6 +333,22 @@ const DealsDebugConsole = ({ isOpen, onClose, selectedInspector, inspectors }) =
                   {deal.coordinates && (
                     <div className="text-xs text-gray-500">
                       Coordinates: {deal.coordinates.lat?.toFixed(4)}, {deal.coordinates.lng?.toFixed(4)}
+                    </div>
+                  )}
+                  
+                  {deal.distanceInfo && deal.distanceInfo.closestAddress && (
+                    <div className="text-xs text-blue-600 bg-blue-50 rounded p-2 mt-2">
+                      <div className="flex items-center gap-1 mb-1">
+                        <Navigation className="w-3 h-3" />
+                        <span className="font-medium">Closest to: {deal.distanceInfo.closestAddress}</span>
+                      </div>
+                      <div>Distance: {deal.distanceInfo.minDistance?.toFixed(1)}km</div>
+                      {deal.distanceInfo.allDistances && deal.distanceInfo.allDistances.length > 1 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Other inspections: {deal.distanceInfo.allDistances.slice(1, 3).map(d => d.distance.toFixed(1) + 'km').join(', ')}
+                          {deal.distanceInfo.allDistances.length > 3 && ` + ${deal.distanceInfo.allDistances.length - 3} more`}
+                        </div>
+                      )}
                     </div>
                   )}
                   

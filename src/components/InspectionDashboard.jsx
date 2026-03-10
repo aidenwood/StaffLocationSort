@@ -475,6 +475,8 @@ const InspectionDashboard = ({ pipedriveData }) => {
         onClose={() => setShowDealsDebugConsole(false)}
         selectedInspector={selectedInspector}
         inspectors={pipedriveInspectors}
+        selectedDate={selectedDate}
+        inspectionActivities={enrichedMapActivities}
       />
 
       {/* App Unavailable Modal */}

@@ -4,6 +4,8 @@
 
 import axios from 'axios';
 import { geocodeAddress } from '../services/geocoding.js';
+import { parseDealAddress } from '../utils/dealAddressParser.js';
+import { calculateDistance } from '../utils/regionValidation.js';
 
 // Base Pipedrive API configuration
 const PIPEDRIVE_BASE_URL = 'https://api.pipedrive.com/v1';
@@ -73,14 +75,60 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
  * @returns {Object} Transformed deal data
  */
 export const transformPipedriveDeal = (deal) => {
-  // Extract address from deal or person
+  // Debug: Log the first deal's structure to identify available fields
+  if (Math.random() < 0.1) { // Log ~10% of deals to avoid spam
+    console.log('📋 Sample deal structure:', {
+      id: deal.id,
+      title: deal.title,
+      availableFields: Object.keys(deal).filter(key => 
+        key.toLowerCase().includes('address') || 
+        key.includes('Address') ||
+        key.includes('address')
+      ),
+      person: deal.person ? {
+        name: deal.person.name,
+        hasAddress: !!deal.person.address,
+        address: deal.person.address
+      } : null
+    });
+  }
+
+  // Extract address with priority order:
+  // 1. Custom 'Deal Address' field
+  // 2. Person address
+  // 3. Organization address  
+  // 4. Deal address field
+  // 5. Parse from title as fallback
+  
   let address = null;
-  if (deal.person?.address) {
+  let addressSource = null;
+  
+  // Check for custom 'Deal Address' field first
+  if (deal['Deal Address'] && typeof deal['Deal Address'] === 'string' && deal['Deal Address'].trim()) {
+    address = deal['Deal Address'].trim();
+    addressSource = 'deal_address_field';
+  } else if (deal.deal_address && typeof deal.deal_address === 'string' && deal.deal_address.trim()) {
+    address = deal.deal_address.trim();
+    addressSource = 'deal_address_field';
+  } else if (deal.person?.address) {
     address = deal.person.address;
+    addressSource = 'person_address';
   } else if (deal.org?.address) {
     address = deal.org.address;
+    addressSource = 'org_address';
   } else if (deal.address) {
     address = deal.address;
+    addressSource = 'deal_address';
+  }
+
+  // Try to parse address from deal title if no address found
+  let parsedFromTitle = null;
+  if (!address && deal.title) {
+    parsedFromTitle = parseDealAddress(deal.title);
+    if (parsedFromTitle && parsedFromTitle.address) {
+      address = parsedFromTitle.address;
+      addressSource = 'parsed_from_title';
+    }
   }
 
   // Extract phone number
@@ -103,7 +151,7 @@ export const transformPipedriveDeal = (deal) => {
     stage: deal.stage_id,
     person: {
       id: deal.person?.id,
-      name: deal.person?.name || 'Unknown Customer',
+      name: deal.person?.name || (parsedFromTitle?.name) || 'Unknown Customer',
       phone: phone,
       email: deal.person?.email?.[0]?.value || null
     },
@@ -112,7 +160,9 @@ export const transformPipedriveDeal = (deal) => {
       name: deal.org?.name || null
     },
     address: address,
+    addressSource: addressSource, // Track where the address came from
     coordinates: null, // Will be populated by geocoding
+    parsedFromTitle: parsedFromTitle, // Keep track of parsing results
     createdAt: deal.add_time,
     updatedAt: deal.update_time,
     expectedCloseDate: deal.expected_close_date,
@@ -212,13 +262,17 @@ export const getDealsForRegion = async (region, options = {}) => {
     const result = await fetchDealsWithFilter(filter.filterId, options);
     
     if (result.success) {
-      // Cache the result
+      // Enrich deals with geocoded addresses
+      const enrichedDeals = await enrichDealsWithAddresses(result.deals);
+      
+      // Cache the enriched result
       dealsCache.set(cacheKey, {
-        data: result.deals,
+        data: enrichedDeals,
         timestamp: Date.now()
       });
       
-      console.log(`✅ Cached ${result.deals.length} deals for region: ${region}`);
+      console.log(`✅ Cached ${enrichedDeals.length} enriched deals for region: ${region}`);
+      return enrichedDeals;
     }
     
     return result.deals;
@@ -286,7 +340,7 @@ export const getRecommendationDeals = async (region, date = new Date()) => {
   try {
     console.log(`🎯 Getting recommendation deals for ${region} on ${date.toDateString()}`);
     
-    // Fetch deals for region (READ-ONLY)
+    // Fetch deals for region (READ-ONLY) - already enriched with coordinates
     const deals = await getDealsForRegion(region);
     
     // Filter deals suitable for recommendations
@@ -302,12 +356,9 @@ export const getRecommendationDeals = async (region, date = new Date()) => {
       
       return true;
     });
-
-    // Enrich with geocoding (READ-ONLY)
-    const enrichedDeals = await enrichDealsWithAddresses(suitableDeals);
     
     // Filter out deals that couldn't be geocoded
-    const geoDeals = enrichedDeals.filter(deal => deal.coordinates);
+    const geoDeals = suitableDeals.filter(deal => deal.coordinates);
     
     console.log(`✅ Found ${geoDeals.length} suitable deals for recommendations`);
     return geoDeals;
@@ -319,6 +370,117 @@ export const getRecommendationDeals = async (region, date = new Date()) => {
 };
 
 /**
+ * Calculate distance from deal to closest inspection address
+ * @param {Object} deal - Deal with coordinates
+ * @param {Array} inspectionActivities - Array of inspection activities with coordinates
+ * @returns {Object} - { minDistance, closestActivity, allDistances }
+ */
+export const calculateDealDistances = (deal, inspectionActivities) => {
+  if (!deal.coordinates || !Array.isArray(inspectionActivities)) {
+    return { minDistance: null, closestActivity: null, allDistances: [] };
+  }
+
+  const distances = [];
+  
+  for (const activity of inspectionActivities) {
+    // Try multiple coordinate sources
+    let activityCoords = null;
+    
+    if (activity.coordinates) {
+      activityCoords = activity.coordinates;
+    } else if (activity.personAddress?.coordinates) {
+      activityCoords = activity.personAddress.coordinates;
+    } else if (activity.lat && activity.lng) {
+      activityCoords = { lat: activity.lat, lng: activity.lng };
+    }
+    
+    if (activityCoords && activityCoords.lat && activityCoords.lng) {
+      const distance = calculateDistance(
+        deal.coordinates.lat,
+        deal.coordinates.lng,
+        activityCoords.lat,
+        activityCoords.lng
+      );
+      
+      distances.push({
+        activity,
+        distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
+        activityAddress: activity.personAddress?.formatted_address || 
+                        activity.subject?.replace(/.*?(?=\d)/, '').trim() || 
+                        'Unknown address'
+      });
+    }
+  }
+
+  if (distances.length === 0) {
+    return { minDistance: null, closestActivity: null, allDistances: [] };
+  }
+
+  // Sort by distance and get closest
+  distances.sort((a, b) => a.distance - b.distance);
+  const closest = distances[0];
+
+  return {
+    minDistance: closest.distance,
+    closestActivity: closest.activity,
+    closestAddress: closest.activityAddress,
+    allDistances: distances
+  };
+};
+
+/**
+ * Sort deals by distance to inspection addresses
+ * @param {Array} deals - Array of deals with coordinates
+ * @param {Array} inspectionActivities - Array of inspection activities
+ * @returns {Array} - Sorted deals with distance information
+ */
+export const sortDealsByDistance = (deals, inspectionActivities) => {
+  if (!Array.isArray(deals) || !Array.isArray(inspectionActivities)) {
+    return deals;
+  }
+
+  // Calculate distances for each deal
+  const dealsWithDistances = deals.map(deal => {
+    const distanceInfo = calculateDealDistances(deal, inspectionActivities);
+    return {
+      ...deal,
+      distanceInfo
+    };
+  });
+
+  // Sort by distance (deals without coordinates go to end)
+  return dealsWithDistances.sort((a, b) => {
+    const aDistance = a.distanceInfo.minDistance;
+    const bDistance = b.distanceInfo.minDistance;
+    
+    // Both have distances
+    if (aDistance !== null && bDistance !== null) {
+      return aDistance - bDistance;
+    }
+    
+    // Only a has distance
+    if (aDistance !== null && bDistance === null) {
+      return -1;
+    }
+    
+    // Only b has distance
+    if (aDistance === null && bDistance !== null) {
+      return 1;
+    }
+    
+    // Neither has distance - sort by priority/value
+    const aPriority = a.priority === 'high' ? 3 : a.priority === 'medium' ? 2 : 1;
+    const bPriority = b.priority === 'high' ? 3 : b.priority === 'medium' ? 2 : 1;
+    
+    if (aPriority !== bPriority) {
+      return bPriority - aPriority;
+    }
+    
+    return (b.value || 0) - (a.value || 0);
+  });
+};
+
+/**
  * Health check for deals API (READ-ONLY)
  * @returns {Promise<Object>} Health status
  */
@@ -326,7 +488,7 @@ export const healthCheckDeals = async () => {
   try {
     const client = createPipedriveClient();
     // READ-ONLY: Simple GET request to test API access
-    const response = await client.get('/deals', {
+    await client.get('/deals', {
       params: { limit: 1 }
     });
     
@@ -353,5 +515,7 @@ export default {
   healthCheckDeals,
   transformPipedriveDeal,
   getFilterForRegion,
+  calculateDealDistances,
+  sortDealsByDistance,
   REGIONAL_DEAL_FILTERS
 };
