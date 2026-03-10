@@ -75,21 +75,14 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
  * @returns {Object} Transformed deal data
  */
 export const transformPipedriveDeal = (deal) => {
-  // Debug: Log the first deal's structure to identify available fields
-  if (Math.random() < 0.1) { // Log ~10% of deals to avoid spam
-    console.log('📋 Sample deal structure:', {
-      id: deal.id,
+  // Debug: Log address extraction for debugging (reduced frequency)
+  if (Math.random() < 0.02) { // Log ~2% of deals
+    const customAddress = deal['fc56b2671002827523bc3711b6a790f5ff00963f'];
+    console.log('📋 Address debug for deal', deal.id, ':', {
       title: deal.title,
-      availableFields: Object.keys(deal).filter(key => 
-        key.toLowerCase().includes('address') || 
-        key.includes('Address') ||
-        key.includes('address')
-      ),
-      person: deal.person ? {
-        name: deal.person.name,
-        hasAddress: !!deal.person.address,
-        address: deal.person.address
-      } : null
+      customDealAddress: customAddress || 'Not found',
+      personAddress: deal.person?.address || 'Not found',
+      hasCustomField: !!customAddress
     });
   }
 
@@ -103,8 +96,11 @@ export const transformPipedriveDeal = (deal) => {
   let address = null;
   let addressSource = null;
   
-  // Check for custom 'Deal Address' field first
-  if (deal['Deal Address'] && typeof deal['Deal Address'] === 'string' && deal['Deal Address'].trim()) {
+  // Check for custom 'Deal Address' field first (using hash key)
+  if (deal['fc56b2671002827523bc3711b6a790f5ff00963f'] && typeof deal['fc56b2671002827523bc3711b6a790f5ff00963f'] === 'string' && deal['fc56b2671002827523bc3711b6a790f5ff00963f'].trim()) {
+    address = deal['fc56b2671002827523bc3711b6a790f5ff00963f'].trim();
+    addressSource = 'deal_address_field';
+  } else if (deal['Deal Address'] && typeof deal['Deal Address'] === 'string' && deal['Deal Address'].trim()) {
     address = deal['Deal Address'].trim();
     addressSource = 'deal_address_field';
   } else if (deal.deal_address && typeof deal.deal_address === 'string' && deal.deal_address.trim()) {
@@ -180,39 +176,60 @@ export const transformPipedriveDeal = (deal) => {
 export const fetchDealsWithFilter = async (filterId, options = {}) => {
   const { 
     limit = 100,
-    start = 0,
-    includeArchived = false 
+    includeArchived = false,
+    fetchAll = false // New option to fetch all deals with pagination
   } = options;
 
   try {
-    console.log(`📋 Fetching deals with filter ${filterId}...`);
+    console.log(`📋 Fetching deals with filter ${filterId}${fetchAll ? ' (all pages)' : ''}...`);
     
     const client = createPipedriveClient();
+    let allDeals = [];
+    let start = 0;
+    let hasMore = true;
     
-    // READ-ONLY: Only GET request to fetch deals
-    const response = await client.get('/deals', {
-      params: {
-        filter_id: filterId,
-        limit: limit,
-        start: start,
-        status: includeArchived ? 'all_not_deleted' : 'open',
-        sort: 'value DESC' // Sort by value, highest first
-      }
-    });
+    while (hasMore) {
+      // READ-ONLY: Only GET request to fetch deals
+      const response = await client.get('/deals', {
+        params: {
+          filter_id: filterId,
+          limit: Math.min(limit, 100), // Pipedrive max is 100 per request
+          start: start,
+          status: includeArchived ? 'all_not_deleted' : 'open',
+          sort: 'value DESC' // Sort by value, highest first
+        }
+      });
 
-    if (!response.data.success) {
-      throw new Error(`Pipedrive API error: ${response.data.error || 'Unknown error'}`);
+      if (!response.data.success) {
+        throw new Error(`Pipedrive API error: ${response.data.error || 'Unknown error'}`);
+      }
+
+      const deals = response.data.data || [];
+      allDeals.push(...deals);
+      
+      const pagination = response.data.additional_data?.pagination;
+      console.log(`✅ Fetched ${deals.length} deals (${allDeals.length} total) from filter ${filterId}`);
+      
+      // Check if we should continue fetching
+      if (!fetchAll || !pagination || !pagination.more_items_in_collection) {
+        hasMore = false;
+      } else {
+        start = pagination.next_start;
+      }
+      
+      // Safety check to avoid infinite loops
+      if (allDeals.length > 500) {
+        console.warn('⚠️ Reached safety limit of 500 deals');
+        hasMore = false;
+      }
     }
 
-    const deals = response.data.data || [];
-    console.log(`✅ Fetched ${deals.length} deals from filter ${filterId}`);
-
     // Transform deals to standardized format
-    const transformedDeals = deals.map(transformPipedriveDeal);
+    const transformedDeals = allDeals.map(transformPipedriveDeal);
     
     return {
       deals: transformedDeals,
-      pagination: response.data.additional_data?.pagination || null,
+      pagination: { total: allDeals.length },
       success: true
     };
 
@@ -259,7 +276,10 @@ export const getDealsForRegion = async (region, options = {}) => {
     const filter = getFilterForRegion(region);
     console.log(`📋 Fetching deals for region: ${region} using filter ${filter.filterId}`);
     
-    const result = await fetchDealsWithFilter(filter.filterId, options);
+    const result = await fetchDealsWithFilter(filter.filterId, { 
+      ...options, 
+      fetchAll: true // Fetch all deals with pagination
+    });
     
     if (result.success) {
       // Enrich deals with geocoded addresses

@@ -40,7 +40,7 @@ const DealsDebugConsole = ({
       if (type === 'recommendations') {
         result = await getRecommendationDeals(region);
       } else {
-        result = await getDealsForRegion(region, { limit: 50 });
+        result = await getDealsForRegion(region, { limit: 200 }); // Increased to get all 197 deals
       }
       
       let processedDeals = result || [];
