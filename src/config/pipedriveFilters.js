@@ -14,6 +14,9 @@ export const PIPEDRIVE_FILTERS = {
   // All inspectors filter for debugging
   ALL_PROPERTY_INSPECTIONS: PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID,
   
+  // Regional deal filters for recommendations
+  R1_DEALS_READY_TO_BOOK: 222491, // Brisbane, Ipswich, Logan, Gold Coast
+  
   // Individual inspector filters (can be added when created in Pipedrive)
   // 'Ben F': 215319,
   // 'Ben W': 123456,

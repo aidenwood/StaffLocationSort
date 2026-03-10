@@ -20,6 +20,7 @@ import InspectorView from './InspectorView';
 import RoofInspectionBooking from './RoofInspectionBooking';
 import GoogleMapsView from './GoogleMapsView';
 import ApiDebugConsole from './ApiDebugConsole';
+import DealsDebugConsole from './DealsDebugConsole';
 import AppUnavailableModal from './AppUnavailableModal';
 import { inspectors } from '../data/mockActivities';
 import { useApiDebug } from '../hooks/useApiDebug.js';
@@ -36,6 +37,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
   const [viewingInspectorId, setViewingInspectorId] = useState(null);
   const [hoveredAppointment, setHoveredAppointment] = useState(null);
   const [showDebugConsole, setShowDebugConsole] = useState(false);
+  const [showDealsDebugConsole, setShowDealsDebugConsole] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState('split'); // 'split', 'calendar', 'map'
 
   // API Debug functionality
@@ -231,6 +233,31 @@ const InspectionDashboard = ({ pipedriveData }) => {
             <span className="text-xs text-gray-500">
               Pipedrive Activities
             </span>
+          </div>
+
+          {/* Center Left: Inspector Selector */}
+          <div className="flex items-center bg-gray-50 rounded-md p-0.5">
+            <select
+              value={selectedInspector || ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'all') {
+                  setSelectedInspector('all');
+                } else if (value) {
+                  setSelectedInspector(parseInt(value));
+                } else {
+                  setSelectedInspector(null);
+                }
+              }}
+              className="bg-transparent text-xs font-medium text-gray-700 px-2 py-1 rounded border-0 focus:outline-none focus:ring-0 cursor-pointer"
+            >
+              <option value="">All Inspectors</option>
+              {pipedriveInspectors && pipedriveInspectors.map(inspector => (
+                <option key={inspector.id} value={inspector.id}>
+                  {inspector.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Center Left: Date Control */}
@@ -442,6 +469,14 @@ const InspectionDashboard = ({ pipedriveData }) => {
         isLiveData={isLiveData}
       />
 
+      {/* Deals Debug Console */}
+      <DealsDebugConsole
+        isOpen={showDealsDebugConsole}
+        onClose={() => setShowDealsDebugConsole(false)}
+        selectedInspector={selectedInspector}
+        inspectors={pipedriveInspectors}
+      />
+
       {/* App Unavailable Modal */}
       <AppUnavailableModal
         isOpen={isCircuitBreakerOpen}
@@ -485,6 +520,13 @@ const InspectionDashboard = ({ pipedriveData }) => {
                     {debugData.consoleLogs.length}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={() => setShowDealsDebugConsole(true)}
+                className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors"
+                title="Deals Debug Console"
+              >
+                <MapPin className="w-3 h-3" />
               </button>
             </div>
             <div className="text-xs text-gray-500">
@@ -535,6 +577,14 @@ const InspectionDashboard = ({ pipedriveData }) => {
                     {debugData.consoleLogs.length}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={() => setShowDealsDebugConsole(true)}
+                className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors"
+                title="Deals Debug Console"
+              >
+                <MapPin className="w-3 h-3" />
+                Deals
               </button>
             </div>
           </div>
