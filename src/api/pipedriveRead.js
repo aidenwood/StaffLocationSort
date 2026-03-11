@@ -589,6 +589,21 @@ export const enrichActivitiesWithAddresses = async (activities) => {
       activities.map(async (activity) => {
         const address = await fetchPersonAddressForActivity(activity);
         
+        // Fetch deal label for region code
+        let dealLabel = null;
+        if (activity.deal_id) {
+          try {
+            const v1Client = createPipedriveClient(false); // Force V1 for deals
+            const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
+            if (dealResponse.data.success && dealResponse.data.data.label) {
+              dealLabel = dealResponse.data.data.label;
+              console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
+            }
+          } catch (error) {
+            console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
+          }
+        }
+        
         // If we found an address, geocode it
         if (address) {
           try {
@@ -603,7 +618,8 @@ export const enrichActivitiesWithAddresses = async (activities) => {
                 coordinates, // Add coordinates for distance calculations
                 lat: coordinates.lat, // Also add individual lat/lng for compatibility
                 lng: coordinates.lng,
-                addressSource: 'person_address_geocoded'
+                addressSource: 'person_address_geocoded',
+                label: dealLabel || null
               };
             } else {
               console.warn(`   ⚠️ Failed to geocode address: "${address}"`);

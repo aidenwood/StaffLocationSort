@@ -1,17 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { format, addDays, startOfWeek, subWeeks, addWeeks } from 'date-fns';
-import { Calendar, Grid3x3, ChevronLeft, ChevronRight, MapPin, Users } from 'lucide-react';
+import { format, addDays, startOfWeek, subWeeks, addWeeks, subDays } from 'date-fns';
+import { Calendar, Grid3x3, ChevronLeft, ChevronRight, MapPin, Users, ArrowLeft, Columns2, Map } from 'lucide-react';
 import { validateAddressInServiceArea, regionCenters } from '../utils/regionValidation.js';
+import DatePickerDropdown from './DatePickerDropdown';
 
 const AvailabilityGrid = ({ pipedriveData }) => {
   const [startDate, setStartDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedInspector, setSelectedInspector] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(new Date());
 
   const {
     activities: allActivities,
     inspectors,
     loading,
-    error
+    error,
+    isLiveData
   } = pipedriveData;
 
   // Generate 4 weeks of weekdays (20 days total)
@@ -257,36 +260,51 @@ const AvailabilityGrid = ({ pipedriveData }) => {
     );
   }
 
+  const handleDateChange = (newDate) => {
+    setSelectedDate(newDate);
+    // Update the start date to show the week containing the selected date
+    setStartDate(startOfWeek(newDate, { weekStartsOn: 1 }));
+  };
+
+  const handleBackToDashboard = () => {
+    window.location.hash = '#dashboard';
+  };
+
   return (
-    <div className="w-full p-6 bg-white">
-      {/* Figma-style Header */}
-      <div className="mb-6">
-        {/* Main header bar */}
-        <div className="flex items-center justify-between bg-white border-b border-gray-200 pb-4 mb-4">
-          {/* Left: Title and subtitle */}
-          <div className="flex items-center gap-3">
-            <Grid3x3 className="h-6 w-6 text-gray-600" />
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">
-                Availability Grid
-              </h1>
-              <span className="text-xs text-gray-500">
-                Inspector availability overview
-              </span>
-            </div>
+    <div className="h-screen bg-gray-50 flex flex-col">
+      {/* Header - Responsive Figma Style */}
+      <div className="bg-white border-b border-gray-200 px-2 sm:px-4 py-2">
+        {/* Desktop Layout - Single Row */}
+        <div className="hidden lg:flex items-center justify-between gap-4">
+          {/* Left: Back Button and Title */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <button
+              onClick={handleBackToDashboard}
+              className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1 className="text-sm font-medium text-gray-900">
+              Availability Grid
+            </h1>
+            <div className="w-px h-4 bg-gray-300"></div>
+            <span className="text-xs text-gray-500">
+              Inspector Overview
+            </span>
           </div>
 
-          {/* Center: Controls */}
-          <div className="flex items-center gap-3">
-            {/* Inspector Filter */}
+          {/* Center Controls */}
+          <div className="flex items-center gap-3 flex-1 justify-center">
+            {/* Inspector Selector */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5">
               <select
                 value={selectedInspector}
                 onChange={(e) => setSelectedInspector(e.target.value)}
-                className="bg-transparent text-xs font-medium text-gray-700 px-2 py-1 rounded border-0 focus:outline-none focus:ring-0 cursor-pointer"
+                className="bg-transparent text-xs font-medium text-gray-700 px-2 py-1 rounded border-0 focus:outline-none focus:ring-0 cursor-pointer min-w-0"
               >
                 <option value="all">All Inspectors</option>
-                {inspectors.map(inspector => (
+                {inspectors?.map(inspector => (
                   <option key={inspector.id} value={inspector.id}>
                     {inspector.name}
                   </option>
@@ -294,7 +312,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
               </select>
             </div>
 
-            {/* Date Navigation */}
+            {/* Date Control */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
               <button
                 onClick={() => navigateWeeks('prev')}
@@ -303,9 +321,13 @@ const AvailabilityGrid = ({ pipedriveData }) => {
               >
                 <ChevronLeft className="w-3 h-3" />
               </button>
-              <span className="px-2 py-1 text-xs text-gray-700 min-w-max">
-                {format(startDate, 'MMM d')} - {format(addDays(weekdays[weekdays.length - 1], 0), 'MMM d')}
-              </span>
+              
+              <DatePickerDropdown
+                selectedDate={selectedDate}
+                onDateChange={handleDateChange}
+                className="px-1"
+              />
+              
               <button
                 onClick={() => navigateWeeks('next')}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
@@ -314,21 +336,213 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                 <ChevronRight className="w-3 h-3" />
               </button>
             </div>
+            
+            {/* Navigation Controls */}
+            <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
+              <button
+                onClick={handleBackToDashboard}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors text-gray-600 hover:text-gray-800"
+                title="Dashboard View"
+              >
+                <Columns2 className="w-3 h-3" />
+                <span className="text-xs">Dashboard</span>
+              </button>
+              <button
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors bg-white text-blue-600 shadow-sm"
+                title="Grid View - Current"
+              >
+                <Grid3x3 className="w-3 h-3" />
+                <span className="text-xs">Grid</span>
+              </button>
+            </div>
           </div>
 
-          {/* Right: Status indicator */}
-          <div className="flex items-center gap-2">
+          {/* Right: Status */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              <span className="text-xs text-gray-500">Live Data</span>
+              <div className={`w-2 h-2 rounded-full ${
+                isLiveData ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              }`}></div>
+              <span className="text-xs text-gray-500">
+                {isLiveData ? 'Live' : 'Mock'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tablet Layout - Two Rows */}
+        <div className="hidden md:block lg:hidden">
+          {/* First Row - Title and Status */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleBackToDashboard}
+                className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <h1 className="text-sm font-medium text-gray-900">Availability Grid</h1>
+              <div className="w-px h-4 bg-gray-300"></div>
+              <span className="text-xs text-gray-500">Inspector Overview</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className={`w-2 h-2 rounded-full ${
+                isLiveData ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              }`}></div>
+              <span className="text-xs text-gray-500">
+                {isLiveData ? 'Live' : 'Mock'}
+              </span>
+            </div>
+          </div>
+
+          {/* Second Row - Controls */}
+          <div className="flex items-center justify-center gap-3">
+            {/* Inspector Selector */}
+            <div className="flex items-center bg-gray-50 rounded-md p-0.5">
+              <select
+                value={selectedInspector}
+                onChange={(e) => setSelectedInspector(e.target.value)}
+                className="bg-transparent text-xs font-medium text-gray-700 px-2 py-1 rounded border-0 focus:outline-none focus:ring-0 cursor-pointer"
+              >
+                <option value="all">All Inspectors</option>
+                {inspectors?.map(inspector => (
+                  <option key={inspector.id} value={inspector.id}>
+                    {inspector.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Control */}
+            <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
+              <button
+                onClick={() => navigateWeeks('prev')}
+                className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                title="Previous 4 weeks"
+              >
+                <ChevronLeft className="w-3 h-3" />
+              </button>
+              
+              <DatePickerDropdown
+                selectedDate={selectedDate}
+                onDateChange={handleDateChange}
+                className="px-1"
+              />
+              
+              <button
+                onClick={() => navigateWeeks('next')}
+                className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                title="Next 4 weeks"
+              >
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+            
+            {/* Navigation Controls */}
+            <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
+              <button
+                onClick={handleBackToDashboard}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors text-gray-600 hover:text-gray-800"
+                title="Dashboard View"
+              >
+                <Columns2 className="w-3 h-3" />
+                <span className="text-xs">Dashboard</span>
+              </button>
+              <button
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors bg-white text-blue-600 shadow-sm"
+                title="Grid View - Current"
+              >
+                <Grid3x3 className="w-3 h-3" />
+                <span className="text-xs">Grid</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Layout - Single Row */}
+        <div className="block md:hidden">
+          <div className="flex items-center justify-between gap-2">
+            {/* Left: Back Button, Title and Status */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleBackToDashboard}
+                className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                title="Back to Dashboard"
+              >
+                <ArrowLeft className="w-3 h-3" />
+              </button>
+              <h1 className="text-sm font-medium text-gray-900">Grid</h1>
+              <div className={`w-2 h-2 rounded-full ${
+                isLiveData ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              }`}></div>
+            </div>
+
+            {/* Center: Compact Inspector Selector */}
+            <div className="flex items-center bg-gray-50 rounded-md p-0.5 min-w-0 flex-1 max-w-[100px]">
+              <select
+                value={selectedInspector}
+                onChange={(e) => setSelectedInspector(e.target.value)}
+                className="bg-transparent text-[10px] font-medium text-gray-700 px-1 py-1 rounded border-0 focus:outline-none focus:ring-0 cursor-pointer w-full truncate"
+              >
+                <option value="all">All Inspectors</option>
+                {inspectors?.map(inspector => (
+                  <option key={inspector.id} value={inspector.id}>
+                    {inspector.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Center Right: Date Control */}
+            <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
+              <button
+                onClick={() => navigateWeeks('prev')}
+                className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                title="Previous 4 weeks"
+              >
+                <ChevronLeft className="w-3 h-3" />
+              </button>
+              
+              <DatePickerDropdown
+                selectedDate={selectedDate}
+                onDateChange={handleDateChange}
+                className=""
+              />
+              
+              <button
+                onClick={() => navigateWeeks('next')}
+                className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
+                title="Next 4 weeks"
+              >
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+            
+            {/* Right: Navigation Control */}
+            <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5 flex-shrink-0">
+              <button
+                onClick={handleBackToDashboard}
+                className="flex items-center p-1 rounded text-xs font-medium transition-colors text-gray-600 hover:text-gray-800"
+                title="Dashboard View"
+              >
+                <Columns2 className="w-3 h-3" />
+              </button>
+              <button
+                className="flex items-center p-1 rounded text-xs font-medium transition-colors bg-white text-blue-600 shadow-sm"
+                title="Grid View - Current"
+              >
+                <Grid3x3 className="w-3 h-3" />
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-
-      {/* Grid */}
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+      {/* Main Content */}
+      <div className="flex-1 p-4 overflow-auto">
+        {/* Grid */}
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             {/* Header row with dates */}
@@ -404,6 +618,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             {region}
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
