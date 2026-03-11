@@ -86,17 +86,26 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             let region = 'Unknown';
             let isFromLabel = false; // Track if region came from Label field
             
-            // First: Use Label field if available (when we get the hash key)
+            // First: Use Label field if available (3-digit Pipedrive codes)
+            // TODO: Labels are returning as 3-digit codes that need translation to region names
+            // Current format: "XXX" where XXX is a 3-digit code for the region
             if (activity.label && typeof activity.label === 'string') {
               const label = activity.label.trim();
+              console.log(`🏷️ Found label for activity "${activity.subject}": "${label}" (3-digit code)`);
               isFromLabel = true;
+              
+              // TODO: Replace this with proper 3-digit code to region mapping
               if (label.includes('GOLD COAST')) region = 'Gold Coast';
               else if (label.includes('LOGAN')) region = 'Logan';
               else if (label.includes('IPSWICH')) region = 'Ipswich';
               else if (label.includes('BRISBANE')) region = 'Brisbane';
               else if (label.includes('SUNSHINE COAST')) region = 'Sunshine Coast';
               else if (label.includes('TOOWOOMBA')) region = 'Toowoomba';
-              else region = label.replace(/\s*-\s*QLD.*$/, '').trim();
+              else {
+                // For now, display the 3-digit code as-is
+                region = `Code: ${label}`;
+              }
+              console.log(`🎯 Mapped label "${label}" to region: "${region}"`);
             }
             
             // Second: Use location object if available

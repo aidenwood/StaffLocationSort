@@ -115,7 +115,8 @@ export const fetchActivitiesWithFilter = async (filterId, startDate = null, endD
     const params = {
       filter_id: filterId, // This is the key - server-side filtering!
       limit: 500, // Higher limit since we're using server-side filtering
-      start: 0
+      start: 0,
+      fields: 'label' // Specifically request the 'label' custom field
     };
 
     // Add date filters if provided
@@ -255,6 +256,25 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
       });
       console.log('   📊 Activity breakdown:', typeBreakdown);
       
+      // 🏷️ DEAL LABELS: Fetch deal labels for activities that have deal_id
+      console.log('🏷️ Fetching deal labels for activities with deal_id...');
+      for (let i = 0; i < Math.min(filtered.length, 50); i++) {
+        const activity = filtered[i];
+        if (activity.deal_id) {
+          try {
+            // Use V1 client for deals endpoint
+            const v1Client = createPipedriveClient(false); // Force V1
+            const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
+            if (dealResponse.data.success && dealResponse.data.data && dealResponse.data.data.label) {
+              activity.label = dealResponse.data.data.label;
+              console.log(`📋 Deal ${activity.deal_id} label: "${activity.label}" for activity "${activity.subject}"`);
+            }
+          } catch (error) {
+            console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
+          }
+        }
+      }
+      
       // 🔍 DEBUG: Log sample activity to find address field
       const sampleActivity = filtered[0];
       console.log('🏠 ADDRESS DEBUG - Sample activity fields:');
@@ -262,6 +282,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
       console.log('   address:', sampleActivity.address);
       console.log('   location_address:', sampleActivity.location_address);
       console.log('   formatted_address:', sampleActivity.formatted_address);
+      console.log('   label:', sampleActivity.label);
       
       // Check for custom fields (40-char hashes that might contain address)
       const customFields = {};
@@ -354,7 +375,8 @@ export const fetchUserActivities = async (userId, startDate = null, endDate = nu
     const params = {
       user_id: userId,
       limit: 500, // Max allowed by Pipedrive
-      sort: 'due_date ASC'
+      sort: 'due_date ASC',
+      fields: 'label' // Specifically request the 'label' custom field
     };
     
     // Add date filters if provided
@@ -388,7 +410,8 @@ export const fetchActivitiesByDateRange = async (startDate, endDate, userId = nu
       start_date: format(startOfDay(new Date(startDate)), 'yyyy-MM-dd'),
       end_date: format(endOfDay(new Date(endDate)), 'yyyy-MM-dd'),
       limit: 500,
-      sort: 'due_date ASC'
+      sort: 'due_date ASC',
+      fields: 'label' // Specifically request the 'label' custom field
     };
     
     // Filter by specific user if provided
@@ -437,11 +460,30 @@ export const fetchPersonAddressForActivity = async (activity) => {
     // First try to get person directly from activity
     let personId = activity.person_id;
     
-    // If no person_id but has deal_id, get person from deal
+    // If no person_id but has deal_id, get person from deal and also get label
+    let dealLabel = null;
     if (!personId && activity.deal_id) {
-      const dealResponse = await client.get(`/deals/${activity.deal_id}`);
-      if (dealResponse.data.success && dealResponse.data.data.person_id) {
-        personId = dealResponse.data.data.person_id;
+      const v1Client = createPipedriveClient(false); // Force V1 for deals
+      const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
+      if (dealResponse.data.success && dealResponse.data.data) {
+        const dealData = dealResponse.data.data;
+        if (dealData.person_id) {
+          personId = dealData.person_id;
+        }
+        dealLabel = dealData.label;
+        console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
+      }
+    } else if (activity.deal_id) {
+      // Even if we have person_id, still fetch deal label
+      try {
+        const v1Client = createPipedriveClient(false); // Force V1 for deals
+        const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
+        if (dealResponse.data.success && dealResponse.data.data.label) {
+          dealLabel = dealResponse.data.data.label;
+          console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
+        }
+      } catch (error) {
+        console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
       }
     }
     
@@ -574,7 +616,8 @@ export const enrichActivitiesWithAddresses = async (activities) => {
         return {
           ...activity,
           personAddress: address,
-          addressSource: address ? 'person_address' : null
+          addressSource: address ? 'person_address' : null,
+          label: dealLabel || null
         };
       })
     );
