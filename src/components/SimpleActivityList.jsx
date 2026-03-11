@@ -213,6 +213,11 @@ const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
                           <span className="truncate">
                             {activity.personAddress || activity.location?.value || (typeof activity.location === 'string' ? activity.location : null) || 'No address available'}
                           </span>
+                          {activity.coordinates && (
+                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              📍 {activity.coordinates.lat?.toFixed(4)}, {activity.coordinates.lng?.toFixed(4)}
+                            </span>
+                          )}
                         </div>
                       </div>
 

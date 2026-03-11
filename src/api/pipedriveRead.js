@@ -426,10 +426,13 @@ export const fetchActivityById = async (activityId) => {
   }
 };
 
-// GET: Fetch person address for activity (via deal -> person -> address)
+// GET: Fetch person address for activity using the specific hash key for Person address
 export const fetchPersonAddressForActivity = async (activity) => {
   try {
     const client = createPipedriveClient();
+    
+    // Hash key for Person address in Pipedrive
+    const PERSON_ADDRESS_HASH = '6fa72064159f058167dcdab4ae78eb140eae6f05';
     
     // First try to get person directly from activity
     let personId = activity.person_id;
@@ -449,8 +452,16 @@ export const fetchPersonAddressForActivity = async (activity) => {
       if (personResponse.data.success && personResponse.data.data) {
         const person = personResponse.data.data;
         
+        // First check the specific hash key for Person address
+        if (person[PERSON_ADDRESS_HASH] && typeof person[PERSON_ADDRESS_HASH] === 'string') {
+          const address = String(person[PERSON_ADDRESS_HASH]).trim();
+          if (address && !address.includes('Lead Gen') && !address.includes('Advertising') && !address.includes('Region:')) {
+            console.log(`   ✅ Found person address in hash field '${PERSON_ADDRESS_HASH}':`, address);
+            return address;
+          }
+        }
         
-        // Look for Address field - prioritize proper address fields
+        // Fallback: Look for Address field - prioritize proper address fields
         const priorityAddressFields = [
           'postal_address_formatted_address',  // Most likely the full address
           'formatted_address',
@@ -462,7 +473,7 @@ export const fetchPersonAddressForActivity = async (activity) => {
         
         let address = null;
         
-        // Try priority address fields first
+        // Try priority address fields
         for (const fieldName of priorityAddressFields) {
           if (person[fieldName] && typeof person[fieldName] === 'string' && person[fieldName].trim()) {
             const value = person[fieldName].trim();
@@ -491,7 +502,7 @@ export const fetchPersonAddressForActivity = async (activity) => {
         // Last resort: look for proper street addresses in custom fields
         if (!address) {
           Object.keys(person).forEach(key => {
-            if (key.length === 40 && person[key] && typeof person[key] === 'string') {
+            if (key.length === 40 && key !== PERSON_ADDRESS_HASH && person[key] && typeof person[key] === 'string') {
               const value = String(person[key]).trim();
               // More specific check for actual street addresses (QLD and NSW)
               if (value && 
@@ -527,23 +538,53 @@ export const fetchPersonAddressForActivity = async (activity) => {
   }
 };
 
-// GET: Enrich activities with person addresses
+// GET: Enrich activities with person addresses and geocoded coordinates
 export const enrichActivitiesWithAddresses = async (activities) => {
   try {
-    console.log(`🏠 Enriching ${activities.length} activities with person addresses...`);
+    console.log(`🏠 Enriching ${activities.length} activities with person addresses and coordinates...`);
     
     const enrichedActivities = await Promise.all(
       activities.map(async (activity) => {
         const address = await fetchPersonAddressForActivity(activity);
+        
+        // If we found an address, geocode it
+        if (address) {
+          try {
+            const { geocodeAddress } = await import('../services/geocoding.js');
+            const coordinates = await geocodeAddress(address);
+            
+            if (coordinates) {
+              console.log(`   📍 Geocoded activity "${activity.subject}": ${coordinates.lat}, ${coordinates.lng}`);
+              return {
+                ...activity,
+                personAddress: address,
+                coordinates, // Add coordinates for distance calculations
+                lat: coordinates.lat, // Also add individual lat/lng for compatibility
+                lng: coordinates.lng,
+                addressSource: 'person_address_geocoded'
+              };
+            } else {
+              console.warn(`   ⚠️ Failed to geocode address: "${address}"`);
+            }
+          } catch (geocodeError) {
+            console.warn(`   ⚠️ Geocoding error for "${address}":`, geocodeError.message);
+          }
+        }
+        
         return {
           ...activity,
-          personAddress: address
+          personAddress: address,
+          addressSource: address ? 'person_address' : null
         };
       })
     );
     
     const withAddresses = enrichedActivities.filter(a => a.personAddress).length;
-    console.log(`✅ Found addresses for ${withAddresses}/${activities.length} activities`);
+    const withCoordinates = enrichedActivities.filter(a => a.coordinates).length;
+    
+    console.log(`✅ Address enrichment results:`);
+    console.log(`   Person addresses: ${withAddresses}/${activities.length}`);
+    console.log(`   Geocoded coordinates: ${withCoordinates}/${activities.length}`);
     
     return enrichedActivities;
   } catch (error) {

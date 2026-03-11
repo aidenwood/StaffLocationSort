@@ -43,34 +43,15 @@ const InspectorCalendar = ({
   // For "all inspectors" view, get all inspectors that have activities
   const visibleInspectors = isAllInspectors ? inspectors : (displayInspector ? [displayInspector] : []);
 
-  // Debug: log activity structure when activities change
+  // Debug: log activity structure when activities change (reduced logging)
   React.useEffect(() => {
-    console.log('📅 CALENDAR: Received', effectiveActivities.length, 'activities');
-    console.log('📅 CALENDAR: Selected inspector:', selectedInspector);
-    console.log('📅 CALENDAR: Selected date:', selectedDate?.toISOString().split('T')[0]);
-    
-    if (effectiveActivities.length > 0) {
-      console.log('📅 CALENDAR: First 3 activities:', effectiveActivities.slice(0, 3).map(a => ({
-        id: a.id,
-        subject: a.subject,
-        due_date: a.due_date,
-        due_time: a.due_time,
-        owner_id: a.owner_id,
-        done: a.done
-      })));
-      
-      // Look specifically for Ben W activities
+    if (process.env.NODE_ENV === 'development') {
       const benActivities = effectiveActivities.filter(a => a.owner_id === 2 || a.owner_id === '2');
-      console.log('📅 CALENDAR: Ben W activities found:', benActivities.length);
       if (benActivities.length > 0) {
-        console.log('📅 CALENDAR: Ben W activities:', benActivities.map(a => ({
-          subject: a.subject,
-          due_date: a.due_date,
-          due_time: a.due_time
-        })));
+        console.log('📅 CALENDAR: Ben W activities found:', benActivities.length);
       }
     }
-  }, [effectiveActivities, selectedInspector, selectedDate]);
+  }, [effectiveActivities, selectedInspector]);
 
   // Update current time every minute
   React.useEffect(() => {
@@ -335,7 +316,7 @@ const InspectorCalendar = ({
 
     return (
       <div 
-        className={`absolute inset-0 p-1 text-xs overflow-hidden z-10 transition-colors cursor-pointer ${
+        className={`absolute inset-0 p-1 text-xs overflow-hidden z-0 transition-colors cursor-pointer ${
           isHovered 
             ? 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100' 
             : 'bg-blue-50 border-l-4 border-blue-500 hover:bg-blue-100'

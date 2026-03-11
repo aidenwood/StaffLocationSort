@@ -13,7 +13,8 @@ import {
   Columns2,
   Map,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Grid3x3
 } from 'lucide-react';
 import InspectorCalendar from './InspectorCalendar';
 import InspectorView from './InspectorView';
@@ -90,11 +91,12 @@ const InspectionDashboard = ({ pipedriveData }) => {
     }
   }, [inspectorActivities]);
 
-  // Enrich all inspector activities with addresses (typically ~16-20 activities)
+  // Enrich activities that don't already have coordinates from App.jsx
   useEffect(() => {
     if (inspectorActivities.length === 0) return;
-    // Skip if all already enriched
-    const unenriched = inspectorActivities.filter(a => !addressMap[a.id]);
+    
+    // Only enrich activities that don't already have coordinates
+    const unenriched = inspectorActivities.filter(a => !a.coordinates && !addressMap[a.id]);
     if (unenriched.length === 0) return;
 
     const doEnrich = async () => {
@@ -114,10 +116,15 @@ const InspectionDashboard = ({ pipedriveData }) => {
     doEnrich();
   }, [inspectorActivities]);
 
-  // Merge addresses into all activities for calendar + map
+  // Merge addresses into all activities for calendar + map, preserving existing coordinates
   const enrichedActivities = useMemo(() => {
-    if (Object.keys(addressMap).length === 0) return activities;
-    return activities.map(a => addressMap[a.id] ? { ...a, personAddress: addressMap[a.id] } : a);
+    return activities.map(a => {
+      // If activity already has coordinates from App.jsx, keep them
+      if (a.coordinates) return a;
+      
+      // Otherwise, add address from addressMap if available
+      return addressMap[a.id] ? { ...a, personAddress: addressMap[a.id] } : a;
+    });
   }, [activities, addressMap]);
 
   // Get enriched day activities for the map
@@ -320,6 +327,18 @@ const InspectionDashboard = ({ pipedriveData }) => {
               <Maximize2 className="w-2.5 h-2.5" />
               <span className="hidden md:inline text-xs">Map</span>
             </button>
+            
+            {/* Availability Grid Button */}
+            <button
+              onClick={() => {
+                window.location.hash = '#grid';
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+              title="Availability Grid View"
+            >
+              <Grid3x3 className="w-3 h-3" />
+              <span className="hidden md:inline text-xs">Availability</span>
+            </button>
           </div>
 
           {/* Right: Status */}
@@ -350,7 +369,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
             selectedInspector={selectedInspector}
             selectedDate={selectedDate}
             onInspectorChange={setSelectedInspector}
-            onDateChange={null}
+            onDateChange={setSelectedDate}
             onSelectTimeSlot={handleTimeSlotSelection}
             fullScreen={true}
             hoveredAppointment={hoveredAppointment}
@@ -427,7 +446,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
             <GoogleMapsView
               selectedInspector={selectedInspector}
               selectedDate={selectedDate}
-              onDateChange={null}
+              onDateChange={setSelectedDate}
               potentialBooking={potentialBooking}
               onDriveTimeCalculated={handleDriveTimeCalculated}
               hoveredAppointment={hoveredAppointment}

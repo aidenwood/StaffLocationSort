@@ -23,13 +23,6 @@ console.warn = (...args) => {
   originalWarn.apply(console, args);
 };
 
-// Debug logging for troubleshooting
-console.log('🗺️ Google Maps API Key Status:', {
-  hasKey: !!GOOGLE_MAPS_API_KEY,
-  keyLength: GOOGLE_MAPS_API_KEY?.length || 0,
-  keyPreview: GOOGLE_MAPS_API_KEY ? `${GOOGLE_MAPS_API_KEY.substring(0, 10)}...` : 'Not found',
-  environment: import.meta.env.MODE
-});
 
 if (!GOOGLE_MAPS_API_KEY) {
   console.error('❌ VITE_GOOGLE_MAPS_API_KEY environment variable is required');
@@ -147,11 +140,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         const enrichedAddress = appointment.personAddress || appointment.location?.value || '';
 
         if (enrichedAddress && enrichedAddress.trim() !== '') {
-          console.log(`📍 Geocoding enriched address: ${appointment.subject?.split(' - ')[0] || 'Activity'}`);
-          console.log(`   Enriched address: "${enrichedAddress}"`);
-          
           const coordinates = await geocodeAddress(enrichedAddress);
-          console.log(`   Geocoding result:`, coordinates);
           
           geocoded.push({
             ...appointment,
@@ -159,9 +148,6 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
             locationString: enrichedAddress
           });
         } else {
-          console.warn(`⚠️ No enriched address for appointment: ${appointment.subject}`);
-          console.log(`   location.value: "${appointment.location?.value}"`);
-          console.log(`   Raw location object:`, appointment.location);
           
           geocoded.push({
             ...appointment,
@@ -180,12 +166,27 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
           .filter(coord => coord !== null);
 
         if (validCoordinates.length > 0) {
-          const center = getCenterPoint(validCoordinates);
-          const zoom = getZoomLevel(validCoordinates);
-          
-          console.log(`🗺️ Auto-centering map:`, { center, zoom, locations: validCoordinates.length });
-          map.setCenter(center);
-          map.setZoom(zoom);
+          if (validCoordinates.length === 1) {
+            // Single marker - center on it with reasonable zoom
+            map.setCenter(validCoordinates[0]);
+            map.setZoom(15);
+          } else {
+            // Multiple markers - use fitBounds with padding for better view
+            const bounds = new window.google.maps.LatLngBounds();
+            validCoordinates.forEach(coord => {
+              bounds.extend(new window.google.maps.LatLng(coord.lat, coord.lng));
+            });
+            
+            // Add padding so markers aren't on the edge
+            const padding = { top: 50, right: 50, bottom: 50, left: 50 };
+            map.fitBounds(bounds, padding);
+            
+            // Ensure minimum zoom level so it doesn't zoom too far out
+            const listener = window.google.maps.event.addListener(map, 'bounds_changed', () => {
+              if (map.getZoom() > 16) map.setZoom(16);
+              window.google.maps.event.removeListener(listener);
+            });
+          }
         }
       }
     };
@@ -206,7 +207,6 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
     // Add geocoded appointment markers
     geocodedAppointments.forEach((appointment, index) => {
       if (!appointment.coordinates) {
-        console.log(`⚠️ No coordinates for: ${appointment.subject.substring(0, 50)}...`);
         return;
       }
 
@@ -345,8 +345,6 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
     );
 
     if (validAppointments.length < 2) {
-      console.log('⚠️ Not enough appointments with valid coordinates for route calculation');
-      console.log(`Valid: ${validAppointments.length}, Total: ${geocodedAppointments.length}`);
       if (directionsRenderer) {
         directionsRenderer.setDirections({ routes: [] });
       }
@@ -439,7 +437,6 @@ const GoogleMapsView = ({
   const todaysAppointments = React.useMemo(() => {
     // If enriched activities are available, use them directly
     if (enrichedDayActivities && enrichedDayActivities.length > 0) {
-      console.log(`🗺️ MAP: Using ${enrichedDayActivities.length} enriched activities for map`);
       return enrichedDayActivities.sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
     }
 
@@ -459,7 +456,6 @@ const GoogleMapsView = ({
       })
       .sort((a, b) => a.due_time.localeCompare(b.due_time));
 
-    console.log(`🗺️ MAP: Found ${filtered.length} activities for ${dateString} (fallback, no enrichment)`);
     return filtered;
   }, [selectedInspector, selectedDate, activities, enrichedDayActivities]);
 
@@ -471,8 +467,6 @@ const GoogleMapsView = ({
   }, [onDriveTimeCalculated]);
 
   const render = (status) => {
-    console.log('Google Maps Wrapper Status:', status);
-    console.log('Available statuses:', Object.values(Status));
     if (status === Status.LOADING) return <LoadingComponent />;
     if (status === Status.FAILURE) return <ErrorComponent status={status} />;
     

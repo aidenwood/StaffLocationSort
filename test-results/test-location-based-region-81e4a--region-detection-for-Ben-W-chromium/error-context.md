@@ -1,0 +1,510 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - heading "Inspector Dashboard" [level=1] [ref=e7]
+      - generic [ref=e9]: Pipedrive Activities
+    - combobox [ref=e11] [cursor=pointer]:
+      - option "All Inspectors"
+      - option "Benjamin Frohloff"
+      - option "Benjamin Wharton" [selected]
+      - option "Jayden Williams"
+      - option "Nick Stevens"
+      - option "Richard Lugert"
+      - option "Charlie Staff"
+      - option "Tony Punzo"
+      - option "Eric Knutsen"
+      - option "Finlay Coop"
+      - option "Tim McGill"
+      - option "Ross Runnalls"
+      - option "Travis Mills"
+      - option "Lucas McConnell"
+      - option "Scott Rodman"
+      - option "Kai Valerio"
+      - option "Tommy Dennerley"
+      - option "Ethan Taylor"
+      - option "Aiden Wood"
+    - generic [ref=e12]:
+      - button "Previous day" [ref=e13] [cursor=pointer]:
+        - img [ref=e14]
+      - generic [ref=e16]: Tue, Mar 10
+      - button "Next day" [ref=e17] [cursor=pointer]:
+        - img [ref=e18]
+    - generic [ref=e20]:
+      - button "Split" [ref=e21] [cursor=pointer]:
+        - img [ref=e22]
+        - generic [ref=e24]: Split
+      - button "Calendar" [ref=e25] [cursor=pointer]:
+        - img [ref=e26]
+        - generic [ref=e28]: Calendar
+      - button "Map" [ref=e29] [cursor=pointer]:
+        - img [ref=e30]
+        - img [ref=e32]
+        - generic [ref=e37]: Map
+    - generic [ref=e41]: Live
+  - generic [ref=e42]:
+    - generic [ref=e45]:
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e49] [cursor=pointer]:
+            - generic [ref=e50]: Mon
+            - generic [ref=e51]: Mar 9
+          - generic [ref=e52] [cursor=pointer]:
+            - generic [ref=e53]: Tue
+            - generic [ref=e54]: Mar 10
+          - generic [ref=e55] [cursor=pointer]:
+            - generic [ref=e56]: Wed
+            - generic [ref=e57]: Mar 11
+          - generic [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]: Thu
+            - generic [ref=e60]: Mar 12
+          - generic [ref=e61] [cursor=pointer]:
+            - generic [ref=e62]: Fri
+            - generic [ref=e63]: Mar 13
+        - generic [ref=e66]:
+          - generic [ref=e68]:
+            - generic "Past time slot" [ref=e69] [cursor=pointer]:
+              - generic [ref=e70]: 06:00
+            - generic "Past time slot" [ref=e71] [cursor=pointer]
+            - generic "Past time slot" [ref=e72] [cursor=pointer]:
+              - generic [ref=e73]: 07:00
+            - generic "Past time slot" [ref=e74] [cursor=pointer]
+            - generic "Past time slot" [ref=e75] [cursor=pointer]:
+              - generic [ref=e76]: 08:00
+            - generic "Past time slot" [ref=e77] [cursor=pointer]
+            - generic "Past time slot" [ref=e78] [cursor=pointer]:
+              - generic [ref=e79]: 09:00
+            - generic "Past time slot" [ref=e80] [cursor=pointer]
+            - generic "Past time slot" [ref=e81] [cursor=pointer]:
+              - generic [ref=e82]: 10:00
+            - generic "Past time slot" [ref=e83] [cursor=pointer]
+            - generic "Past time slot" [ref=e84] [cursor=pointer]:
+              - generic [ref=e85]: 11:00
+            - generic "Past time slot" [ref=e86] [cursor=pointer]
+            - generic "Past time slot" [ref=e87] [cursor=pointer]:
+              - generic [ref=e89]: 🍽️
+              - generic [ref=e90]: 12:00
+            - generic "Past time slot" [ref=e91] [cursor=pointer]:
+              - generic [ref=e93]: 🍽️
+            - generic "Past time slot" [ref=e94] [cursor=pointer]:
+              - generic [ref=e95]: 13:00
+            - generic "Past time slot" [ref=e96] [cursor=pointer]
+            - generic "Past time slot" [ref=e97] [cursor=pointer]:
+              - generic [ref=e98]: 14:00
+            - generic "Past time slot" [ref=e99] [cursor=pointer]
+            - generic "Past time slot" [ref=e100] [cursor=pointer]:
+              - generic [ref=e101]: 15:00
+            - generic "Past time slot" [ref=e102] [cursor=pointer]
+            - generic "Past time slot" [ref=e103] [cursor=pointer]:
+              - generic [ref=e104]: 16:00
+            - generic "Past time slot" [ref=e105] [cursor=pointer]
+            - generic "Past time slot" [ref=e106] [cursor=pointer]:
+              - generic [ref=e107]: 17:00
+            - generic "Past time slot" [ref=e108] [cursor=pointer]
+            - generic "Past time slot" [ref=e109] [cursor=pointer]:
+              - generic [ref=e110]: 18:00
+            - generic "Past time slot" [ref=e111] [cursor=pointer]
+            - generic "Past time slot" [ref=e112] [cursor=pointer]:
+              - generic [ref=e113]: 19:00
+          - generic [ref=e118]:
+            - generic "Available - Click to book at 06:00" [ref=e119] [cursor=pointer]:
+              - generic [ref=e121]: 06:00
+              - generic [ref=e122]: 06:00
+            - generic "Available - Click to book at 06:30" [ref=e123] [cursor=pointer]:
+              - generic [ref=e125]: 06:30
+            - generic "Available - Click to book at 07:00" [ref=e126] [cursor=pointer]:
+              - generic [ref=e128]: 07:00
+              - generic [ref=e129]: 07:00
+            - generic "Available - Click to book at 07:30" [ref=e130] [cursor=pointer]:
+              - generic [ref=e132]: 07:30
+            - generic "Available - Click to book at 08:00" [ref=e133] [cursor=pointer]:
+              - generic [ref=e135]: 08:00
+              - generic [ref=e136]: 08:00
+            - generic "Available - Click to book at 08:30" [ref=e137] [cursor=pointer]:
+              - generic [ref=e139]: 08:30
+            - generic "Property Inspection - Ben W - Client wants do be home" [ref=e140] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e141]:
+                - generic [ref=e142]: 91 Greenleaf Grv, Bahrs Scrub QLD 4207, Australia
+                - generic [ref=e143]:
+                  - img [ref=e144]
+                  - generic [ref=e147]: 09:00
+              - generic [ref=e148]: 09:00
+            - generic "Property Inspection - Ben W - Client wants do be home" [ref=e149] [cursor=pointer]
+            - generic "Available - Click to book at 10:00" [ref=e151] [cursor=pointer]:
+              - generic [ref=e153]: 10:00
+              - generic [ref=e154]: 10:00
+            - generic "Available - Click to book at 10:30" [ref=e155] [cursor=pointer]:
+              - generic [ref=e157]: 10:30
+            - generic "Property Inspection - Ben W" [ref=e158] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e159]:
+                - generic [ref=e160]: 4 Savannah Court, Waterford QLD 4133, Australia
+                - generic [ref=e161]:
+                  - img [ref=e162]
+                  - generic [ref=e165]: 11:00
+              - generic [ref=e166]: 11:00
+            - generic "Property Inspection - Ben W" [ref=e167] [cursor=pointer]
+            - generic "Lunch Break (12:00-13:00)" [ref=e169] [cursor=pointer]:
+              - generic [ref=e171]: 🍽️
+              - generic [ref=e172]: 12:00
+            - generic "Lunch Break (12:00-13:00)" [ref=e173] [cursor=pointer]:
+              - generic [ref=e175]: 🍽️
+            - generic "Property Inspection - Ben Wharton" [ref=e176] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e177]:
+                - generic [ref=e178]: 26 Elevate St, Rochedale QLD, Australia
+                - generic [ref=e179]:
+                  - img [ref=e180]
+                  - generic [ref=e183]: 13:00
+              - generic [ref=e184]: 13:00
+            - generic "Property Inspection - Ben Wharton" [ref=e185] [cursor=pointer]
+            - generic "Available - Click to book at 14:00" [ref=e187] [cursor=pointer]:
+              - generic [ref=e189]: 14:00
+              - generic [ref=e190]: 14:00
+            - generic "Available - Click to book at 14:30" [ref=e191] [cursor=pointer]:
+              - generic [ref=e193]: 14:30
+            - generic "Property Inspection - Ben" [ref=e194] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e195]:
+                - generic [ref=e196]: 7 Smith Rd, Woodridge QLD 4114, Australia
+                - generic [ref=e197]:
+                  - img [ref=e198]
+                  - generic [ref=e201]: 15:00
+              - generic [ref=e202]: 15:00
+            - generic "Property Inspection - Ben" [ref=e203] [cursor=pointer]
+            - generic "Available - Click to book at 16:00" [ref=e205] [cursor=pointer]:
+              - generic [ref=e207]: 16:00
+              - generic [ref=e208]: 16:00
+            - generic "Available - Click to book at 16:30" [ref=e209] [cursor=pointer]:
+              - generic [ref=e211]: 16:30
+            - generic "Available - Click to book at 17:00" [ref=e212] [cursor=pointer]:
+              - generic [ref=e214]: 17:00
+              - generic [ref=e215]: 17:00
+            - generic "Available - Click to book at 17:30" [ref=e216] [cursor=pointer]:
+              - generic [ref=e218]: 17:30
+            - generic "Available - Click to book at 18:00" [ref=e219] [cursor=pointer]:
+              - generic [ref=e221]: 18:00
+              - generic [ref=e222]: 18:00
+            - generic "Available - Click to book at 18:30" [ref=e223] [cursor=pointer]:
+              - generic [ref=e225]: 18:30
+            - generic "Available - Click to book at 19:00" [ref=e226] [cursor=pointer]:
+              - generic [ref=e228]: 19:00
+              - generic [ref=e229]: 19:00
+          - generic [ref=e231]:
+            - generic "Available - Click to book at 06:00" [ref=e232] [cursor=pointer]:
+              - generic [ref=e234]: 06:00
+              - generic [ref=e235]: 06:00
+            - generic "Available - Click to book at 06:30" [ref=e236] [cursor=pointer]:
+              - generic [ref=e238]: 06:30
+            - generic "Available - Click to book at 07:00" [ref=e239] [cursor=pointer]:
+              - generic [ref=e241]: 07:00
+              - generic [ref=e242]: 07:00
+            - generic "Available - Click to book at 07:30" [ref=e243] [cursor=pointer]:
+              - generic [ref=e245]: 07:30
+            - generic "Available - Click to book at 08:00" [ref=e246] [cursor=pointer]:
+              - generic [ref=e248]: 08:00
+              - generic [ref=e249]: 08:00
+            - generic "Available - Click to book at 08:30" [ref=e250] [cursor=pointer]:
+              - generic [ref=e252]: 08:30
+            - generic "Property Inspection - Ben W" [ref=e253] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e254]:
+                - generic [ref=e255]: 22-24 Plover Dr, Eagleby QLD, Australia
+                - generic [ref=e256]:
+                  - img [ref=e257]
+                  - generic [ref=e260]: 09:00
+              - generic [ref=e261]: 09:00
+            - generic "Property Inspection - Ben W" [ref=e262] [cursor=pointer]
+            - generic "Property Inspection - Ben W" [ref=e264] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e265]:
+                - generic [ref=e266]: Loading address...
+                - generic [ref=e267]:
+                  - img [ref=e268]
+                  - generic [ref=e271]: 10:00
+              - generic [ref=e272]: 10:00
+            - generic "Property Inspection - Ben W" [ref=e273] [cursor=pointer]
+            - generic "Property Inspection - Ben W" [ref=e275] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e276]:
+                - generic [ref=e277]: 89 Plantain Rd, Shailer Park QLD 4128, Australia
+                - generic [ref=e278]:
+                  - img [ref=e279]
+                  - generic [ref=e282]: 11:00
+              - generic [ref=e283]: 11:00
+            - generic "Property Inspection - Ben W" [ref=e284] [cursor=pointer]
+            - generic "Lunch Break (12:00-13:00)" [ref=e286] [cursor=pointer]:
+              - generic [ref=e288]: 🍽️
+              - generic [ref=e289]: 12:00
+            - generic "Lunch Break (12:00-13:00)" [ref=e290] [cursor=pointer]:
+              - generic [ref=e292]: 🍽️
+            - generic "Property Inspection - Ben W" [ref=e293] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e294]:
+                - generic [ref=e295]: Loading address...
+                - generic [ref=e296]:
+                  - img [ref=e297]
+                  - generic [ref=e300]: 13:00
+              - generic [ref=e301]: 13:00
+            - generic "Property Inspection - Ben W" [ref=e302] [cursor=pointer]
+            - generic "Available - Click to book at 14:00" [ref=e304] [cursor=pointer]:
+              - generic [ref=e306]: 14:00
+              - generic [ref=e307]: 14:00
+            - generic "Available - Click to book at 14:30" [ref=e308] [cursor=pointer]:
+              - generic [ref=e310]: 14:30
+            - generic "Property Inspection - Ben W" [ref=e311] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e312]:
+                - generic [ref=e313]: 4 Celco Street, Slacks Creek QLD, Australia
+                - generic [ref=e314]:
+                  - img [ref=e315]
+                  - generic [ref=e318]: 15:00
+              - generic [ref=e319]: 15:00
+            - generic "Property Inspection - Ben W" [ref=e320] [cursor=pointer]
+            - generic "Available - Click to book at 16:00" [ref=e322] [cursor=pointer]:
+              - generic [ref=e324]: 16:00
+              - generic [ref=e325]: 16:00
+            - generic "Available - Click to book at 16:30" [ref=e326] [cursor=pointer]:
+              - generic [ref=e328]: 16:30
+            - generic "Available - Click to book at 17:00" [ref=e329] [cursor=pointer]:
+              - generic [ref=e331]: 17:00
+              - generic [ref=e332]: 17:00
+            - generic "Available - Click to book at 17:30" [ref=e333] [cursor=pointer]:
+              - generic [ref=e335]: 17:30
+            - generic "Available - Click to book at 18:00" [ref=e336] [cursor=pointer]:
+              - generic [ref=e338]: 18:00
+              - generic [ref=e339]: 18:00
+            - generic "Available - Click to book at 18:30" [ref=e340] [cursor=pointer]:
+              - generic [ref=e342]: 18:30
+            - generic "Available - Click to book at 19:00" [ref=e343] [cursor=pointer]:
+              - generic [ref=e345]: 19:00
+              - generic [ref=e346]: 19:00
+          - generic [ref=e348]:
+            - generic "Available - Click to book at 06:00" [ref=e349] [cursor=pointer]:
+              - generic [ref=e351]: 06:00
+              - generic [ref=e352]: 06:00
+            - generic "Available - Click to book at 06:30" [ref=e353] [cursor=pointer]:
+              - generic [ref=e355]: 06:30
+            - generic "Available - Click to book at 07:00" [ref=e356] [cursor=pointer]:
+              - generic [ref=e358]: 07:00
+              - generic [ref=e359]: 07:00
+            - generic "Available - Click to book at 07:30" [ref=e360] [cursor=pointer]:
+              - generic [ref=e362]: 07:30
+            - generic "Available - Click to book at 08:00" [ref=e363] [cursor=pointer]:
+              - generic [ref=e365]: 08:00
+              - generic [ref=e366]: 08:00
+            - generic "Available - Click to book at 08:30" [ref=e367] [cursor=pointer]:
+              - generic [ref=e369]: 08:30
+            - generic "Property Inspection - Ben W - Ok if client is not home" [ref=e370] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e371]:
+                - generic [ref=e372]: Ok if client is not home
+                - generic [ref=e373]:
+                  - img [ref=e374]
+                  - generic [ref=e377]: 09:00
+              - generic [ref=e378]: 09:00
+            - generic "Property Inspection - Ben W - Ok if client is not home" [ref=e379] [cursor=pointer]
+            - generic "Available - Click to book at 10:00" [ref=e381] [cursor=pointer]:
+              - generic [ref=e383]: 10:00
+              - generic [ref=e384]: 10:00
+            - generic "Available - Click to book at 10:30" [ref=e385] [cursor=pointer]:
+              - generic [ref=e387]: 10:30
+            - generic "Property Inspection - Ben W" [ref=e388] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e389]:
+                - generic [ref=e390]: 18-20 Plover Drive, Eagleby QLD, Australia
+                - generic [ref=e391]:
+                  - img [ref=e392]
+                  - generic [ref=e395]: 11:00
+              - generic [ref=e396]: 11:00
+            - generic "Property Inspection - Ben W" [ref=e397] [cursor=pointer]
+            - generic "Lunch Break (12:00-13:00)" [ref=e399] [cursor=pointer]:
+              - generic [ref=e401]: 🍽️
+              - generic [ref=e402]: 12:00
+            - generic "Lunch Break (12:00-13:00)" [ref=e403] [cursor=pointer]:
+              - generic [ref=e405]: 🍽️
+            - generic "Property Inspection - Ben W" [ref=e406] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e407]:
+                - generic [ref=e408]: 4A Goenoeng Drive, Tanah Merah QLD, Australia
+                - generic [ref=e409]:
+                  - img [ref=e410]
+                  - generic [ref=e413]: 13:00
+              - generic [ref=e414]: 13:00
+            - generic "Property Inspection - Ben W" [ref=e415] [cursor=pointer]
+            - generic "Available - Click to book at 14:00" [ref=e417] [cursor=pointer]:
+              - generic [ref=e419]: 14:00
+              - generic [ref=e420]: 14:00
+            - generic "Available - Click to book at 14:30" [ref=e421] [cursor=pointer]:
+              - generic [ref=e423]: 14:30
+            - generic "Available - Click to book at 15:00" [ref=e424] [cursor=pointer]:
+              - generic [ref=e426]: 15:00
+              - generic [ref=e427]: 15:00
+            - generic "Available - Click to book at 15:30" [ref=e428] [cursor=pointer]:
+              - generic [ref=e430]: 15:30
+            - generic "Available - Click to book at 16:00" [ref=e431] [cursor=pointer]:
+              - generic [ref=e433]: 16:00
+              - generic [ref=e434]: 16:00
+            - generic "Available - Click to book at 16:30" [ref=e435] [cursor=pointer]:
+              - generic [ref=e437]: 16:30
+            - generic "Available - Click to book at 17:00" [ref=e438] [cursor=pointer]:
+              - generic [ref=e440]: 17:00
+              - generic [ref=e441]: 17:00
+            - generic "Available - Click to book at 17:30" [ref=e442] [cursor=pointer]:
+              - generic [ref=e444]: 17:30
+            - generic "Available - Click to book at 18:00" [ref=e445] [cursor=pointer]:
+              - generic [ref=e447]: 18:00
+              - generic [ref=e448]: 18:00
+            - generic "Available - Click to book at 18:30" [ref=e449] [cursor=pointer]:
+              - generic [ref=e451]: 18:30
+            - generic "Available - Click to book at 19:00" [ref=e452] [cursor=pointer]:
+              - generic [ref=e454]: 19:00
+              - generic [ref=e455]: 19:00
+          - generic [ref=e457]:
+            - generic "Available - Click to book at 06:00" [ref=e458] [cursor=pointer]:
+              - generic [ref=e460]: 06:00
+              - generic [ref=e461]: 06:00
+            - generic "Available - Click to book at 06:30" [ref=e462] [cursor=pointer]:
+              - generic [ref=e464]: 06:30
+            - generic "Available - Click to book at 07:00" [ref=e465] [cursor=pointer]:
+              - generic [ref=e467]: 07:00
+              - generic [ref=e468]: 07:00
+            - generic "Available - Click to book at 07:30" [ref=e469] [cursor=pointer]:
+              - generic [ref=e471]: 07:30
+            - generic "Available - Click to book at 08:00" [ref=e472] [cursor=pointer]:
+              - generic [ref=e474]: 08:00
+              - generic [ref=e475]: 08:00
+            - generic "Available - Click to book at 08:30" [ref=e476] [cursor=pointer]:
+              - generic [ref=e478]: 08:30
+            - generic "Available - Click to book at 09:00" [ref=e479] [cursor=pointer]:
+              - generic [ref=e481]: 09:00
+              - generic [ref=e482]: 09:00
+            - generic "Available - Click to book at 09:30" [ref=e483] [cursor=pointer]:
+              - generic [ref=e485]: 09:30
+            - generic "Available - Click to book at 10:00" [ref=e486] [cursor=pointer]:
+              - generic [ref=e488]: 10:00
+              - generic [ref=e489]: 10:00
+            - generic "Available - Click to book at 10:30" [ref=e490] [cursor=pointer]:
+              - generic [ref=e492]: 10:30
+            - generic "Property Inspection - Ben W - Client will not be home ok to proceed - Unfriendly dog in the left side yard (locked)" [ref=e493] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e494]:
+                - generic [ref=e495]: 25 Bellmere Road, Bellmere QLD 4510, Australia
+                - generic [ref=e496]:
+                  - img [ref=e497]
+                  - generic [ref=e500]: 11:00
+              - generic [ref=e501]: 11:00
+            - generic "Property Inspection - Ben W - Client will not be home ok to proceed - Unfriendly dog in the left side yard (locked)" [ref=e502] [cursor=pointer]
+            - generic "Lunch Break (12:00-13:00)" [ref=e504] [cursor=pointer]:
+              - generic [ref=e506]: 🍽️
+              - generic [ref=e507]: 12:00
+            - generic "Lunch Break (12:00-13:00)" [ref=e508] [cursor=pointer]:
+              - generic [ref=e510]: 🍽️
+            - generic "Available - Click to book at 13:00" [ref=e511] [cursor=pointer]:
+              - generic [ref=e513]: 13:00
+              - generic [ref=e514]: 13:00
+            - generic "Available - Click to book at 13:30" [ref=e515] [cursor=pointer]:
+              - generic [ref=e517]: 13:30
+            - generic "Available - Click to book at 14:00" [ref=e518] [cursor=pointer]:
+              - generic [ref=e520]: 14:00
+              - generic [ref=e521]: 14:00
+            - generic "Available - Click to book at 14:30" [ref=e522] [cursor=pointer]:
+              - generic [ref=e524]: 14:30
+            - generic "Property Inspection - Ben W - Ok if client is not home" [ref=e525] [cursor=pointer]:
+              - generic "Click to view appointment details" [ref=e526]:
+                - generic [ref=e527]: 32 Saul St, Brighton QLD, Australia
+                - generic [ref=e528]:
+                  - img [ref=e529]
+                  - generic [ref=e532]: 15:00
+              - generic [ref=e533]: 15:00
+            - generic "Property Inspection - Ben W - Ok if client is not home" [ref=e534] [cursor=pointer]
+            - generic "Available - Click to book at 16:00" [ref=e536] [cursor=pointer]:
+              - generic [ref=e538]: 16:00
+              - generic [ref=e539]: 16:00
+            - generic "Available - Click to book at 16:30" [ref=e540] [cursor=pointer]:
+              - generic [ref=e542]: 16:30
+            - generic "Available - Click to book at 17:00" [ref=e543] [cursor=pointer]:
+              - generic [ref=e545]: 17:00
+              - generic [ref=e546]: 17:00
+            - generic "Available - Click to book at 17:30" [ref=e547] [cursor=pointer]:
+              - generic [ref=e549]: 17:30
+            - generic "Available - Click to book at 18:00" [ref=e550] [cursor=pointer]:
+              - generic [ref=e552]: 18:00
+              - generic [ref=e553]: 18:00
+            - generic "Available - Click to book at 18:30" [ref=e554] [cursor=pointer]:
+              - generic [ref=e556]: 18:30
+            - generic "Available - Click to book at 19:00" [ref=e557] [cursor=pointer]:
+              - generic [ref=e559]: 19:00
+              - generic [ref=e560]: 19:00
+      - generic [ref=e561]:
+        - generic [ref=e564]: Booked
+        - generic [ref=e567]: Available
+        - generic [ref=e568]:
+          - generic [ref=e570]: 🍽️
+          - generic [ref=e571]: Lunch
+        - generic [ref=e574]: Past
+    - generic [ref=e577]:
+      - generic [ref=e578]:
+        - heading "Route Map" [level=3] [ref=e580]
+        - generic [ref=e581]:
+          - generic [ref=e584]: Benjamin Wharton
+          - generic [ref=e585]: •
+          - generic [ref=e586]: 4 appointments
+          - generic [ref=e587]: •
+          - generic [ref=e588]:
+            - img [ref=e589]
+            - generic [ref=e591]: 1h 8m drive time
+      - generic [ref=e594]:
+        - generic:
+          - button "Keyboard shortcuts"
+        - region "Map" [ref=e595]
+        - generic [ref=e596]:
+          - generic [ref=e597]:
+            - generic:
+              - generic:
+                - generic [ref=e651]: 4 SAVANNAH COURT
+                - generic [ref=e657]: 26 ELEVATE ST
+                - generic [ref=e663]: 7 SMITH RD
+                - generic [ref=e669]: 91 GREENLEAF GRV
+            - generic [ref=e682]:
+              - generic:
+                - generic:
+                  - img "Property Inspection - Ben W" [ref=e684] [cursor=pointer]
+                  - img "Property Inspection - Ben Wharton" [ref=e685] [cursor=pointer]
+                  - img "Property Inspection - Ben" [ref=e686] [cursor=pointer]
+                  - img "Property Inspection - Ben W - Client wants do be home" [ref=e687] [cursor=pointer]
+          - iframe [ref=e688]:
+            
+          - generic [ref=e690] [cursor=pointer]:
+            - button "Zoom in" [ref=e691]
+            - button "Zoom out" [ref=e693]
+          - link "Open this area in Google Maps (opens a new window)" [ref=e695] [cursor=pointer]:
+            - /url: https://maps.google.com/maps?ll=-27.665249,153.139661&z=12&t=m&hl=en-US&gl=US&mapclient=apiv3
+            - img "Google" [ref=e697]
+          - generic [ref=e698]:
+            - button "Keyboard shortcuts" [ref=e704] [cursor=pointer]
+            - generic [ref=e709]: Map data ©2026 Google
+            - link "Terms (opens in new tab)" [ref=e714] [cursor=pointer]:
+              - /url: https://www.google.com/intl/en-US_US/help/terms_maps.html
+              - text: Terms
+            - link "Report a map error" [ref=e719] [cursor=pointer]:
+              - /url: https://www.google.com/maps/@-27.6652493,153.1396612,12z/data=!10m1!1e1!12b1?source=apiv3&rapsrc=apiv3
+  - generic [ref=e721]:
+    - generic [ref=e722]:
+      - generic [ref=e723]:
+        - generic [ref=e724]: "Pages:"
+        - link "Activities" [ref=e725] [cursor=pointer]:
+          - /url: /#activities
+          - img [ref=e726]
+          - text: Activities
+        - link "Book" [ref=e731] [cursor=pointer]:
+          - /url: /#book
+          - img [ref=e732]
+          - text: Book
+      - generic [ref=e735]:
+        - generic [ref=e736]: "Developer Tools:"
+        - button "New Booking" [ref=e737] [cursor=pointer]:
+          - img [ref=e738]
+          - text: New Booking
+        - button "Debug 1" [ref=e739] [cursor=pointer]:
+          - img [ref=e740]
+          - text: Debug
+          - generic [ref=e749]: "1"
+        - button "Deals" [ref=e750] [cursor=pointer]:
+          - img [ref=e751]
+          - text: Deals
+    - generic [ref=e754]:
+      - generic [ref=e755]: "Activities: 228"
+      - generic [ref=e756]: •
+      - generic [ref=e757]: "Inspectors: 18"
+```

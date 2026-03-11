@@ -23,11 +23,56 @@ const DealsDebugConsole = ({
   const [healthStatus, setHealthStatus] = useState(null);
   const [selectedRegion, setSelectedRegion] = useState('R1');
   const [dealType, setDealType] = useState('all'); // 'all' or 'recommendations'
-  const [sortByDistance, setSortByDistance] = useState(false);
+  const [sortByDistance, setSortByDistance] = useState(true); // Default to true
+  const [distanceStats, setDistanceStats] = useState(null);
 
   // Get region for current inspector
   const currentInspector = inspectors?.find(i => i.id === selectedInspector);
-  const inspectorRegion = currentInspector?.region || 'R1';
+  const inspectorHomeRegion = currentInspector?.region || 'R1';
+  
+  // Determine region based on inspection locations (overrides inspector home region)
+  const determineRegionFromInspections = (activities) => {
+    if (!activities || activities.length === 0) return inspectorHomeRegion;
+    
+    // Check addresses for region keywords - use multiple address sources
+    const addresses = activities.map(a => {
+      const sources = [
+        a.personAddress?.address,
+        a.address,
+        a.enrichedAddress,
+        a.subject // Sometimes addresses are in the subject line
+      ];
+      return sources.find(addr => addr && addr.length > 10) || '';
+    }).filter(Boolean).map(addr => addr.toLowerCase());
+    
+    console.log('🔍 Checking addresses for region detection:', addresses.slice(0, 3));
+    
+    // Logan area -> R01 (check for specific suburbs)
+    const loganKeywords = ['waterford', 'rochedale', 'woodridge', 'bahrs scrub', 'eagleby', 'beenleigh', 'logan', 'gold coast', 'brisbane', 'ipswich'];
+    if (addresses.some(addr => loganKeywords.some(keyword => addr.includes(keyword)))) {
+      console.log('🌍 Detected Logan/Brisbane area inspections -> Using region R01');
+      return 'R01';
+    }
+    
+    // Sunshine Coast -> R03  
+    const sunshineCoastKeywords = ['sunshine coast', 'caloundra', 'maroochydore', 'noosa', 'golden beach', 'little mountain', 'twin waters'];
+    if (addresses.some(addr => sunshineCoastKeywords.some(keyword => addr.includes(keyword)))) {
+      console.log('🌍 Detected Sunshine Coast inspections -> Using region R03');
+      return 'R03';
+    }
+    
+    // Newcastle -> R09
+    const newcastleKeywords = ['newcastle', 'maitland', 'cessnock', 'central coast', 'fletcher', 'belmont'];
+    if (addresses.some(addr => newcastleKeywords.some(keyword => addr.includes(keyword)))) {
+      console.log('🌍 Detected Newcastle area inspections -> Using region R09');
+      return 'R09';
+    }
+    
+    console.log('🏠 No region match found, using inspector home region:', inspectorHomeRegion);
+    return inspectorHomeRegion;
+  };
+  
+  const inspectorRegion = determineRegionFromInspections(inspectionActivities);
 
   const fetchDeals = async (region = selectedRegion, type = dealType) => {
     setLoading(true);
@@ -77,8 +122,22 @@ const DealsDebugConsole = ({
         
         processedDeals = sortDealsByDistance(processedDeals, inspectionActivities);
         
-        // Log sorted results
+        // Calculate distance statistics
         const dealsWithDistance = processedDeals.filter(d => d.distanceInfo && d.distanceInfo.minDistance !== null);
+        
+        if (dealsWithDistance.length > 0) {
+          const stats = {
+            within_5km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length,
+            within_10km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length,
+            within_15km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length,
+            total_with_distance: dealsWithDistance.length
+          };
+          setDistanceStats(stats);
+          console.log('📏 Distance statistics:', stats);
+        } else {
+          setDistanceStats(null);
+        }
+        
         console.log(`✅ ${dealsWithDistance.length} deals successfully sorted by distance`);
       }
       
@@ -110,12 +169,13 @@ const DealsDebugConsole = ({
     }
   }, [isOpen, selectedRegion, dealType, sortByDistance]);
 
-  // Update region when inspector changes
+  // Update region when inspector or inspections change
   useEffect(() => {
     if (inspectorRegion && inspectorRegion !== selectedRegion) {
+      console.log(`📍 Region changed from ${selectedRegion} to ${inspectorRegion} based on inspection locations`);
       setSelectedRegion(inspectorRegion);
     }
-  }, [inspectorRegion]);
+  }, [inspectorRegion, inspectionActivities]);
 
   if (!isOpen) return null;
 
@@ -155,6 +215,42 @@ const DealsDebugConsole = ({
             >
               <X className="w-5 h-5 text-gray-500" />
             </button>
+          </div>
+        </div>
+
+        {/* Distance-based Deal Counts Subheader - Always Visible */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+              <Target className="w-4 h-4" />
+              Deals Near Today's Inspections
+            </h3>
+            <span className="text-xs text-blue-600 font-medium">
+              {selectedDate ? format(selectedDate, 'MMM d, yyyy') : 'Selected Date'} • {inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-6">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600 mb-1">{distanceStats?.within_5km || 0}</div>
+              <div className="text-xs text-green-700 font-medium">Within 5km</div>
+              <div className="text-xs text-gray-500">Immediate area</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-yellow-600 mb-1">{distanceStats?.within_10km || 0}</div>
+              <div className="text-xs text-yellow-700 font-medium">Within 10km</div>
+              <div className="text-xs text-gray-500">Close proximity</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600 mb-1">{distanceStats?.within_15km || 0}</div>
+              <div className="text-xs text-orange-700 font-medium">Within 15km</div>
+              <div className="text-xs text-gray-500">Reasonable drive</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-600 mb-1">{distanceStats?.total_with_distance || 0}</div>
+              <div className="text-xs text-gray-700 font-medium">Total Mapped</div>
+              <div className="text-xs text-gray-500">With coordinates</div>
+            </div>
           </div>
         </div>
 
@@ -233,6 +329,7 @@ const DealsDebugConsole = ({
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4">
+
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
               <div className="flex items-center gap-2">

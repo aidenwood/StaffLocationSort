@@ -105,18 +105,18 @@ export const useApiDebug = () => {
     originalConsole.current.warn = console.warn;
     originalConsole.current.info = console.info;
 
-    // Override console methods with stricter filtering - VERY RESTRICTIVE to prevent loops
-    console.log = (...args) => {
-      originalConsole.current.log(...args);
-      const message = args.join(' ');
-      // ONLY capture critical API state changes to prevent infinite logging
-      if (message.includes('✅ V2 API: Server-side filter returned') || 
-          message.includes('❌ V2 API failed') ||
-          message.includes('⚠️ Rate limit hit') ||
-          message.includes('🚫 API call already in progress')) {
-        addLog('info', message.substring(0, 150)); // Further truncated
-      }
-    };
+    // Temporarily disable console override to stop infinite loop
+    // console.log = (...args) => {
+    //   originalConsole.current.log(...args);
+    //   const message = args.join(' ');
+    //   // ONLY capture critical API state changes to prevent infinite logging
+    //   if (message.includes('✅ V2 API: Server-side filter returned') || 
+    //       message.includes('❌ V2 API failed') ||
+    //       message.includes('⚠️ Rate limit hit') ||
+    //       message.includes('🚫 API call already in progress')) {
+    //     addLog('info', message.substring(0, 150)); // Further truncated
+    //   }
+    // };
 
     console.error = (...args) => {
       originalConsole.current.error(...args);
