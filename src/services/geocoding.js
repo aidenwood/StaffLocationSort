@@ -50,10 +50,10 @@ export const geocodeAddress = async (address) => {
       // Cache the result
       geocodeCache.set(cleanAddress, coordinates);
       
-      console.log(`✅ Geocoded to: ${coordinates.lat.toFixed(4)}, ${coordinates.lng.toFixed(4)}`);
+      // Reduced logging: Individual geocoding results removed for performance
       return coordinates;
     } else {
-      console.warn(`⚠️ No results: ${cleanAddress} (${data.status})`);
+      // Geocoding failed - cached as null to avoid retrying
       
       // Cache null result to avoid retrying
       geocodeCache.set(cleanAddress, null);

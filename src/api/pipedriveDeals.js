@@ -432,11 +432,7 @@ export const getRecommendationDeals = async (region, date = new Date()) => {
  */
 export const calculateDealDistances = (deal, inspectionActivities) => {
   if (!deal.coordinates || !Array.isArray(inspectionActivities)) {
-    console.log('❌ Deal distance calculation failed:', {
-      dealHasCoords: !!deal.coordinates,
-      activitiesIsArray: Array.isArray(inspectionActivities),
-      activitiesCount: inspectionActivities?.length || 0
-    });
+    // Skip logging for deals without coordinates - handled in summary
     return { minDistance: null, closestActivity: null, allDistances: [] };
   }
 

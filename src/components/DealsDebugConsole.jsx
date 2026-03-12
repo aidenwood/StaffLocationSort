@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, MapPin, DollarSign, User, Phone, Navigation, Target, Clock } from 'lucide-react';
+import { X, RefreshCw, MapPin, DollarSign, User, Phone, Navigation, Target, Clock, ExternalLink, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { 
   getDealsForRegion, 
@@ -16,7 +16,10 @@ const DealsDebugConsole = ({
   selectedInspector, 
   inspectors, 
   selectedDate, 
-  inspectionActivities = [] 
+  inspectionActivities = [],
+  viewMode = 'split', // 'split', 'calendar', 'map'
+  onDealsUpdate = () => {}, // Callback to update deals shown on map
+  context = null // Context from time slot button (timeSlot, date, radius, etc.)
 }) => {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -29,6 +32,30 @@ const DealsDebugConsole = ({
   const [distanceStats, setDistanceStats] = useState(null);
   const [selectedDistanceFilter, setSelectedDistanceFilter] = useState(null); // 5, 10, 15 or null for all
   const [proximityAnalysis, setProximityAnalysis] = useState(null);
+  const [hoveredDeal, setHoveredDeal] = useState(null); // For showing individual deal on map
+  const [selectedDeals, setSelectedDeals] = useState([]); // For showing multiple selected deals on map
+  const [showAll, setShowAll] = useState(false); // Show all deals in current radius on map
+
+  // Toggle deal selection for map display
+  const toggleDealSelection = (deal) => {
+    setSelectedDeals(prev => {
+      const isSelected = prev.find(d => d.id === deal.id);
+      if (isSelected) {
+        // Remove deal
+        return prev.filter(d => d.id !== deal.id);
+      } else {
+        // Add deal
+        return [...prev, {...deal, isSelected: true}];
+      }
+    });
+  };
+
+  // Set radius filter based on context when console opens
+  useEffect(() => {
+    if (isOpen && context?.radius) {
+      setSelectedDistanceFilter(context.radius);
+    }
+  }, [isOpen, context]);
 
   // Get region for current inspector
   const currentInspector = inspectors?.find(i => i.id === selectedInspector);
@@ -49,30 +76,26 @@ const DealsDebugConsole = ({
       return sources.find(addr => addr && addr.length > 10) || '';
     }).filter(Boolean).map(addr => addr.toLowerCase());
     
-    console.log('🔍 Checking addresses for region detection:', addresses.slice(0, 3));
+    // Region detection from addresses
     
     // Logan area -> R01 (check for specific suburbs)
     const loganKeywords = ['waterford', 'rochedale', 'woodridge', 'bahrs scrub', 'eagleby', 'beenleigh', 'logan', 'gold coast', 'brisbane', 'ipswich'];
     if (addresses.some(addr => loganKeywords.some(keyword => addr.includes(keyword)))) {
-      console.log('🌍 Detected Logan/Brisbane area inspections -> Using region R01');
       return 'R01';
     }
     
     // Sunshine Coast -> R03  
     const sunshineCoastKeywords = ['sunshine coast', 'caloundra', 'maroochydore', 'noosa', 'golden beach', 'little mountain', 'twin waters'];
     if (addresses.some(addr => sunshineCoastKeywords.some(keyword => addr.includes(keyword)))) {
-      console.log('🌍 Detected Sunshine Coast inspections -> Using region R03');
       return 'R03';
     }
     
     // Newcastle -> R09
     const newcastleKeywords = ['newcastle', 'maitland', 'cessnock', 'central coast', 'fletcher', 'belmont'];
     if (addresses.some(addr => newcastleKeywords.some(keyword => addr.includes(keyword)))) {
-      console.log('🌍 Detected Newcastle area inspections -> Using region R09');
       return 'R09';
     }
     
-    console.log('🏠 No region match found, using inspector home region:', inspectorHomeRegion);
     return inspectorHomeRegion;
   };
   
@@ -83,7 +106,6 @@ const DealsDebugConsole = ({
     setError(null);
     
     try {
-      console.log(`🔍 Fetching ${type} deals for region: ${region}`);
       
       let result;
       if (type === 'recommendations') {
@@ -96,21 +118,18 @@ const DealsDebugConsole = ({
       
       // Apply distance sorting if enabled and we have inspection activities
       if (sortByDistance && inspectionActivities.length > 0) {
-        console.log(`📏 Sorting ${processedDeals.length} deals by distance to ${inspectionActivities.length} inspection addresses`);
         
         // Summary logging only
         const dealsWithCoords = processedDeals.filter(d => d.coordinates).length;
         const inspectionsWithCoords = inspectionActivities.filter(a => 
           a.coordinates || a.personAddress?.coordinates || (a.lat && a.lng)
         ).length;
-        console.log(`📊 Sorting Summary: ${dealsWithCoords}/${processedDeals.length} deals have coordinates, ${inspectionsWithCoords}/${inspectionActivities.length} inspections have coordinates`);
         
         // Determine which inspections to use for sorting
         let sortingInspections = inspectionActivities;
         
         // Check for sort-by inspection from window (set by calendar button click)
         if (window.dealsSortByInspection) {
-          console.log(`🎯 Sorting by specific inspection from calendar: ${window.dealsSortByInspection.due_time} - ${window.dealsSortByInspection.personAddress}`);
           sortingInspections = [window.dealsSortByInspection];
           // Auto-select this inspection in dropdown
           setSelectedSortInspection(window.dealsSortByInspection.id.toString());
@@ -120,7 +139,6 @@ const DealsDebugConsole = ({
           // Use specific inspection from dropdown
           const selectedInspection = inspectionActivities.find(a => a.id.toString() === selectedSortInspection);
           if (selectedInspection) {
-            console.log(`🎯 Sorting by selected inspection: ${selectedInspection.due_time} - ${selectedInspection.personAddress}`);
             sortingInspections = [selectedInspection];
           }
         }
@@ -133,13 +151,13 @@ const DealsDebugConsole = ({
         if (dealsWithDistance.length > 0) {
           const stats = {
             within_1km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 1).length,
+            within_2_5km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 2.5).length,
             within_5km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length,
             within_10km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length,
             within_15km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length,
             total_with_distance: dealsWithDistance.length
           };
           setDistanceStats(stats);
-          console.log('📏 Distance statistics:', stats);
         } else {
           setDistanceStats(null);
         }
@@ -148,16 +166,12 @@ const DealsDebugConsole = ({
         if (window.dealsSortByInspection && stats) {
           if (stats.within_1km > 0) {
             setSelectedDistanceFilter(1);
-            console.log(`🎯 Auto-selected 1km radius (${stats.within_1km} deals)`);
           } else if (stats.within_5km > 0) {
             setSelectedDistanceFilter(5);
-            console.log(`🎯 Auto-selected 5km radius (${stats.within_5km} deals)`);
           } else if (stats.within_10km > 0) {
             setSelectedDistanceFilter(10);
-            console.log(`🎯 Auto-selected 10km radius (${stats.within_10km} deals)`);
           } else if (stats.within_15km > 0) {
             setSelectedDistanceFilter(15);
-            console.log(`🎯 Auto-selected 15km radius (${stats.within_15km} deals)`);
           }
         }
         
@@ -177,7 +191,7 @@ const DealsDebugConsole = ({
       }
       
       setDeals(processedDeals);
-      console.log(`✅ Loaded ${processedDeals.length} deals${sortByDistance ? ' (sorted by distance)' : ''}`);
+      console.log(`✅ Loaded ${processedDeals.length} deals for region ${region}${sortByDistance ? ' (sorted by distance)' : ''}`);
       
     } catch (err) {
       console.error('❌ Error fetching deals:', err);
@@ -195,6 +209,49 @@ const DealsDebugConsole = ({
         deal.distanceInfo.minDistance <= selectedDistanceFilter
       )
     : deals;
+
+  // Send 1km deals + selected deals + hovered deal to map
+  useEffect(() => {
+    if (isOpen && deals.length > 0) {
+      // Filter deals within 1km for map display
+      const dealsWithin1km = deals.filter(deal => 
+        deal.distanceInfo && 
+        deal.distanceInfo.minDistance !== null && 
+        deal.distanceInfo.minDistance <= 1.0 &&
+        deal.coordinates // Only include deals with coordinates
+      );
+
+      // Start with 1km deals
+      let dealsToShow = [...dealsWithin1km];
+
+      // Add selected deals (even if outside 1km)
+      selectedDeals.forEach(selectedDeal => {
+        if (selectedDeal.coordinates && !dealsToShow.find(d => d.id === selectedDeal.id)) {
+          dealsToShow.push({...selectedDeal, isSelected: true});
+        }
+      });
+
+      // Add hovered deal if it exists and has coordinates
+      if (hoveredDeal && hoveredDeal.coordinates && 
+          !dealsToShow.find(d => d.id === hoveredDeal.id)) {
+        dealsToShow.push({...hoveredDeal, isHovered: true});
+      }
+      
+      // Mark selected deals in the array
+      dealsToShow = dealsToShow.map(deal => ({
+        ...deal,
+        isSelected: selectedDeals.find(d => d.id === deal.id) ? true : deal.isSelected,
+        isHovered: hoveredDeal?.id === deal.id ? true : deal.isHovered
+      }));
+      
+      console.log(`📍 Sending ${dealsWithin1km.length} deals within 1km + ${selectedDeals.length} selected${hoveredDeal ? ' + 1 hovered' : ''} to map`);
+      onDealsUpdate(dealsToShow);
+    } else if (!isOpen) {
+      // Clear deals from map when console closes
+      setSelectedDeals([]); // Clear selections when closing
+      onDealsUpdate([]);
+    }
+  }, [isOpen, deals, hoveredDeal, selectedDeals, onDealsUpdate]);
 
   const checkHealth = async () => {
     try {
@@ -216,226 +273,212 @@ const DealsDebugConsole = ({
   // Update region when inspector or inspections change
   useEffect(() => {
     if (inspectorRegion && inspectorRegion !== selectedRegion) {
-      console.log(`📍 Region changed from ${selectedRegion} to ${inspectorRegion} based on inspection locations`);
+      console.log(`📍 Region: ${inspectorRegion}`);
       setSelectedRegion(inspectorRegion);
     }
   }, [inspectorRegion, inspectionActivities]);
 
   if (!isOpen) return null;
 
+  // Different positioning based on view mode
+  const getModalClasses = () => {
+    if (viewMode === 'split') {
+      // In split view, position over the left half (calendar section)
+      return "fixed left-0 top-0 bottom-0 w-1/2 bg-black bg-opacity-50 flex items-center justify-center z-50 lg:left-4 lg:top-4 lg:bottom-4 lg:w-[calc(50%-2rem)]";
+    } else {
+      // Full screen modal for calendar or map only views
+      return "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+    }
+  };
+
+  const getContentClasses = () => {
+    if (viewMode === 'split') {
+      return "bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-2xl max-h-[90vh] m-4 flex flex-col";
+    } else {
+      return "bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-6xl max-h-[90vh] m-4 flex flex-col";
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-6xl max-h-[90vh] m-4 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <MapPin className="w-5 h-5 text-purple-600" />
-            <h2 className="text-lg font-semibold text-gray-900">
-              Deals Debug Console
+    <div className={getModalClasses()}>
+      <div className={getContentClasses()}>
+        {/* Minimal Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+          <div className="flex items-center gap-2 min-w-0">
+            <MapPin className="w-4 h-4 text-purple-600 flex-shrink-0" />
+            <h2 className="text-sm font-medium text-gray-900 truncate">
+              {context ? 
+                `Deals Console - ${context.formattedTime}, ${context.formattedDate}` : 
+                'Deals Console'
+              }
             </h2>
             {healthStatus && (
-              <span className={`text-xs px-2 py-1 rounded ${
-                healthStatus.success 
-                  ? 'bg-green-100 text-green-700' 
-                  : 'bg-red-100 text-red-700'
-              }`}>
-                {healthStatus.success ? '✅ API Connected' : '❌ API Error'}
-              </span>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                healthStatus.success ? 'bg-green-500' : 'bg-red-500'
+              }`} title={healthStatus.success ? 'API Connected' : 'API Error'} />
             )}
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => fetchDeals()}
               disabled={loading}
-              className="flex items-center gap-1 px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition-colors disabled:opacity-50"
+              className="p-1.5 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
+              title="Refresh Deals"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+              <RefreshCw className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-gray-200 rounded-md transition-colors"
+              title="Close"
             >
-              <X className="w-5 h-5 text-gray-500" />
+              <X className="w-4 h-4 text-gray-600" />
             </button>
           </div>
         </div>
 
-        {/* Distance-based Deal Counts Subheader - Always Visible */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
-              <Target className="w-4 h-4" />
-              Deals Near Today's Inspections
-            </h3>
-            <span className="text-xs text-blue-600 font-medium">
-              {selectedDate ? format(selectedDate, 'MMM d, yyyy') : 'Selected Date'} • {inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          
-          <div className="grid grid-cols-5 gap-4">
-            <button
-              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 1 ? null : 1)}
-              className={`text-center p-3 rounded-lg transition-colors ${
-                selectedDistanceFilter === 1 
-                  ? 'bg-purple-600 text-white shadow-lg' 
-                  : 'hover:bg-purple-50 text-purple-600'
-              }`}
-            >
-              <div className="text-2xl font-bold mb-1">{distanceStats?.within_1km || 0}</div>
-              <div className="text-xs font-medium">Within 1km</div>
-              <div className="text-xs opacity-75">Walking distance</div>
-            </button>
-            <button
-              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 5 ? null : 5)}
-              className={`text-center p-3 rounded-lg transition-colors ${
-                selectedDistanceFilter === 5 
-                  ? 'bg-green-600 text-white shadow-lg' 
-                  : 'hover:bg-green-50 text-green-600'
-              }`}
-            >
-              <div className="text-2xl font-bold mb-1">{distanceStats?.within_5km || 0}</div>
-              <div className="text-xs font-medium">Within 5km</div>
-              <div className="text-xs opacity-75">Immediate area</div>
-            </button>
-            <button
-              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 10 ? null : 10)}
-              className={`text-center p-3 rounded-lg transition-colors ${
-                selectedDistanceFilter === 10 
-                  ? 'bg-yellow-600 text-white shadow-lg' 
-                  : 'hover:bg-yellow-50 text-yellow-600'
-              }`}
-            >
-              <div className="text-2xl font-bold mb-1">{distanceStats?.within_10km || 0}</div>
-              <div className="text-xs font-medium">Within 10km</div>
-              <div className="text-xs opacity-75">Close proximity</div>
-            </button>
-            <button
-              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 15 ? null : 15)}
-              className={`text-center p-3 rounded-lg transition-colors ${
-                selectedDistanceFilter === 15 
-                  ? 'bg-orange-600 text-white shadow-lg' 
-                  : 'hover:bg-orange-50 text-orange-600'
-              }`}
-            >
-              <div className="text-2xl font-bold mb-1">{distanceStats?.within_15km || 0}</div>
-              <div className="text-xs font-medium">Within 15km</div>
-              <div className="text-xs opacity-75">Reasonable drive</div>
-            </button>
-            <button
-              onClick={() => setSelectedDistanceFilter(null)}
-              className={`text-center p-3 rounded-lg transition-colors ${
-                selectedDistanceFilter === null 
-                  ? 'bg-gray-600 text-white shadow-lg' 
-                  : 'hover:bg-gray-50 text-gray-600'
-              }`}
-            >
-              <div className="text-2xl font-bold mb-1">{distanceStats?.total_with_distance || 0}</div>
-              <div className="text-xs font-medium">All Deals</div>
-              <div className="text-xs opacity-75">Show all</div>
-            </button>
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center gap-4">
+        {/* Compact Distance Controls */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Region:</label>
-              <select
-                value={selectedRegion}
-                onChange={(e) => setSelectedRegion(e.target.value)}
-                className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              <Target className="w-3 h-3 text-blue-600" />
+              <span className="text-xs font-medium text-blue-900">Radius:</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 1 ? null : 1)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedDistanceFilter === 1 ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                  }`}
+                >
+                  1km ({distanceStats?.within_1km || 0})
+                </button>
+                <button
+                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 2.5 ? null : 2.5)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedDistanceFilter === 2.5 ? 'bg-sky-500 text-white' : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
+                  }`}
+                >
+                  2.5km ({distanceStats?.within_2_5km || 0})
+                </button>
+                <button
+                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 5 ? null : 5)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedDistanceFilter === 5 ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'
+                  }`}
+                >
+                  5km ({distanceStats?.within_5km || 0})
+                </button>
+                <button
+                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 10 ? null : 10)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedDistanceFilter === 10 ? 'bg-yellow-600 text-white' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                  }`}
+                >
+                  10km ({distanceStats?.within_10km || 0})
+                </button>
+                <button
+                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 15 ? null : 15)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedDistanceFilter === 15 ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                  }`}
+                >
+                  15km ({distanceStats?.within_15km || 0})
+                </button>
+                <button
+                  onClick={() => setSelectedDistanceFilter(null)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedDistanceFilter === null ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  All ({distanceStats?.total_with_distance || 0})
+                </button>
+              </div>
+            </div>
+            
+            {/* Show All Toggle */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAll(!showAll)}
+                className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
+                  showAll ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                }`}
               >
-                {Object.entries(REGIONAL_DEAL_FILTERS).map(([key, filter]) => (
-                  <option key={key} value={key}>
-                    {filter.name} (Filter {filter.filterId})
+                <Eye className="w-3 h-3" />
+                {showAll ? 'Hide All' : 'Show All'}
+              </button>
+              <span className="text-xs text-gray-500">
+                {selectedDate ? format(selectedDate, 'MMM d') : 'Today'} • {inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Compact Controls */}
+        <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 space-y-2">
+          {/* Top row: selectors and checkbox */}
+          <div className="flex items-center gap-2 text-xs">
+            <select
+              value={selectedRegion}
+              onChange={(e) => setSelectedRegion(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs"
+            >
+              {Object.entries(REGIONAL_DEAL_FILTERS).map(([key, filter]) => (
+                <option key={key} value={key}>{key}</option>
+              ))}
+            </select>
+            
+            <select
+              value={dealType}
+              onChange={(e) => setDealType(e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs"
+            >
+              <option value="all">All</option>
+              <option value="recommendations">Recs</option>
+            </select>
+            
+            {inspectionActivities.length > 0 && (
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sortByDistance}
+                  onChange={(e) => setSortByDistance(e.target.checked)}
+                  className="w-3 h-3"
+                />
+                <span>By distance</span>
+              </label>
+            )}
+            
+            {/* Inspector dropdown for multi-inspection sorting */}
+            {sortByDistance && inspectionActivities.length > 1 && (
+              <select
+                value={selectedSortInspection}
+                onChange={(e) => setSelectedSortInspection(e.target.value)}
+                className="px-2 py-1 border border-gray-300 rounded text-xs"
+              >
+                <option value="all">All</option>
+                {inspectionActivities.map(activity => (
+                  <option key={activity.id} value={activity.id.toString()}>
+                    {activity.due_time} - {activity.personAddress?.split(',')[0] || activity.subject?.substring(0, 15)}
                   </option>
                 ))}
               </select>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Type:</label>
-              <select
-                value={dealType}
-                onChange={(e) => setDealType(e.target.value)}
-                className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="all">All Deals</option>
-                <option value="recommendations">Recommendation Ready</option>
-              </select>
-            </div>
-            
-            {/* Distance Sorting Toggle */}
-            {inspectionActivities.length > 0 && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="sortByDistance"
-                  checked={sortByDistance}
-                  onChange={(e) => setSortByDistance(e.target.checked)}
-                  className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
-                />
-                <label htmlFor="sortByDistance" className="text-sm font-medium text-gray-700 cursor-pointer flex items-center gap-1">
-                  <Target className="w-4 h-4" />
-                  Sort by Distance
-                </label>
-                <span className="text-xs text-gray-500">
-                  ({inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''} on {selectedDate ? format(selectedDate, 'MMM d') : 'selected date'})
-                </span>
-              </div>
-            )}
-            
-            {/* Sort by specific inspection dropdown */}
-            {sortByDistance && inspectionActivities.length > 1 && (
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Sort by:</label>
-                <select
-                  value={selectedSortInspection}
-                  onChange={(e) => setSelectedSortInspection(e.target.value)}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="all">All Inspections</option>
-                  {inspectionActivities.map(activity => (
-                    <option key={activity.id} value={activity.id.toString()}>
-                      {activity.due_time} - {activity.personAddress?.substring(0, 30) || activity.subject?.substring(0, 30)}...
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-  
-            {currentInspector && (
-              <div className="text-sm text-gray-600">
-                Current Inspector: <span className="font-medium">{currentInspector.name}</span> ({inspectorRegion})
-              </div>
             )}
           </div>
 
-          <div className="text-sm text-gray-600">
-            {loading ? (
-              'Loading...'
-            ) : (
-              <>
-                {selectedDistanceFilter 
-                  ? `${filteredDeals.length} deals within ${selectedDistanceFilter}km (${deals.length} total)`
-                  : `${deals.length} deals found`
-                }
-                {sortByDistance && inspectionActivities.length > 0 && (
-                  <span className="ml-2 text-blue-600 font-medium">
-                    (sorted by distance)
-                  </span>
-                )}
-                {selectedDistanceFilter && (
-                  <span className="ml-2 text-orange-600 font-medium">
-                    (filtered)
-                  </span>
-                )}
-              </>
+          {/* Bottom row: status */}
+          <div className="flex items-center justify-between text-xs text-gray-600">
+            {currentInspector && (
+              <span>{currentInspector.name} ({inspectorRegion})</span>
             )}
+            
+            <span>
+              {loading ? 'Loading...' : (
+                selectedDistanceFilter 
+                  ? `${filteredDeals.length} of ${deals.length} deals`
+                  : `${deals.length} deals`
+              )}
+            </span>
           </div>
         </div>
 
@@ -474,34 +517,39 @@ const DealsDebugConsole = ({
           ) : (
             <div className="grid gap-4">
               {filteredDeals.map((deal, index) => (
-                <div key={deal.id || index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">{deal.title}</h3>
-                      <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                        {deal.value && (
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="w-4 h-4" />
-                            ${deal.value}
-                          </div>
-                        )}
-                        {deal.person?.name && (
-                          <div className="flex items-center gap-1">
-                            <User className="w-4 h-4" />
-                            {deal.person.name}
-                          </div>
-                        )}
-                        {deal.person?.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="w-4 h-4" />
-                            {deal.person.phone}
-                          </div>
-                        )}
+                <div key={deal.id || index} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                  {/* Title Row */}
+                  <div className="mb-2">
+                    <h3 className="font-medium text-gray-900 text-sm leading-tight">{deal.title}</h3>
+                  </div>
+
+                  {/* Details Row */}
+                  <div className="flex items-center gap-3 mb-2 text-xs text-gray-600">
+                    {deal.value && (
+                      <div className="flex items-center gap-1">
+                        <DollarSign className="w-3 h-3" />
+                        ${deal.value}
                       </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`px-2 py-1 text-xs rounded ${
+                    )}
+                    {deal.person?.name && (
+                      <div className="flex items-center gap-1">
+                        <User className="w-3 h-3" />
+                        {deal.person.name}
+                      </div>
+                    )}
+                    {deal.person?.phone && (
+                      <div className="flex items-center gap-1">
+                        <Phone className="w-3 h-3" />
+                        {deal.person.phone}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pills and Actions Row */}
+                  <div className="flex items-center justify-between gap-2">
+                    {/* Left side pills */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className={`px-1.5 py-0.5 text-xs rounded ${
                         deal.priority === 'high' ? 'bg-red-100 text-red-700' :
                         deal.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
                         'bg-gray-100 text-gray-700'
@@ -510,81 +558,60 @@ const DealsDebugConsole = ({
                       </span>
                       
                       {deal.coordinates && (
-                        <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">
-                          📍 Geocoded
+                        <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded" title={`${deal.coordinates.lat?.toFixed(4)}, ${deal.coordinates.lng?.toFixed(4)}`}>
+                          📍 {deal.coordinates.lat?.toFixed(2)}, {deal.coordinates.lng?.toFixed(2)}
                         </span>
                       )}
                       
                       {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
-                        <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded flex items-center gap-1">
-                          <Navigation className="w-3 h-3" />
+                        <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded flex items-center gap-1">
+                          <Navigation className="w-2.5 h-2.5" />
                           {deal.distanceInfo.minDistance.toFixed(1)}km
                         </span>
                       )}
-                      
-                      {deal.addressSource && (
-                        <span className={`px-2 py-1 text-xs rounded ${
-                          deal.addressSource === 'deal_address_field' ? 'bg-green-100 text-green-700' :
-                          deal.addressSource === 'person_address' ? 'bg-yellow-100 text-yellow-700' :
-                          deal.addressSource === 'org_address' ? 'bg-orange-100 text-orange-700' :
-                          deal.addressSource === 'parsed_from_title' ? 'bg-purple-100 text-purple-700' :
-                          'bg-gray-100 text-gray-700'
-                        }`}>
-                          {deal.addressSource === 'deal_address_field' ? '🏠 Deal Address' :
-                           deal.addressSource === 'person_address' ? '👤 Person Address' :
-                           deal.addressSource === 'org_address' ? '🏢 Org Address' :
-                           deal.addressSource === 'parsed_from_title' ? '📝 Parsed from Title' :
-                           '❓ Unknown Source'
-                          }
-                        </span>
-                      )}
                     </div>
-                  </div>
-                  
-                  {deal.address && (
-                    <div className="text-sm text-gray-600 mb-2">
-                      <MapPin className="w-4 h-4 inline mr-1" />
-                      {deal.address}
-                    </div>
-                  )}
 
-                  {deal.coordinates && (
-                    <div className="text-xs text-gray-500">
-                      Coordinates: {deal.coordinates.lat?.toFixed(4)}, {deal.coordinates.lng?.toFixed(4)}
-                    </div>
-                  )}
-                  
-                  {deal.distanceInfo && deal.distanceInfo.closestAddress && (
-                    <div className="text-xs text-blue-600 bg-blue-50 rounded p-2 mt-2">
-                      <div className="flex items-center gap-1 mb-1">
-                        <Navigation className="w-3 h-3" />
-                        <span className="font-medium">Closest to: {deal.distanceInfo.closestAddress}</span>
-                      </div>
-                      <div>Distance: {deal.distanceInfo.minDistance?.toFixed(1)}km</div>
-                      {deal.distanceInfo.allDistances?.[0]?.coordSource && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Coord source: {deal.distanceInfo.allDistances[0].coordSource}
-                        </div>
+                    {/* Right side actions */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {deal.coordinates && (
+                        <button
+                          onClick={() => toggleDealSelection(deal)}
+                          onMouseEnter={() => setHoveredDeal(deal)}
+                          onMouseLeave={() => setHoveredDeal(null)}
+                          className={`flex items-center gap-1 px-1.5 py-1 rounded transition-colors ${
+                            selectedDeals.find(d => d.id === deal.id)
+                              ? 'bg-purple-600 text-white hover:bg-purple-700'
+                              : 'hover:bg-purple-100 text-purple-600'
+                          }`}
+                          title={selectedDeals.find(d => d.id === deal.id) ? "Hide from map" : "Show on map"}
+                        >
+                          <Eye className={`w-3 h-3 ${selectedDeals.find(d => d.id === deal.id) ? 'text-white' : 'text-purple-600'}`} />
+                          <span className={`text-xs ${selectedDeals.find(d => d.id === deal.id) ? 'text-white' : 'text-purple-600'}`}>
+                            {selectedDeals.find(d => d.id === deal.id) ? 'Hide' : 'Map'}
+                          </span>
+                        </button>
                       )}
-                      {deal.distanceInfo.allDistances && deal.distanceInfo.allDistances.length > 1 && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Other inspections: {deal.distanceInfo.allDistances.slice(1, 3).map(d => d.distance.toFixed(1) + 'km').join(', ')}
-                          {deal.distanceInfo.allDistances.length > 3 && ` + ${deal.distanceInfo.allDistances.length - 3} more`}
-                        </div>
-                      )}
+                      
+                      <button
+                        onClick={() => window.open(`https://rebuildrelief.pipedrive.com/deal/${deal.id}`, '_blank')}
+                        className="flex items-center gap-1 px-1.5 py-1 hover:bg-orange-100 rounded transition-colors"
+                        title="Open in Pipedrive"
+                      >
+                        <ExternalLink className="w-3 h-3 text-orange-600" />
+                        <span className="text-xs text-orange-600">Open</span>
+                      </button>
                     </div>
-                  )}
-                  
-                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
-                    <div className="text-xs text-gray-500">
-                      ID: {deal.id} | Stage: {deal.stage} | Source: {deal.source}
-                    </div>
-                    {deal.expectedCloseDate && (
-                      <div className="text-xs text-gray-500">
-                        Expected: {new Date(deal.expectedCloseDate).toLocaleDateString()}
-                      </div>
-                    )}
                   </div>
+                  
+                  {/* Address Row */}
+                  {deal.address && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <div className="text-xs text-gray-500 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {deal.address}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -650,27 +650,37 @@ const InspectorCalendar = ({
                                             const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
                                             const counts = timeSlotDealCounts[dayKey];
                                             const within1km = counts?.within1km || 0;
+                                            const within2_5km = counts?.within2_5km || 0;
                                             const within5km = counts?.within5km || 0;
                                             const within10km = counts?.within10km || 0;
                                             const within15km = counts?.within15km || 0;
                                             const radiusText = counts?.radiusText || '';
                                             
-                                            // Determine display count and color (vibrant purple for 1km, then existing colors)
+                                            // Determine display count, color, and radius (vibrant purple for 1km, then existing colors)
                                             let displayCount = 0;
                                             let colorClass = "bg-purple-600 hover:bg-purple-700"; // Vibrant purple for 1km
+                                            let selectedRadius = null;
                                             
                                             if (within1km > 0) {
                                               displayCount = within1km;
                                               colorClass = "bg-purple-600 hover:bg-purple-700"; // Vibrant purple for 1km
+                                              selectedRadius = 1;
+                                            } else if (within2_5km > 0) {
+                                              displayCount = within2_5km;
+                                              colorClass = "bg-sky-500 hover:bg-sky-600"; // Light blue for 2.5km
+                                              selectedRadius = 2.5;
                                             } else if (within5km > 0) {
                                               displayCount = within5km;
                                               colorClass = "bg-green-600 hover:bg-green-700"; // Green for 5km
+                                              selectedRadius = 5;
                                             } else if (within10km > 0) {
                                               displayCount = within10km;
                                               colorClass = "bg-yellow-600 hover:bg-yellow-700"; // Yellow for 10km
+                                              selectedRadius = 10;
                                             } else if (within15km > 0) {
                                               displayCount = within15km;
                                               colorClass = "bg-orange-600 hover:bg-orange-700"; // Orange for 15km
+                                              selectedRadius = 15;
                                             }
                                             
                                             // Only show button if there are deals or if we haven't calculated yet
@@ -682,7 +692,7 @@ const InspectorCalendar = ({
                                                 <button
                                                   onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onShowDealsDebugConsole(day, timeSlot);
+                                                    onShowDealsDebugConsole(day, timeSlot, selectedRadius);
                                                   }}
                                                   className={`${colorClass} text-white text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm`}
                                                 >

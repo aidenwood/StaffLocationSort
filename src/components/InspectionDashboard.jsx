@@ -46,6 +46,8 @@ const InspectionDashboard = ({ pipedriveData }) => {
   const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   const [timeSlotDealCounts, setTimeSlotDealCounts] = useState({});
   const [mobileViewMode, setMobileViewMode] = useState('split'); // 'split', 'calendar', 'map'
+  const [dealsToShowOnMap, setDealsToShowOnMap] = useState([]); // Deals to display as markers on map
+  const [dealsConsoleContext, setDealsConsoleContext] = useState(null); // Context for deals console (time slot info)
 
   // API Debug functionality
   const {
@@ -122,11 +124,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
                 addressSource: a.addressSource,
                 label: a.label
               };
-              console.log(`📍 Added to addressMap: Activity ${a.id}`, {
-                hasPersonAddress: !!a.personAddress,
-                hasCoordinates: !!a.coordinates,
-                addressSource: a.addressSource
-              });
+              // Reduced logging: only count successful additions
             }
           });
           console.log(`🗺️ AddressMap now contains ${Object.keys(updated).length} activities`);
@@ -151,22 +149,21 @@ const InspectionDashboard = ({ pipedriveData }) => {
 
   // Merge addresses into all activities for calendar + map, preserving existing coordinates
   const enrichedActivities = useMemo(() => {
-    console.log(`🔄 Building enrichedActivities from ${activities?.length || 0} activities and ${Object.keys(addressMap).length} addressMap entries`);
+    // Build enriched activities with addressMap data (reduced logging)
+    let enrichedCount = 0;
+    let missingCount = 0;
     
-    return activities.map(a => {
+    const result = activities.map(a => {
       // If activity already has coordinates from App.jsx, keep them
       if (a.coordinates) {
-        console.log(`   ✅ Activity ${a.id} already has coordinates`);
+        enrichedCount++;
         return a;
       }
       
       // Otherwise, add enriched data from addressMap if available
       if (addressMap[a.id]) {
         const enrichedData = addressMap[a.id];
-        console.log(`   📍 Enriching activity ${a.id} with addressMap data:`, {
-          hasPersonAddress: !!enrichedData.personAddress,
-          hasCoordinates: !!enrichedData.coordinates
-        });
+        enrichedCount++;
         return {
           ...a,
           personAddress: enrichedData.personAddress,
@@ -178,9 +175,12 @@ const InspectionDashboard = ({ pipedriveData }) => {
         };
       }
       
-      console.log(`   ⚠️ Activity ${a.id} not found in addressMap`);
+      missingCount++;
       return a;
     });
+    
+    console.log(`📊 Activities: ${enrichedCount} enriched/${activities?.length || 0} total`);
+    return result;
   }, [activities, addressMap]);
 
   // Get enriched day activities for the map (inspector-specific)
@@ -194,19 +194,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
       !(a.subject && a.subject.includes('Inspector ENG Follow up'))
     );
     
-    console.log(`🔍 EnrichedMapActivities debug for ${dateString}:`);
-    console.log(`   Selected inspector: ${selectedInspector}`);
-    console.log(`   Total enrichedActivities: ${enrichedActivities.length}`);
-    console.log(`   Filtered for inspector/date: ${filtered.length}`);
-    filtered.forEach((a, i) => {
-      console.log(`   Activity ${i + 1}:`, {
-        id: a.id,
-        subject: a.subject?.substring(0, 50) + '...',
-        hasPersonAddress: !!a.personAddress,
-        hasCoordinates: !!a.coordinates,
-        addressSource: a.addressSource
-      });
-    });
+    // Activities filtered for current day/inspector
     
     return filtered;
   }, [enrichedActivities, selectedInspector, dateString]);
@@ -220,9 +208,8 @@ const InspectionDashboard = ({ pipedriveData }) => {
       !(a.subject && a.subject.includes('Inspector ENG Follow up'))
     );
     
-    console.log(`🌍 AllDayInspectionActivities for ${dateString}: ${filtered.length} total activities`);
     const withCoords = filtered.filter(a => a.coordinates);
-    console.log(`   ${withCoords.length} have coordinates for distance calculations`);
+    console.log(`🗺️  ${withCoords.length}/${filtered.length} activities geocoded for ${dateString}`);
     
     return filtered;
   }, [enrichedActivities, dateString]);
@@ -272,7 +259,6 @@ const InspectionDashboard = ({ pipedriveData }) => {
             // If no following appointment, fallback to any activity on this day
             if (!referenceInspection && dayActivities.length > 0) {
               referenceInspection = dayActivities[0]; // Use first available activity
-              console.log(`🔄 No following appointment for 9am on ${dayString}, using fallback: ${referenceInspection.personAddress?.substring(0, 30)}`);
             }
           } else {
             // For other slots, use the previous appointment
@@ -290,36 +276,34 @@ const InspectionDashboard = ({ pipedriveData }) => {
               
               if (dealsWithDistance.length > 0) {
                 const within1km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 1).length;
+                const within2_5km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 2.5).length;
                 const within5km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length;
                 const within10km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length;
                 const within15km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length;
                 
                 counts[`${dayString}-${timeSlot}`] = {
                   within1km,
-                  within5km: within5km - within1km, // 1-5km range only
+                  within2_5km: within2_5km - within1km, // 1-2.5km range only
+                  within5km: within5km - within2_5km, // 2.5-5km range only
                   within10km: within10km - within5km, // 5-10km range only
                   within15km: within15km - within10km, // 10-15km range only
-                  radiusText: within1km > 0 ? '1km' : (within5km > within1km ? '5km' : (within10km > within5km ? '10km' : '15km')),
+                  radiusText: within1km > 0 ? '1km' : (within2_5km > within1km ? '2.5km' : (within5km > within2_5km ? '5km' : (within10km > within5km ? '10km' : '15km'))),
                   referenceAddress: referenceInspection.personAddress?.substring(0, 40) || 'Unknown'
                 };
                 
-                console.log(`🔍 ${dayString} ${timeSlot}: ${within1km}/1km, ${within5km-within1km}/1-5km, ${within10km-within5km}/5-10km, ${within15km-within10km}/10-15km near ${referenceInspection.personAddress?.substring(0, 30)}`);
+                // Individual slot calculation complete
               }
             } catch (error) {
               console.error(`Error calculating deals for ${dayString} ${timeSlot}:`, error);
             }
           } else {
-            console.warn(`⚠️ No reference inspection found for ${dayString} ${timeSlot}:`, {
-              timeSlot,
-              totalDayActivities: dayActivities.length,
-              availableSlots: dayActivities.map(a => `${a.due_time}: ${a.subject?.substring(0, 30)}`)
-            });
+            // No reference inspection available for this slot
           }
         }
       }
       
       setTimeSlotDealCounts(counts);
-      console.log(`📅 Calculated individual deal counts for ${Object.keys(counts).length} time slots across the week`);
+      console.log(`📅 Calculated deal counts for ${Object.keys(counts).length} time slots`);
       
     } catch (err) {
       console.error('❌ Error calculating time slot deal counts:', err);
@@ -403,9 +387,23 @@ const InspectionDashboard = ({ pipedriveData }) => {
     refetch(); // Refetch REAL data
   };
 
-  const handleShowDealsDebugConsole = (date, timeSlot = null) => {
+  const handleShowDealsDebugConsole = (date, timeSlot = null, radius = null) => {
     if (date) {
       setSelectedDate(date);
+    }
+    
+    // Set context for deals console title and radius
+    if (timeSlot && date) {
+      const contextInfo = {
+        timeSlot,
+        date,
+        radius,
+        formattedTime: timeSlot ? timeSlot.substring(0, 5) : null, // "09:00" from "09:00:00"
+        formattedDate: format(date, 'do \'of\' MMMM') // "13th of March"
+      };
+      setDealsConsoleContext(contextInfo);
+    } else {
+      setDealsConsoleContext(null);
     }
     
     // If a timeSlot is provided, find the reference inspection for sorting
@@ -423,7 +421,6 @@ const InspectionDashboard = ({ pipedriveData }) => {
         // If no following appointment, fallback to any activity on this day
         if (!referenceInspection && dayActivities.length > 0) {
           referenceInspection = dayActivities[0]; // Use first available activity
-          console.log(`🔄 No following appointment for 9am modal, using fallback: ${referenceInspection.personAddress?.substring(0, 30)}`);
         }
       } else {
         // For other slots, use the previous appointment
@@ -968,6 +965,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
               loading={loading}
               isTimeout={isTimeout}
               error={error}
+              dealsToShow={dealsToShowOnMap}
             />
           </div>
 
@@ -1001,11 +999,18 @@ const InspectionDashboard = ({ pipedriveData }) => {
       {/* Deals Debug Console */}
       <DealsDebugConsole
         isOpen={showDealsDebugConsole}
-        onClose={() => setShowDealsDebugConsole(false)}
+        onClose={() => {
+          setShowDealsDebugConsole(false);
+          setDealsToShowOnMap([]); // Clear deal markers when closing
+          setDealsConsoleContext(null); // Clear context when closing
+        }}
         selectedInspector={selectedInspector}
         inspectors={pipedriveInspectors}
         selectedDate={selectedDate}
         inspectionActivities={enrichedMapActivities}
+        viewMode={mobileViewMode}
+        onDealsUpdate={setDealsToShowOnMap}
+        context={dealsConsoleContext} // Pass time slot context
       />
 
       {/* App Unavailable Modal */}

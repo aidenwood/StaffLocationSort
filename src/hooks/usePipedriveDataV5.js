@@ -50,20 +50,13 @@ export const usePipedriveDataV5 = (options = {}) => {
 
   // Check if we should use live data
   const shouldUseLiveData = useMemo(() => {
-    console.log('🔧 PIPEDRIVE V5 DEBUG: Checking if should use live data...');
-    console.log('   enableLiveData:', enableLiveData);
-    console.log('   VITE_USE_LIVE_DATA:', import.meta.env.VITE_USE_LIVE_DATA);
-    
     if (!enableLiveData) {
-      console.log('❌ Live data disabled - using mock data');
       return false;
     }
     
     const validation = hasValidPipedriveIds();
-    console.log('🔍 Pipedrive ID validation:', validation);
-    
     const result = validation.testUser || validation.inspectors;
-    console.log(result ? `✅ V5: Using live Pipedrive data with SERVER-SIDE FILTER (ID: ${PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID})` : '❌ No valid Pipedrive IDs - using mock data');
+    console.log(result ? '✅ Using live Pipedrive data' : '❌ Using mock data');
     
     return result;
   }, [enableLiveData]);

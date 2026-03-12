@@ -211,10 +211,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
     const client = createPipedriveClient(true); // V2 client
     const maxPages = 5; // Increased to get more activities
 
-    console.log('🔍 V2 API: Fetching UPCOMING activities from filter (target: 188 activities)...');
-    console.log('   filterId:', filterId);
-    console.log('   startDate:', startDate);
-    console.log('   endDate:', endDate);
+    console.log('🔍 Fetching activities...');
 
     const allActivities = [];
     let cursor = null;
@@ -223,7 +220,6 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
     // Use V2 API's updated_since parameter to filter by update_time (avoids 500 limit)
     // Remove updated_since for now to get all activities, then filter client-side
     
-    console.log('📅 V2 API: Getting all activities (no date filter) then filtering client-side');
 
     do {
       const params = {
@@ -235,7 +231,6 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
 
       if (cursor) params.cursor = cursor;
 
-      console.log('📞 V2 API: GET /activities', cursor ? `(page ${pageCount + 1})` : '(first page)', params);
 
       const response = await client.get('/activities', { params });
 
@@ -271,7 +266,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
         if (end && d > end) return false;
         return true;
       });
-      console.log(`✅ V2 API: ${filtered.length} activities in due_date range (from ${allActivities.length} fetched)`);
+      console.log(`✅ Filtered ${filtered.length}/${allActivities.length} activities`);
     } else {
       // Filter to only show upcoming activities (due_date >= today)
       const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -279,7 +274,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
         const dueDate = a.due_date || '';
         return dueDate >= todayStr; // Only upcoming activities
       });
-      console.log(`✅ V2 API: ${filtered.length} upcoming activities (from ${allActivities.length} total)`);
+      console.log(`✅ Found ${filtered.length} upcoming activities`);
     }
 
     if (filtered.length > 0) {
@@ -625,33 +620,21 @@ export const fetchPersonAddressForActivity = async (activity) => {
 // GET: Enrich activities with person addresses and geocoded coordinates
 export const enrichActivitiesWithAddresses = async (activities) => {
   try {
-    console.log(`🏠 Enriching ${activities.length} activities with person addresses and coordinates (batched to avoid rate limits)...`);
+    console.log(`🏠 Enriching ${activities.length} activities with addresses...`);
     
     const enrichedActivities = [];
-    const batchSize = 3; // Process only 3 activities at a time to avoid rate limits
+    const batchSize = 5; // Increased batch size for better performance
+    let geocodedCount = 0;
     
     for (let i = 0; i < activities.length; i += batchSize) {
       const batch = activities.slice(i, i + batchSize);
-      console.log(`   Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(activities.length/batchSize)} (${batch.length} activities)`);
       
       const batchResults = await Promise.all(
         batch.map(async (activity) => {
           const address = await fetchPersonAddressForActivity(activity);
           
-          // Fetch deal label for region code (limited)
+          // Skip deal label fetching for better performance
           let dealLabel = null;
-          if (activity.deal_id) {
-            try {
-              const v1Client = createPipedriveClient(false); // Force V1 for deals
-              const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
-              if (dealResponse.data.success && dealResponse.data.data.label) {
-                dealLabel = dealResponse.data.data.label;
-                console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
-              }
-            } catch (error) {
-              console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
-            }
-          }
           
           // If we found an address, geocode it
           if (address) {
@@ -660,7 +643,7 @@ export const enrichActivitiesWithAddresses = async (activities) => {
               const coordinates = await geocodeAddress(address);
               
               if (coordinates) {
-                console.log(`   📍 Geocoded activity "${activity.subject}": ${coordinates.lat}, ${coordinates.lng}`);
+                geocodedCount++;
                 return {
                   ...activity,
                   personAddress: address,
@@ -670,11 +653,9 @@ export const enrichActivitiesWithAddresses = async (activities) => {
                   addressSource: 'person_address_geocoded',
                   label: dealLabel || null
                 };
-              } else {
-                console.warn(`   ⚠️ Failed to geocode address: "${address}"`);
               }
             } catch (geocodeError) {
-              console.warn(`   ⚠️ Geocoding error for "${address}":`, geocodeError.message);
+              // Skip geocoding errors for performance
             }
           }
           
@@ -691,7 +672,6 @@ export const enrichActivitiesWithAddresses = async (activities) => {
       
       // Add delay between batches to avoid rate limits
       if (i + batchSize < activities.length) {
-        console.log(`   ⏳ Waiting 500ms before next batch to avoid rate limits...`);
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }

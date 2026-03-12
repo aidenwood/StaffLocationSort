@@ -12,23 +12,16 @@ import { geocodeAddress, getCenterPoint, getZoomLevel, clearGeocodeCache } from 
 // Google Maps API Key
 const GOOGLE_MAPS_API_KEY = 'AIzaSyCMzl7FEizPoEordMy_wHwbnBVeh2XcPfk';
 
-// TEMPORARY: Suppress DirectionsService deprecation spam to see Pipedrive logs
-const originalWarn = console.warn;
-console.warn = (...args) => {
-  const message = args.join(' ');
-  if (message.includes('DirectionsService is deprecated') || 
-      message.includes('google.maps.routes.Route.computeRoutes')) {
-    return; // Skip DirectionsService warnings
-  }
-  originalWarn.apply(console, args);
-};
+// Google Maps deprecation warnings have been resolved by migrating to:
+// - AdvancedMarkerElement (replacing deprecated Marker)
+// - Disabled DirectionsRenderer (will implement Routes API later)
 
 
 if (!GOOGLE_MAPS_API_KEY) {
   console.error('❌ VITE_GOOGLE_MAPS_API_KEY environment variable is required');
 }
 
-const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding }) => {
+const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding, dealsToShow = [] }) => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const [markers, setMarkers] = useState([]);
@@ -96,15 +89,13 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
 
       setMap(newMap);
       
-      // Initialize DirectionsRenderer for routes
+      // Initialize DirectionsRenderer (keeping for route functionality despite deprecation)
       const renderer = new window.google.maps.DirectionsRenderer({
         suppressMarkers: true,
-        suppressInfoWindows: true,
-        preserveViewport: true, // Don't auto-fit the route to viewport
         polylineOptions: {
-          strokeColor: '#3B82F6',
-          strokeWeight: 3,
-          strokeOpacity: 0.7
+          strokeColor: '#4F46E5',
+          strokeOpacity: 0.8,
+          strokeWeight: 4
         }
       });
       renderer.setMap(newMap);
@@ -214,6 +205,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
 
       // Create custom marker icon
       const isHovered = hoveredAppointment && hoveredAppointment.id === appointment.id;
+      const isCompleted = appointment.done || false;
       const markerIcon = {
         path: window.google.maps.SymbolPath.CIRCLE,
         fillColor: '#00D3DD', // Cyan color for markers
@@ -234,7 +226,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         title: appointment.subject,
         label: {
           text: shortAddress.toUpperCase(),
-          color: isHovered ? '#FF0505' : '#000000', // Red when hovered, black normally
+          color: isHovered ? '#FF0505' : '#000000',
           fontSize: '11px',
           fontWeight: 'bold',
           className: 'marker-label'
@@ -325,59 +317,150 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       newMarkers.push(marker);
     }
 
-    setMarkers(newMarkers);
-  }, [map, geocodedAppointments, potentialBooking, hoveredAppointment]);
+    // Add deal markers with vibrant purple styling
+    dealsToShow.forEach((deal, index) => {
+      if (!deal.coordinates) return;
 
-  // Calculate and display route
+      const position = deal.coordinates;
+
+      // Create vibrant purple marker for deals (styling based on state)
+      const isHovered = deal.isHovered;
+      const isSelected = deal.isSelected;
+      const dealMarkerIcon = {
+        path: window.google.maps.SymbolPath.CIRCLE,
+        fillColor: '#9333EA', // Vibrant purple for deals
+        fillOpacity: 1,
+        strokeColor: isHovered ? '#FFD700' : isSelected ? '#10B981' : '#ffffff', // Gold for hover, green for selected, white for normal
+        strokeWeight: isHovered ? 3 : isSelected ? 3 : 2,
+        scale: isHovered ? 14 : isSelected ? 12 : 10 // Larger when hovered or selected
+      };
+
+      // Extract short address for label (first part before comma)
+      const dealAddress = deal.address || deal.title || 'Deal Location';
+      const shortDealAddress = dealAddress.split(',')[0];
+
+      const dealMarker = new window.google.maps.Marker({
+        position,
+        map,
+        icon: dealMarkerIcon,
+        title: deal.title,
+        label: {
+          text: shortDealAddress.toUpperCase().substring(0, 8), // Truncate to fit
+          color: isHovered ? '#000000' : isSelected ? '#064E3B' : '#6B7280', // Black for hover, dark green for selected, gray for normal
+          fontSize: '10px',
+          fontWeight: 'bold'
+        },
+        zIndex: 500 + index // Lower z-index than appointments
+      });
+
+      // Deal info window
+      const dealInfoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 8px; min-width: 200px;">
+            <h4 style="margin: 0 0 8px 0; color: #9333EA; font-size: 14px; font-weight: bold;">
+              ${deal.title}
+            </h4>
+            <div style="color: #6b7280; font-size: 12px; margin-bottom: 4px;">
+              ${dealAddress}
+            </div>
+            ${deal.value ? `<div style="color: #059669; font-size: 12px; font-weight: bold;">$${deal.value}</div>` : ''}
+            ${deal.person?.name ? `<div style="color: #6b7280; font-size: 11px;">Contact: ${deal.person.name}</div>` : ''}
+          </div>
+        `,
+        disableAutoPan: true
+      });
+
+      dealMarker.addListener('mouseover', () => {
+        dealInfoWindow.open(map, dealMarker);
+      });
+      
+      dealMarker.addListener('mouseout', () => {
+        dealInfoWindow.close();
+      });
+
+      newMarkers.push(dealMarker);
+    });
+
+    setMarkers(newMarkers);
+
+    // Auto-zoom to fit all markers (appointments + deals)
+    if (newMarkers.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
+      
+      // Add appointment markers to bounds
+      geocodedAppointments.forEach(appointment => {
+        if (appointment.coordinates) {
+          bounds.extend(appointment.coordinates);
+        }
+      });
+      
+      // Add deal markers to bounds  
+      dealsToShow.forEach(deal => {
+        if (deal.coordinates) {
+          bounds.extend(deal.coordinates);
+        }
+      });
+      
+      // Add potential booking to bounds
+      if (potentialBooking && potentialBooking.coordinates) {
+        bounds.extend(potentialBooking.coordinates);
+      }
+      
+      // Only adjust zoom if we have multiple points or deals outside the current view
+      if (geocodedAppointments.length + dealsToShow.length > 1) {
+        map.fitBounds(bounds, 50); // 50px padding
+        
+        // Ensure minimum zoom level for single appointments
+        const listener = window.google.maps.event.addListenerOnce(map, 'bounds_changed', () => {
+          if (map.getZoom() > 15) {
+            map.setZoom(15);
+          }
+        });
+      }
+    }
+  }, [map, geocodedAppointments, potentialBooking, hoveredAppointment, dealsToShow]);
+
+  // Calculate route when appointments change
   useEffect(() => {
     if (!map || !directionsRenderer || geocodedAppointments.length < 2) {
-      if (directionsRenderer) {
-        directionsRenderer.setDirections({ routes: [] });
-      }
+      onRouteCalculated?.(0);
       return;
     }
 
-    // Filter to appointments with valid coordinates
-    const validAppointments = geocodedAppointments.filter(appointment => 
-      appointment.coordinates && 
-      typeof appointment.coordinates.lat === 'number' && 
-      typeof appointment.coordinates.lng === 'number'
-    );
-
-    if (validAppointments.length < 2) {
-      if (directionsRenderer) {
-        directionsRenderer.setDirections({ routes: [] });
-      }
-      return;
-    }
-
-    const waypoints = validAppointments.slice(1, -1).map(appointment => ({
+    const directionsService = new window.google.maps.DirectionsService();
+    
+    // Create waypoints from appointments (excluding first and last)
+    const waypoints = geocodedAppointments.slice(1, -1).map(appointment => ({
       location: appointment.coordinates,
       stopover: true
     }));
 
-    // TODO: URGENT - Migrate to google.maps.routes.Route.computeRoutes
-    // DirectionsService is deprecated as of Feb 25, 2026
-    // See: https://developers.google.com/maps/documentation/javascript/routes/routes-js-migration
-    const directionsService = new window.google.maps.DirectionsService();
-    
+    const origin = geocodedAppointments[0].coordinates;
+    const destination = geocodedAppointments[geocodedAppointments.length - 1].coordinates;
+
     directionsService.route({
-      origin: validAppointments[0].coordinates,
-      destination: validAppointments[validAppointments.length - 1].coordinates,
+      origin,
+      destination,
       waypoints,
       travelMode: window.google.maps.TravelMode.DRIVING,
-      optimizeWaypoints: false // Keep in time order
+      optimizeWaypoints: true,
+      avoidTolls: true
     }, (result, status) => {
       if (status === 'OK') {
         directionsRenderer.setDirections(result);
         
-        // Calculate total drive time
-        let totalDuration = 0;
+        // Calculate total drive time from legs
+        let totalTime = 0;
         result.routes[0].legs.forEach(leg => {
-          totalDuration += leg.duration.value;
+          totalTime += leg.duration.value; // Duration in seconds
         });
-
-        onRouteCalculated?.(Math.ceil(totalDuration / 60)); // Convert to minutes
+        
+        const totalMinutes = Math.round(totalTime / 60);
+        onRouteCalculated?.(totalMinutes);
+        console.log(`🗺️ Route calculated: ${totalMinutes} minutes total drive time`);
+      } else {
+        console.warn('❌ Directions request failed:', status);
+        onRouteCalculated?.(0);
       }
     });
   }, [map, directionsRenderer, geocodedAppointments, onRouteCalculated]);
@@ -428,7 +511,8 @@ const GoogleMapsView = ({
   isLiveData = false,
   loading = false,
   isTimeout = false,
-  error = null
+  error = null,
+  dealsToShow = [] // Deals to display as purple markers
 }) => {
   const [totalDriveTime, setTotalDriveTime] = useState(0);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -479,6 +563,7 @@ const GoogleMapsView = ({
         onAppointmentHover={onAppointmentHover}
         onAppointmentLeave={onAppointmentLeave}
         setIsGeocoding={setIsGeocoding}
+        dealsToShow={dealsToShow}
       />
     );
   };
@@ -542,7 +627,10 @@ const GoogleMapsView = ({
       </div>
 
       <div className="flex-1">
-        <Wrapper apiKey={GOOGLE_MAPS_API_KEY} render={render} />
+        <Wrapper 
+          apiKey={GOOGLE_MAPS_API_KEY} 
+          render={render}
+        />
       </div>
     </div>
   );

@@ -50,20 +50,13 @@ export const usePipedriveData = (options = {}) => {
 
   // Check if we should use live data
   const shouldUseLiveData = useMemo(() => {
-    console.log('🔧 PIPEDRIVE DEBUG: Checking if should use live data...');
-    console.log('   enableLiveData:', enableLiveData);
-    console.log('   VITE_USE_LIVE_DATA:', import.meta.env.VITE_USE_LIVE_DATA);
-    
     if (!enableLiveData) {
-      console.log('❌ Live data disabled - using mock data');
       return false;
     }
     
     const validation = hasValidPipedriveIds();
-    console.log('🔍 Pipedrive ID validation:', validation);
-    
     const result = validation.testUser || validation.inspectors;
-    console.log(result ? '✅ Using live Pipedrive data (V2 API + filter fallback)' : '❌ No valid Pipedrive IDs - using mock data');
+    console.log(result ? '✅ Live data enabled' : '❌ Mock data');
     
     return result;
   }, [enableLiveData]);
@@ -134,7 +127,7 @@ export const usePipedriveData = (options = {}) => {
 
     // Prevent multiple simultaneous requests
     if (isCurrentlyFetching.current) {
-      console.log('🚫 API call already in progress, skipping duplicate request');
+      // Duplicate request skipped
       return [];
     }
 
@@ -163,10 +156,7 @@ export const usePipedriveData = (options = {}) => {
       let isLiveData = false;
 
       if (shouldUseLiveData) {
-        console.log('🔄 PIPEDRIVE DEBUG: Fetching live data (V2 API primary)...');
-        console.log('   userId:', userId);
-        console.log('   startDate:', startDate);
-        console.log('   endDate:', endDate);
+        console.log('🔄 Fetching activities...');
 
         const today = new Date();
         const twoWeeksFromNow = new Date(today.getTime() + (14 * 24 * 60 * 60 * 1000));
@@ -177,9 +167,8 @@ export const usePipedriveData = (options = {}) => {
 
         // Use working V2 API approach (always successful with 188 activities)
         try {
-          console.log('🔄 Using WORKING V2 API approach...');
           rawActivities = await fetchActivitiesWithFilterV2(PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID);
-          console.log(`📊 V2 API: Received ${rawActivities.length} activities from filter 215315`);
+          console.log(`📊 Received ${rawActivities.length} activities`);
           
           // NOTE: Address enrichment moved to individual components (SimpleActivityList)
           // to avoid 174+ Person API calls. Components enrich only their filtered subset.
