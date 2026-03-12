@@ -654,19 +654,19 @@ const InspectorCalendar = ({
                                             const within15km = counts?.within15km || 0;
                                             const radiusText = counts?.radiusText || '';
                                             
-                                            // Determine display count and color (priority: 5km > 10km > 15km)
+                                            // Determine display count and color (matching debug console colors)
                                             let displayCount = 0;
-                                            let colorClass = "bg-purple-600 hover:bg-purple-700"; // Dark purple for 5km
+                                            let colorClass = "bg-green-600 hover:bg-green-700"; // Green for 5km
                                             
                                             if (within5km > 0) {
                                               displayCount = within5km;
-                                              colorClass = "bg-purple-600 hover:bg-purple-700"; // Dark purple for 5km
+                                              colorClass = "bg-green-600 hover:bg-green-700"; // Green for 5km
                                             } else if (within10km > 0) {
                                               displayCount = within10km;
-                                              colorClass = "bg-purple-400 hover:bg-purple-500"; // Medium purple for 5-10km
+                                              colorClass = "bg-yellow-600 hover:bg-yellow-700"; // Yellow for 10km
                                             } else if (within15km > 0) {
                                               displayCount = within15km;
-                                              colorClass = "bg-purple-300 hover:bg-purple-400"; // Light purple for 10-15km
+                                              colorClass = "bg-orange-600 hover:bg-orange-700"; // Orange for 15km
                                             }
                                             
                                             // Only show button if there are deals or if we haven't calculated yet

@@ -32,7 +32,7 @@ This application is a staff location sorting system that integrates with Pipedri
 - **Individual Calculations**: Each time slot (9am, 11am, 1pm, 3pm) calculates deals based on its specific reference inspection
 - **Reference Logic**: 9am uses FOLLOWING appointment, others use PREVIOUS appointment
 - **Week-Wide Scope**: Calculates for all 28 time slots (7 days × 4 slots) across the current week
-- **Color Coding**: Dark purple (5km) > Medium purple (10km) > Light purple (15km)
+- **Color Coding**: Green (5km) > Yellow (10km) > Orange (15km) - matches debug console
 - **Button Format**: Shows "X Deals (5km)" with radius indicator
 
 #### 1. InspectionDashboard (`/src/components/InspectionDashboard.jsx`)
@@ -172,6 +172,78 @@ export const calculateDealDistances = (deal, inspectionActivities) => {
 ### Deal Filtering
 - Deals are filtered by region using predefined filter IDs
 - `REGIONAL_DEAL_FILTERS` maps regions to Pipedrive filter IDs
+
+## Deal Recommendation Time Slot Implementation
+
+### Data Flow Architecture
+```mermaid
+graph TD
+    A[InspectionDashboard] --> B[calculateTimeSlotDealCounts]
+    B --> C[getDealsForRegion API]
+    B --> D[enrichedActivities filter]
+    D --> E[Find Reference Inspection]
+    E --> F[sortDealsByDistance]
+    F --> G[Distance Filtering 5km/10km/15km]
+    G --> H[timeSlotDealCounts state]
+    H --> I[InspectorCalendar props]
+    I --> J[Deal Button Rendering]
+```
+
+### Key Implementation Details
+
+#### InspectionDashboard (`calculateTimeSlotDealCounts` function)
+**Purpose**: Calculates individual deal counts for each time slot across the entire week
+
+**Process**:
+1. **Week Generation**: Loops through all 7 days of current week
+2. **Day Activities Filter**: Gets inspections for each specific day with coordinates
+3. **Reference Inspection Logic**:
+   - `timeSlot === '09:00'`: Uses FOLLOWING appointment (earliest after 9am)
+   - Other slots: Uses PREVIOUS appointment (latest before slot time)
+4. **Deal Calculation**: Calls `sortDealsByDistance(deals, [referenceInspection])`
+5. **Range Counting**: Filters deals into 5km, 5-10km, 10-15km buckets
+6. **State Storage**: Stores in `timeSlotDealCounts` keyed by `${dayString}-${timeSlot}`
+
+**Key Props Passed to InspectorCalendar**:
+```javascript
+timeSlotDealCounts={timeSlotDealCounts}  // Object with deal counts per time slot
+enableOpportunities={showOpportunities}  // Toggle visibility
+onShowDealsDebugConsole={handleShowDealsDebugConsole}  // Click handler
+```
+
+#### InspectorCalendar (Deal Button Rendering)
+**Data Access**: 
+```javascript
+const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
+const counts = timeSlotDealCounts[dayKey];
+const within5km = counts?.within5km || 0;
+const radiusText = counts?.radiusText || '';
+```
+
+**Button Logic**:
+- Shows button only for standard slots: ['09:00', '11:00', '13:00', '15:00']
+- Displays count with radius: "X Deals (5km)"
+- Color codes by closest range with deals
+- Hides button if no deals found in any range
+
+### Working with the Function
+
+#### To Modify Calculation Logic:
+1. Edit `calculateTimeSlotDealCounts` in `InspectionDashboard.jsx`
+2. Adjust reference inspection selection logic
+3. Modify distance range filtering
+4. Update `timeSlotDealCounts` structure
+
+#### To Change Display:
+1. Edit InspectorCalendar deal button rendering logic
+2. Modify color classes and text formatting
+3. Adjust visibility conditions
+
+#### To Add New Radius Ranges:
+1. Add new distance filter in `calculateTimeSlotDealCounts`
+2. Update `counts` object structure
+3. Add new color class in InspectorCalendar
+4. Update button text logic
 
 ## Key Data Structures
 
