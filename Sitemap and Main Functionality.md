@@ -28,6 +28,13 @@ This application is a staff location sorting system that integrates with Pipedri
 3. Inspections are automatically populated from Pipedrive activities
 4. **Recommendation Workflow**: Click "Deals" button → Opens console → View nearby deals → Book optimal time slots
 
+**Deal Recommendation Time Slot System:**
+- **Individual Calculations**: Each time slot (9am, 11am, 1pm, 3pm) calculates deals based on its specific reference inspection
+- **Reference Logic**: 9am uses FOLLOWING appointment, others use PREVIOUS appointment
+- **Week-Wide Scope**: Calculates for all 28 time slots (7 days × 4 slots) across the current week
+- **Color Coding**: Dark purple (5km) > Medium purple (10km) > Light purple (15km)
+- **Button Format**: Shows "X Deals (5km)" with radius indicator
+
 #### 1. InspectionDashboard (`/src/components/InspectionDashboard.jsx`)
 **Main dashboard view that orchestrates the entire application**
 

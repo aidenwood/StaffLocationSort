@@ -227,10 +227,10 @@ const InspectionDashboard = ({ pipedriveData }) => {
     return filtered;
   }, [enrichedActivities, dateString]);
 
-  // Function to calculate deal counts for time slots using same logic as debug console
+  // Function to calculate deal counts individually for each time slot across the entire week
   const calculateTimeSlotDealCounts = async () => {
     try {
-      if (!selectedInspector || allDayInspectionActivities.length === 0) return;
+      if (!selectedInspector) return;
       
       // Get current inspector region
       const currentInspector = pipedriveInspectors?.find(i => i.id === selectedInspector);
@@ -240,43 +240,72 @@ const InspectionDashboard = ({ pipedriveData }) => {
       const deals = await getDealsForRegion(region, { limit: 200 });
       if (!deals || deals.length === 0) return;
       
-      // Sort deals by distance to ALL inspection activities (same as debug console)
-      const sortedDeals = await sortDealsByDistance(deals, allDayInspectionActivities);
+      const timeSlots = ['09:00', '11:00', '13:00', '15:00'];
+      const counts = {};
       
-      // Calculate statistics using same logic as debug console (cumulative counts)
-      const dealsWithDistance = sortedDeals.filter(d => d.distanceInfo?.minDistance !== null);
+      // Generate all days for the current week
+      const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
       
-      if (dealsWithDistance.length > 0) {
-        const stats = {
-          within5km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length,
-          within10km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length,
-          within15km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length,
-        };
+      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+        const day = addDays(startOfCurrentWeek, dayOffset);
+        const dayString = format(day, 'yyyy-MM-dd');
         
-        console.log('🎯 Week deal statistics (matching debug console):', stats);
+        // Get activities for this specific day across all inspectors
+        const dayActivities = enrichedActivities.filter(a =>
+          a.due_date === dayString &&
+          !a.done &&
+          a.due_time && a.due_time !== '00:00:00' &&
+          !(a.subject && a.subject.includes('Inspector ENG Follow up')) &&
+          a.coordinates // Only activities with coordinates
+        );
         
-        // Apply these counts to all time slots for the entire week
-        const timeSlots = ['09:00', '11:00', '13:00', '15:00'];
-        const counts = {};
-        
-        // Generate all days for the current week
-        const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-          const day = addDays(startOfCurrentWeek, dayOffset);
-          const dayString = format(day, 'yyyy-MM-dd');
+        for (const timeSlot of timeSlots) {
+          let referenceInspection = null;
           
-          timeSlots.forEach(timeSlot => {
-            counts[`${dayString}-${timeSlot}`] = {
-              within5km: stats.within5km,
-              within10km: stats.within10km - stats.within5km, // 5-10km range
-              within15km: stats.within15km - stats.within10km // 10-15km range
-            };
-          });
+          if (timeSlot === '09:00') {
+            // For 9am, use the following appointment (next inspection)
+            const activitiesAfterSlot = dayActivities
+              .filter(a => a.due_time > timeSlot)
+              .sort((a, b) => a.due_time.localeCompare(b.due_time)); // Earliest first
+            referenceInspection = activitiesAfterSlot[0];
+          } else {
+            // For other slots, use the previous appointment
+            const activitiesBeforeSlot = dayActivities
+              .filter(a => a.due_time < timeSlot)
+              .sort((a, b) => b.due_time.localeCompare(a.due_time)); // Latest first
+            referenceInspection = activitiesBeforeSlot[0];
+          }
+          
+          if (referenceInspection) {
+            try {
+              // Sort deals by distance to this specific inspection
+              const sortedDeals = await sortDealsByDistance(deals, [referenceInspection]);
+              const dealsWithDistance = sortedDeals.filter(d => d.distanceInfo?.minDistance !== null);
+              
+              if (dealsWithDistance.length > 0) {
+                const within5km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length;
+                const within10km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length;
+                const within15km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length;
+                
+                counts[`${dayString}-${timeSlot}`] = {
+                  within5km,
+                  within10km: within10km - within5km, // 5-10km range only
+                  within15km: within15km - within10km, // 10-15km range only
+                  radiusText: within5km > 0 ? '5km' : (within10km > within5km ? '10km' : '15km'),
+                  referenceAddress: referenceInspection.personAddress?.substring(0, 40) || 'Unknown'
+                };
+                
+                console.log(`🔍 ${dayString} ${timeSlot}: ${within5km}/5km, ${within10km-within5km}/5-10km, ${within15km-within10km}/10-15km near ${referenceInspection.personAddress?.substring(0, 30)}`);
+              }
+            } catch (error) {
+              console.error(`Error calculating deals for ${dayString} ${timeSlot}:`, error);
+            }
+          }
         }
-        
-        setTimeSlotDealCounts(counts);
-        console.log(`📅 Applied deal counts to ${Object.keys(counts).length} time slots across the week`);
       }
+      
+      setTimeSlotDealCounts(counts);
+      console.log(`📅 Calculated individual deal counts for ${Object.keys(counts).length} time slots across the week`);
       
     } catch (err) {
       console.error('❌ Error calculating time slot deal counts:', err);
@@ -285,10 +314,10 @@ const InspectionDashboard = ({ pipedriveData }) => {
 
   // Recalculate deal counts when date or inspector changes and opportunities are enabled
   useEffect(() => {
-    if (showOpportunities && !opportunitiesLoading && allDayInspectionActivities.length > 0) {
+    if (showOpportunities && !opportunitiesLoading && enrichedActivities.length > 0) {
       calculateTimeSlotDealCounts();
     }
-  }, [selectedDate, selectedInspector, showOpportunities, allDayInspectionActivities]);
+  }, [selectedDate, selectedInspector, showOpportunities, enrichedActivities]);
 
   const handleTimeSlotSelection = (slotData) => {
     setSelectedTimeSlot(slotData);

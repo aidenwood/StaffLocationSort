@@ -652,6 +652,7 @@ const InspectorCalendar = ({
                                             const within5km = counts?.within5km || 0;
                                             const within10km = counts?.within10km || 0;
                                             const within15km = counts?.within15km || 0;
+                                            const radiusText = counts?.radiusText || '';
                                             
                                             // Determine display count and color (priority: 5km > 10km > 15km)
                                             let displayCount = 0;
@@ -682,7 +683,7 @@ const InspectorCalendar = ({
                                                   className={`${colorClass} text-white text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm`}
                                                 >
                                                   <Target className="w-3 h-3" />
-                                                  {displayCount > 0 ? `${displayCount} Deal${displayCount === 1 ? '' : 's'}` : 'Deals'}
+                                                  {displayCount > 0 ? `${displayCount} Deal${displayCount === 1 ? '' : 's'}${radiusText ? ` (${radiusText})` : ''}` : 'Deals'}
                                                 </button>
                                               );
                                             }
