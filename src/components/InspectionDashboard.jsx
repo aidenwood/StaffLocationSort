@@ -14,7 +14,8 @@ import {
   Map,
   ChevronLeft,
   ChevronRight,
-  Grid3x3
+  Grid3x3,
+  Target
 } from 'lucide-react';
 import InspectorCalendar from './InspectorCalendar';
 import InspectorView from './InspectorView';
@@ -40,6 +41,8 @@ const InspectionDashboard = ({ pipedriveData }) => {
   const [hoveredAppointment, setHoveredAppointment] = useState(null);
   const [showDebugConsole, setShowDebugConsole] = useState(false);
   const [showDealsDebugConsole, setShowDealsDebugConsole] = useState(false);
+  const [showOpportunities, setShowOpportunities] = useState(false);
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState('split'); // 'split', 'calendar', 'map'
 
   // API Debug functionality
@@ -102,6 +105,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
 
     const doEnrich = async () => {
       try {
+        setOpportunitiesLoading(true);
         const enriched = await enrichActivitiesWithAddresses(unenriched);
         setAddressMap(prev => {
           const updated = { ...prev };
@@ -126,8 +130,15 @@ const InspectionDashboard = ({ pipedriveData }) => {
           console.log(`🗺️ AddressMap now contains ${Object.keys(updated).length} activities`);
           return updated;
         });
+        
+        // Auto-enable opportunities after successful enrichment
+        setTimeout(() => {
+          setShowOpportunities(true);
+          setOpportunitiesLoading(false);
+        }, 1000);
       } catch (err) {
         console.error('Address enrichment failed:', err);
+        setOpportunitiesLoading(false);
       }
     };
     doEnrich();
@@ -281,6 +292,37 @@ const InspectionDashboard = ({ pipedriveData }) => {
     refetch(); // Refetch REAL data
   };
 
+  const handleShowDealsDebugConsole = (date, timeSlot = null) => {
+    if (date) {
+      setSelectedDate(date);
+    }
+    
+    // If a timeSlot is provided, find the previous inspection for sorting
+    if (timeSlot && date) {
+      const dayActivities = enrichedMapActivities.filter(a => a.due_date === format(date, 'yyyy-MM-dd'));
+      
+      // Sort activities by time to find the one before this timeSlot
+      const sortedActivities = dayActivities
+        .filter(a => a.due_time && a.due_time < timeSlot)
+        .sort((a, b) => a.due_time.localeCompare(b.due_time));
+      
+      const previousInspection = sortedActivities[sortedActivities.length - 1]; // Last one before timeSlot
+      
+      if (previousInspection) {
+        console.log(`🎯 Opening deals console for ${timeSlot} with previous inspection:`, {
+          time: previousInspection.due_time,
+          address: previousInspection.personAddress,
+          coordinates: previousInspection.coordinates
+        });
+        
+        // Store the sort-by inspection for DealsDebugConsole
+        window.dealsSortByInspection = previousInspection;
+      }
+    }
+    
+    setShowDealsDebugConsole(true);
+  };
+
   // Show inspector view if selected
   if (viewMode === 'inspector' && viewingInspectorId) {
     return (
@@ -420,8 +462,33 @@ const InspectionDashboard = ({ pipedriveData }) => {
             </div>
           </div>
 
-          {/* Right: Status */}
+          {/* Right: Status & Controls */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Opportunities Toggle */}
+            <button
+              onClick={() => setShowOpportunities(!showOpportunities)}
+              disabled={opportunitiesLoading}
+              className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
+                opportunitiesLoading
+                  ? 'bg-blue-100 text-blue-700'
+                  : showOpportunities 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {opportunitiesLoading ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div>
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Target className="w-3 h-3" />
+                  Opportunities
+                </>
+              )}
+            </button>
+            
             <div className="flex items-center gap-1">
               <div className={`w-2 h-2 rounded-full ${
                 isLiveData ? 'bg-green-500' : 'bg-gray-400'
@@ -697,6 +764,8 @@ const InspectionDashboard = ({ pipedriveData }) => {
             isTimeout={isTimeout}
             error={error}
             hideNavigation={true}
+            enableOpportunities={showOpportunities}
+            onShowDealsDebugConsole={handleShowDealsDebugConsole}
           />
         </div>
 

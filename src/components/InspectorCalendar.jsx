@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addDays, subDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign, X, Target } from 'lucide-react';
 import { getActivityTypeByKey } from '../data/mockActivities';
 import { convertToAustralianTime } from '../utils/timezone';
 
@@ -20,13 +20,16 @@ const InspectorCalendar = ({
   loading = false,
   isTimeout = false,
   error = null,
-  hideNavigation = false
+  hideNavigation = false,
+  enableOpportunities = false,
+  onShowDealsDebugConsole = null
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate || new Date());
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [viewMode, setViewMode] = useState(5); // 1, 3, or 5 days
+  const [showOpportunities, setShowOpportunities] = useState(false);
 
   // Only use real Pipedrive data - no mock fallbacks
   const effectiveActivities = activities || [];
@@ -511,6 +514,26 @@ const InspectorCalendar = ({
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Time Slot Opportunities Toggle */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowOpportunities(!showOpportunities)}
+                className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
+                  showOpportunities 
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Target className="w-3 h-3" />
+                Opportunities
+              </button>
+              {showOpportunities && (
+                <span className="text-xs text-green-600 font-medium">
+                  Deals Debug Console for full view
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -619,11 +642,28 @@ const InspectorCalendar = ({
                                 >
                                   {activity && <ActivityBlock activity={activity} timeSlot={timeSlot} />}
                                   {!activity && !isPast && !isLunch && (
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100">
-                                      <div className="bg-green-500 text-white text-xs px-2 py-0.5 rounded font-medium">
-                                        {timeSlot}
-                                      </div>
-                                    </div>
+                                    <>
+                                      {enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onShowDealsDebugConsole(day, timeSlot);
+                                            }}
+                                            className="bg-purple-500 hover:bg-purple-600 text-white text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm"
+                                          >
+                                            <Target className="w-3 h-3" />
+                                            Deals
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100">
+                                          <div className="bg-green-500 text-white text-xs px-2 py-0.5 rounded font-medium">
+                                            {timeSlot}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </>
                                   )}
                                   {isLunch && !activity && (
                                     <div className="absolute inset-0 flex items-center justify-center">

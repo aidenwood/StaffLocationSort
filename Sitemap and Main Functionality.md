@@ -7,6 +7,27 @@ This application is a staff location sorting system that integrates with Pipedri
 
 ### Core Components
 
+#### 0. InspectorCalendar (`/src/components/InspectorCalendar.jsx`)
+**Weekly calendar view for managing inspection schedules and time slot recommendations**
+
+**Key Features:**
+- Displays weekly calendar with existing inspections
+- Shows empty time slots for standard booking times (9am, 11am, 1pm, 3pm)
+- **Time Slot Recommendations**: When opportunities toggle is enabled, shows "Deals" buttons on empty time slots
+- **Deals Button Functionality**: Clicking "Deals" button opens DealsDebugConsole for that specific day, with sorting based on the previous inspection address
+
+**Props Integration:**
+- `enableOpportunities` - Controls visibility of deals recommendation buttons
+- `onShowDealsDebugConsole` - Callback to open deals analysis for specific date
+- Auto-enables opportunities toggle when data loads successfully
+- Shows loading state while opportunities are being processed
+
+**How to Add Inspections to Calendar:**
+1. Click on any empty time slot to open booking form
+2. Use "New Booking" button in developer tools
+3. Inspections are automatically populated from Pipedrive activities
+4. **Recommendation Workflow**: Click "Deals" button → Opens console → View nearby deals → Book optimal time slots
+
 #### 1. InspectionDashboard (`/src/components/InspectionDashboard.jsx`)
 **Main dashboard view that orchestrates the entire application**
 

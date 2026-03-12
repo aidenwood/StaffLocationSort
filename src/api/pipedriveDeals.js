@@ -613,6 +613,111 @@ export const healthCheckDeals = async () => {
   }
 };
 
+/**
+ * Find deals within a specified distance of a location
+ * @param {Array} deals - Array of deals with coordinates
+ * @param {Object} location - { lat, lng }
+ * @param {number} threshold - Distance threshold in km
+ * @returns {Array} Deals within threshold distance, sorted by distance
+ */
+export const findDealsNearLocation = (deals, location, threshold = 1) => {
+  if (!location || !location.lat || !location.lng) {
+    console.warn('⚠️ Invalid location provided to findDealsNearLocation');
+    return [];
+  }
+
+  console.log(`🔍 Finding deals within ${threshold}km of location: ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`);
+
+  const nearbyDeals = deals
+    .filter(deal => deal.coordinates && deal.coordinates.lat && deal.coordinates.lng)
+    .map(deal => {
+      const distance = calculateDistance(
+        location.lat,
+        location.lng,
+        deal.coordinates.lat,
+        deal.coordinates.lng
+      );
+      
+      return {
+        ...deal,
+        distanceToLocation: Math.round(distance * 100) / 100
+      };
+    })
+    .filter(deal => deal.distanceToLocation <= threshold)
+    .sort((a, b) => a.distanceToLocation - b.distanceToLocation);
+
+  console.log(`📍 Found ${nearbyDeals.length} deals within ${threshold}km`);
+  return nearbyDeals;
+};
+
+/**
+ * Group deals by their proximity to inspection activities
+ * @param {Array} deals - Array of deals with coordinates
+ * @param {Array} activities - Array of activities with coordinates
+ * @param {number} threshold - Distance threshold in km
+ * @returns {Object} Deals grouped by which activities they're near
+ */
+export const groupDealsByProximity = (deals, activities, threshold = 1) => {
+  console.log(`🗂️ Grouping ${deals.length} deals by proximity to ${activities.length} activities (${threshold}km threshold)`);
+
+  const grouped = {
+    dealsByActivity: new Map(),
+    activitiesWithNearbyDeals: [],
+    dealsWithNoNearbyActivities: [],
+    summary: {
+      totalDeals: deals.length,
+      totalActivities: activities.length,
+      activitiesWithDeals: 0,
+      totalNearbyConnections: 0
+    }
+  };
+
+  // Filter activities with valid coordinates
+  const validActivities = activities.filter(activity => 
+    activity.coordinates && activity.coordinates.lat && activity.coordinates.lng
+  );
+
+  // For each activity, find nearby deals
+  validActivities.forEach(activity => {
+    const nearbyDeals = findDealsNearLocation(deals, activity.coordinates, threshold);
+    
+    if (nearbyDeals.length > 0) {
+      grouped.dealsByActivity.set(activity.id, {
+        activity,
+        nearbyDeals,
+        count: nearbyDeals.length
+      });
+      
+      grouped.activitiesWithNearbyDeals.push({
+        ...activity,
+        nearbyDealsCount: nearbyDeals.length,
+        closestDeal: nearbyDeals[0]
+      });
+      
+      grouped.summary.activitiesWithDeals++;
+      grouped.summary.totalNearbyConnections += nearbyDeals.length;
+    }
+  });
+
+  // Find deals that aren't near any activities
+  const dealsNearActivities = new Set();
+  grouped.dealsByActivity.forEach(group => {
+    group.nearbyDeals.forEach(deal => dealsNearActivities.add(deal.id));
+  });
+
+  grouped.dealsWithNoNearbyActivities = deals.filter(deal => 
+    deal.coordinates && !dealsNearActivities.has(deal.id)
+  );
+
+  console.log(`✅ Proximity grouping complete:`, {
+    activitiesWithDeals: grouped.summary.activitiesWithDeals,
+    totalConnections: grouped.summary.totalNearbyConnections,
+    isolatedDeals: grouped.dealsWithNoNearbyActivities.length
+  });
+
+  return grouped;
+};
+
 export default {
   fetchDealsWithFilter,
   getDealsForRegion,
@@ -624,5 +729,7 @@ export default {
   getFilterForRegion,
   calculateDealDistances,
   sortDealsByDistance,
+  findDealsNearLocation,
+  groupDealsByProximity,
   REGIONAL_DEAL_FILTERS
 };

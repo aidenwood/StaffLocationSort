@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, MapPin, DollarSign, User, Phone, Navigation, Target } from 'lucide-react';
+import { X, RefreshCw, MapPin, DollarSign, User, Phone, Navigation, Target, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { 
   getDealsForRegion, 
   getRecommendationDeals, 
   healthCheckDeals,
   sortDealsByDistance,
+  groupDealsByProximity,
   REGIONAL_DEAL_FILTERS 
 } from '../api/pipedriveDeals.js';
 
@@ -26,6 +27,7 @@ const DealsDebugConsole = ({
   const [sortByDistance, setSortByDistance] = useState(true); // Default to true
   const [distanceStats, setDistanceStats] = useState(null);
   const [selectedDistanceFilter, setSelectedDistanceFilter] = useState(null); // 5, 10, 15 or null for all
+  const [proximityAnalysis, setProximityAnalysis] = useState(null);
 
   // Get region for current inspector
   const currentInspector = inspectors?.find(i => i.id === selectedInspector);
@@ -140,6 +142,18 @@ const DealsDebugConsole = ({
         }
         
         console.log(`✅ ${dealsWithDistance.length} deals successfully sorted by distance`);
+      }
+      
+      // Calculate proximity analysis for time slot opportunities
+      if (inspectionActivities.length > 0 && processedDeals.length > 0) {
+        const proximityData = groupDealsByProximity(processedDeals, inspectionActivities, 1); // 1km threshold
+        setProximityAnalysis(proximityData);
+        console.log('🎯 Proximity analysis complete:', {
+          activitiesWithDeals: proximityData.summary.activitiesWithDeals,
+          totalConnections: proximityData.summary.totalNearbyConnections
+        });
+      } else {
+        setProximityAnalysis(null);
       }
       
       setDeals(processedDeals);
@@ -342,6 +356,7 @@ const DealsDebugConsole = ({
               </div>
             )}
 
+  
             {currentInspector && (
               <div className="text-sm text-gray-600">
                 Current Inspector: <span className="font-medium">{currentInspector.name}</span> ({inspectorRegion})
@@ -384,6 +399,7 @@ const DealsDebugConsole = ({
               </div>
             </div>
           )}
+
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
