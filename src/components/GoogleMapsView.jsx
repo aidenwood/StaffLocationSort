@@ -24,11 +24,19 @@ if (!GOOGLE_MAPS_API_KEY) {
 const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding, dealsToShow = [] }) => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
-  const [markers, setMarkers] = useState([]);
+  const markersRef = useRef([]); // Use ref instead of state to prevent loops
   const [directionsRenderer, setDirectionsRenderer] = useState(null);
   const [geocodedAppointments, setGeocodedAppointments] = useState([]);
+  const onRouteCalculatedRef = useRef(onRouteCalculated);
+  const mapOperationsInProgress = useRef(false);
+  
+  // Update ref when callback changes
+  useEffect(() => {
+    onRouteCalculatedRef.current = onRouteCalculated;
+  }, [onRouteCalculated]);
 
   // Initialize map
+  // ⚠️ URGENT: Must use empty [] deps - adding 'map' creates infinite initialization loop
   useEffect(() => {
     if (mapRef.current && !map) {
       const newMap = new window.google.maps.Map(mapRef.current, {
@@ -101,7 +109,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       renderer.setMap(newMap);
       setDirectionsRenderer(renderer);
     }
-  }, [map]);
+  }, []); // Run only once on mount
 
   // Geocode appointments when they change
   useEffect(() => {
@@ -150,8 +158,11 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       setGeocodedAppointments(geocoded);
       setIsGeocoding?.(false);
 
-      // Auto-center and zoom map based on geocoded locations
-      if (map && geocoded.length > 0) {
+      // Auto-center and zoom map based on geocoded locations (only if not currently processing map operations)
+      // ⚠️ URGENT: mapOperationsInProgress prevents concurrent map operations that cause loops
+      if (map && geocoded.length > 0 && !mapOperationsInProgress.current) {
+        mapOperationsInProgress.current = true;
+        
         const validCoordinates = geocoded
           .map(a => a.coordinates)
           .filter(coord => coord !== null);
@@ -161,6 +172,9 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
             // Single marker - center on it with reasonable zoom
             map.setCenter(validCoordinates[0]);
             map.setZoom(15);
+            setTimeout(() => {
+              mapOperationsInProgress.current = false;
+            }, 100);
           } else {
             // Multiple markers - use fitBounds with padding for better view
             const bounds = new window.google.maps.LatLngBounds();
@@ -176,8 +190,13 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
             const listener = window.google.maps.event.addListener(map, 'bounds_changed', () => {
               if (map.getZoom() > 16) map.setZoom(16);
               window.google.maps.event.removeListener(listener);
+              setTimeout(() => {
+                mapOperationsInProgress.current = false;
+              }, 100);
             });
           }
+        } else {
+          mapOperationsInProgress.current = false;
         }
       }
     };
@@ -185,13 +204,20 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
     geocodeAppointments();
   }, [appointments, map]);
 
-  // Update markers when geocoded appointments change
+  // Update markers when geocoded appointments change  
+  // ⚠️ URGENT: Avoid adding callback props to deps - causes constant recreation
+  // ⚠️ URGENT: Must prevent infinite setState by checking if recreation is needed
   useEffect(() => {
     if (!map || !window.google) return;
+    
+    // Prevent unnecessary recreation if nothing meaningful changed
+    if (geocodedAppointments.length === 0 && dealsToShow.length === 0 && !potentialBooking) {
+      if (markersRef.current.length === 0) return; // Already empty, no need to clear
+    }
 
     // Clear existing markers
-    markers.forEach(marker => marker.setMap(null));
-    setMarkers([]);
+    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current = [];
 
     const newMarkers = [];
 
@@ -381,7 +407,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       newMarkers.push(dealMarker);
     });
 
-    setMarkers(newMarkers);
+    markersRef.current = newMarkers;
 
     // Auto-zoom to fit all markers (appointments + deals)
     if (newMarkers.length > 0) {
@@ -407,7 +433,9 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       }
       
       // Only adjust zoom if we have multiple points or deals outside the current view
-      if (geocodedAppointments.length + dealsToShow.length > 1) {
+      if (geocodedAppointments.length + dealsToShow.length > 1 && !mapOperationsInProgress.current) {
+        mapOperationsInProgress.current = true;
+        
         map.fitBounds(bounds, 50); // 50px padding
         
         // Ensure minimum zoom level for single appointments
@@ -415,15 +443,20 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
           if (map.getZoom() > 15) {
             map.setZoom(15);
           }
+          // Reset flag after map operations complete
+          setTimeout(() => {
+            mapOperationsInProgress.current = false;
+          }, 100);
         });
       }
     }
   }, [map, geocodedAppointments, potentialBooking, hoveredAppointment, dealsToShow]);
 
   // Calculate route when appointments change
+  // ⚠️ URGENT: Uses ref pattern for onRouteCalculated to avoid callback dependency loops  
   useEffect(() => {
     if (!map || !directionsRenderer || geocodedAppointments.length < 2) {
-      onRouteCalculated?.(0);
+      onRouteCalculatedRef.current?.(0);
       return;
     }
 
@@ -456,14 +489,14 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         });
         
         const totalMinutes = Math.round(totalTime / 60);
-        onRouteCalculated?.(totalMinutes);
+        onRouteCalculatedRef.current?.(totalMinutes);
         console.log(`🗺️ Route calculated: ${totalMinutes} minutes total drive time`);
       } else {
         console.warn('❌ Directions request failed:', status);
-        onRouteCalculated?.(0);
+        onRouteCalculatedRef.current?.(0);
       }
     });
-  }, [map, directionsRenderer, geocodedAppointments, onRouteCalculated]);
+  }, [map, directionsRenderer, geocodedAppointments]);
 
   return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
 };

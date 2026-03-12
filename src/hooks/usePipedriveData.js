@@ -28,7 +28,7 @@ import {
 export const usePipedriveData = (options = {}) => {
   const {
     autoFetch = true,
-    cacheTimeout = 5 * 60 * 1000, // 5 minutes
+    cacheTimeout = 60 * 60 * 1000, // 1 hour (improved for rate limiting)
     enableLiveData = import.meta.env.VITE_USE_LIVE_DATA === 'true'
   } = options;
 

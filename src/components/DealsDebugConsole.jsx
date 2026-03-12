@@ -35,6 +35,7 @@ const DealsDebugConsole = ({
   const [hoveredDeal, setHoveredDeal] = useState(null); // For showing individual deal on map
   const [selectedDeals, setSelectedDeals] = useState([]); // For showing multiple selected deals on map
   const [showAll, setShowAll] = useState(false); // Show all deals in current radius on map
+  const [lastFetchTime, setLastFetchTime] = useState(null); // Track when deals were last fetched
 
   // Toggle deal selection for map display
   const toggleDealSelection = (deal) => {
@@ -56,6 +57,7 @@ const DealsDebugConsole = ({
       setSelectedDistanceFilter(context.radius);
     }
   }, [isOpen, context]);
+
 
   // Get region for current inspector
   const currentInspector = inspectors?.find(i => i.id === selectedInspector);
@@ -191,6 +193,7 @@ const DealsDebugConsole = ({
       }
       
       setDeals(processedDeals);
+      setLastFetchTime(new Date()); // Track when deals were fetched
       console.log(`✅ Loaded ${processedDeals.length} deals for region ${region}${sortByDistance ? ' (sorted by distance)' : ''}`);
       
     } catch (err) {
@@ -210,7 +213,23 @@ const DealsDebugConsole = ({
       )
     : deals;
 
+  // Handle Show All functionality - auto-select all deals in current radius
+  // ⚠️ URGENT: NEVER use useEffect for this - creates infinite loop with selectedDeals state
+  // ⚠️ URGENT: Show All functionality moved to onClick handler to prevent loops
+  // DISABLED TO STOP INFINITE LOOP
+  // useEffect(() => {
+  //   if (showAll && filteredDeals.length > 0) {
+  //     // Select all deals in current radius filter that have coordinates
+  //     const dealsToSelect = filteredDeals.filter(deal => deal.coordinates);
+  //     setSelectedDeals(dealsToSelect.map(deal => ({...deal, isSelected: true})));
+  //   } else if (!showAll) {
+  //     // Clear selections when Show All is turned off
+  //     setSelectedDeals([]);
+  //   }
+  // }, [showAll, filteredDeals]);
+
   // Send 1km deals + selected deals + hovered deal to map
+  // ⚠️ URGENT: onDealsUpdate removed from deps to prevent infinite callback loops
   useEffect(() => {
     if (isOpen && deals.length > 0) {
       // Filter deals within 1km for map display
@@ -244,14 +263,13 @@ const DealsDebugConsole = ({
         isHovered: hoveredDeal?.id === deal.id ? true : deal.isHovered
       }));
       
-      console.log(`📍 Sending ${dealsWithin1km.length} deals within 1km + ${selectedDeals.length} selected${hoveredDeal ? ' + 1 hovered' : ''} to map`);
       onDealsUpdate(dealsToShow);
     } else if (!isOpen) {
       // Clear deals from map when console closes
       setSelectedDeals([]); // Clear selections when closing
       onDealsUpdate([]);
     }
-  }, [isOpen, deals, hoveredDeal, selectedDeals, onDealsUpdate]);
+  }, [isOpen, deals, hoveredDeal, selectedDeals]);
 
   const checkHealth = async () => {
     try {
@@ -312,6 +330,16 @@ const DealsDebugConsole = ({
                 'Deals Console'
               }
             </h2>
+            {lastFetchTime && (
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-xs text-gray-500" title={`Last updated: ${lastFetchTime.toLocaleString()}`}>
+                  Updated {lastFetchTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded" title="Live data from Pipedrive API">
+                  Live
+                </span>
+              </div>
+            )}
             {healthStatus && (
               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                 healthStatus.success ? 'bg-green-500' : 'bg-red-500'
@@ -399,13 +427,26 @@ const DealsDebugConsole = ({
             {/* Show All Toggle */}
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowAll(!showAll)}
+                onClick={() => {
+                  // ⚠️ URGENT: Show All logic moved here from useEffect to prevent infinite loops
+                  if (!showAll) {
+                    // Show All - select all deals in current radius
+                    const dealsToSelect = filteredDeals.filter(deal => deal.coordinates);
+                    setSelectedDeals(dealsToSelect.map(deal => ({...deal, isSelected: true})));
+                    setShowAll(true);
+                  } else {
+                    // Hide All - clear selections
+                    setSelectedDeals([]);
+                    setShowAll(false);
+                  }
+                }}
                 className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
                   showAll ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
                 }`}
+                title={showAll ? 'Hide all deals from map' : `Show all ${filteredDeals.filter(d => d.coordinates).length} deals on map`}
               >
                 <Eye className="w-3 h-3" />
-                {showAll ? 'Hide All' : 'Show All'}
+                {showAll ? 'Hide All' : `Show All (${filteredDeals.filter(d => d.coordinates).length})`}
               </button>
               <span className="text-xs text-gray-500">
                 {selectedDate ? format(selectedDate, 'MMM d') : 'Today'} • {inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''}

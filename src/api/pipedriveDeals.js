@@ -102,7 +102,7 @@ export const REGIONAL_DEAL_FILTERS = {
 
 // Cache for deals to minimize API calls
 const dealsCache = new Map();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour (improved for rate limiting)
 
 /**
  * Transform Pipedrive deal data to standardized format

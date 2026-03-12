@@ -49,6 +49,11 @@ const InspectionDashboard = ({ pipedriveData }) => {
   const [dealsToShowOnMap, setDealsToShowOnMap] = useState([]); // Deals to display as markers on map
   const [dealsConsoleContext, setDealsConsoleContext] = useState(null); // Context for deals console (time slot info)
 
+  // ⚠️ URGENT: Wrap setDealsToShowOnMap in useCallback to prevent infinite loops in DealsDebugConsole
+  const handleDealsUpdate = useCallback((deals) => {
+    setDealsToShowOnMap(deals);
+  }, []);
+
   // API Debug functionality
   const {
     debugData,
@@ -1009,7 +1014,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
         selectedDate={selectedDate}
         inspectionActivities={enrichedMapActivities}
         viewMode={mobileViewMode}
-        onDealsUpdate={setDealsToShowOnMap}
+        onDealsUpdate={handleDealsUpdate}
         context={dealsConsoleContext} // Pass time slot context
       />
 
