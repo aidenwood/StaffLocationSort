@@ -143,6 +143,20 @@ const DealsDebugConsole = ({
           setDistanceStats(null);
         }
         
+        // Auto-select smallest radius with deals when opened from calendar button
+        if (window.dealsSortByInspection && stats) {
+          if (stats.within_5km > 0) {
+            setSelectedDistanceFilter(5);
+            console.log(`🎯 Auto-selected 5km radius (${stats.within_5km} deals)`);
+          } else if (stats.within_10km > 0) {
+            setSelectedDistanceFilter(10);
+            console.log(`🎯 Auto-selected 10km radius (${stats.within_10km} deals)`);
+          } else if (stats.within_15km > 0) {
+            setSelectedDistanceFilter(15);
+            console.log(`🎯 Auto-selected 15km radius (${stats.within_15km} deals)`);
+          }
+        }
+        
         console.log(`✅ ${dealsWithDistance.length} deals successfully sorted by distance`);
       }
       

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { format, addDays, subDays } from 'date-fns';
+import { format, addDays, subDays, startOfWeek } from 'date-fns';
 import {
   Calendar,
   Users,
@@ -28,6 +28,7 @@ import DatePickerDropdown from './DatePickerDropdown';
 import { inspectors } from '../data/mockActivities';
 import { useApiDebug } from '../hooks/useApiDebug.js';
 import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
+import { getDealsForRegion, sortDealsByDistance } from '../api/pipedriveDeals.js';
 
 const InspectionDashboard = ({ pipedriveData }) => {
   const [selectedInspector, setSelectedInspector] = useState(2); // Ben Thompson (ID 2) for consistency with working Activities page
@@ -43,6 +44,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
   const [showDealsDebugConsole, setShowDealsDebugConsole] = useState(false);
   const [showOpportunities, setShowOpportunities] = useState(false);
   const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
+  const [timeSlotDealCounts, setTimeSlotDealCounts] = useState({});
   const [mobileViewMode, setMobileViewMode] = useState('split'); // 'split', 'calendar', 'map'
 
   // API Debug functionality
@@ -135,6 +137,8 @@ const InspectionDashboard = ({ pipedriveData }) => {
         setTimeout(() => {
           setShowOpportunities(true);
           setOpportunitiesLoading(false);
+          // Calculate deal counts for time slots
+          calculateTimeSlotDealCounts();
         }, 1000);
       } catch (err) {
         console.error('Address enrichment failed:', err);
@@ -143,6 +147,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
     };
     doEnrich();
   }, [inspectorActivities]);
+
 
   // Merge addresses into all activities for calendar + map, preserving existing coordinates
   const enrichedActivities = useMemo(() => {
@@ -221,6 +226,69 @@ const InspectionDashboard = ({ pipedriveData }) => {
     
     return filtered;
   }, [enrichedActivities, dateString]);
+
+  // Function to calculate deal counts for time slots using same logic as debug console
+  const calculateTimeSlotDealCounts = async () => {
+    try {
+      if (!selectedInspector || allDayInspectionActivities.length === 0) return;
+      
+      // Get current inspector region
+      const currentInspector = pipedriveInspectors?.find(i => i.id === selectedInspector);
+      const region = currentInspector?.region || 'R1';
+      
+      // Fetch deals for the region
+      const deals = await getDealsForRegion(region, { limit: 200 });
+      if (!deals || deals.length === 0) return;
+      
+      // Sort deals by distance to ALL inspection activities (same as debug console)
+      const sortedDeals = await sortDealsByDistance(deals, allDayInspectionActivities);
+      
+      // Calculate statistics using same logic as debug console (cumulative counts)
+      const dealsWithDistance = sortedDeals.filter(d => d.distanceInfo?.minDistance !== null);
+      
+      if (dealsWithDistance.length > 0) {
+        const stats = {
+          within5km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length,
+          within10km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length,
+          within15km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length,
+        };
+        
+        console.log('🎯 Week deal statistics (matching debug console):', stats);
+        
+        // Apply these counts to all time slots for the entire week
+        const timeSlots = ['09:00', '11:00', '13:00', '15:00'];
+        const counts = {};
+        
+        // Generate all days for the current week
+        const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+          const day = addDays(startOfCurrentWeek, dayOffset);
+          const dayString = format(day, 'yyyy-MM-dd');
+          
+          timeSlots.forEach(timeSlot => {
+            counts[`${dayString}-${timeSlot}`] = {
+              within5km: stats.within5km,
+              within10km: stats.within10km - stats.within5km, // 5-10km range
+              within15km: stats.within15km - stats.within10km // 10-15km range
+            };
+          });
+        }
+        
+        setTimeSlotDealCounts(counts);
+        console.log(`📅 Applied deal counts to ${Object.keys(counts).length} time slots across the week`);
+      }
+      
+    } catch (err) {
+      console.error('❌ Error calculating time slot deal counts:', err);
+    }
+  };
+
+  // Recalculate deal counts when date or inspector changes and opportunities are enabled
+  useEffect(() => {
+    if (showOpportunities && !opportunitiesLoading && allDayInspectionActivities.length > 0) {
+      calculateTimeSlotDealCounts();
+    }
+  }, [selectedDate, selectedInspector, showOpportunities, allDayInspectionActivities]);
 
   const handleTimeSlotSelection = (slotData) => {
     setSelectedTimeSlot(slotData);
@@ -766,6 +834,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
             hideNavigation={true}
             enableOpportunities={showOpportunities}
             onShowDealsDebugConsole={handleShowDealsDebugConsole}
+            timeSlotDealCounts={timeSlotDealCounts}
           />
         </div>
 

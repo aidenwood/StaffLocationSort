@@ -22,7 +22,8 @@ const InspectorCalendar = ({
   error = null,
   hideNavigation = false,
   enableOpportunities = false,
-  onShowDealsDebugConsole = null
+  onShowDealsDebugConsole = null,
+  timeSlotDealCounts = {}
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate || new Date());
   const [selectedActivity, setSelectedActivity] = useState(null);
@@ -645,16 +646,50 @@ const InspectorCalendar = ({
                                     <>
                                       {enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
                                         <div className="absolute inset-0 flex items-center justify-center">
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              onShowDealsDebugConsole(day, timeSlot);
-                                            }}
-                                            className="bg-purple-500 hover:bg-purple-600 text-white text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm"
-                                          >
-                                            <Target className="w-3 h-3" />
-                                            Deals
-                                          </button>
+                                          {(() => {
+                                            const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
+                                            const counts = timeSlotDealCounts[dayKey];
+                                            const within5km = counts?.within5km || 0;
+                                            const within10km = counts?.within10km || 0;
+                                            const within15km = counts?.within15km || 0;
+                                            
+                                            // Determine display count and color (priority: 5km > 10km > 15km)
+                                            let displayCount = 0;
+                                            let colorClass = "bg-purple-600 hover:bg-purple-700"; // Dark purple for 5km
+                                            
+                                            if (within5km > 0) {
+                                              displayCount = within5km;
+                                              colorClass = "bg-purple-600 hover:bg-purple-700"; // Dark purple for 5km
+                                            } else if (within10km > 0) {
+                                              displayCount = within10km;
+                                              colorClass = "bg-purple-400 hover:bg-purple-500"; // Medium purple for 5-10km
+                                            } else if (within15km > 0) {
+                                              displayCount = within15km;
+                                              colorClass = "bg-purple-300 hover:bg-purple-400"; // Light purple for 10-15km
+                                            }
+                                            
+                                            // Only show button if there are deals or if we haven't calculated yet
+                                            const hasDeals = displayCount > 0;
+                                            const hasData = counts !== undefined;
+                                            
+                                            if (!hasData || hasDeals) {
+                                              return (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onShowDealsDebugConsole(day, timeSlot);
+                                                  }}
+                                                  className={`${colorClass} text-white text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm`}
+                                                >
+                                                  <Target className="w-3 h-3" />
+                                                  {displayCount > 0 ? `${displayCount} Deal${displayCount === 1 ? '' : 's'}` : 'Deals'}
+                                                </button>
+                                              );
+                                            }
+                                            
+                                            // Don't show button if no deals found
+                                            return null;
+                                          })()}
                                         </div>
                                       ) : (
                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100">
