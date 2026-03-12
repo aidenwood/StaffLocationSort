@@ -649,16 +649,20 @@ const InspectorCalendar = ({
                                           {(() => {
                                             const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
                                             const counts = timeSlotDealCounts[dayKey];
+                                            const within1km = counts?.within1km || 0;
                                             const within5km = counts?.within5km || 0;
                                             const within10km = counts?.within10km || 0;
                                             const within15km = counts?.within15km || 0;
                                             const radiusText = counts?.radiusText || '';
                                             
-                                            // Determine display count and color (matching debug console colors)
+                                            // Determine display count and color (vibrant purple for 1km, then existing colors)
                                             let displayCount = 0;
-                                            let colorClass = "bg-green-600 hover:bg-green-700"; // Green for 5km
+                                            let colorClass = "bg-purple-600 hover:bg-purple-700"; // Vibrant purple for 1km
                                             
-                                            if (within5km > 0) {
+                                            if (within1km > 0) {
+                                              displayCount = within1km;
+                                              colorClass = "bg-purple-600 hover:bg-purple-700"; // Vibrant purple for 1km
+                                            } else if (within5km > 0) {
                                               displayCount = within5km;
                                               colorClass = "bg-green-600 hover:bg-green-700"; // Green for 5km
                                             } else if (within10km > 0) {

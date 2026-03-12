@@ -268,6 +268,12 @@ const InspectionDashboard = ({ pipedriveData }) => {
               .filter(a => a.due_time > timeSlot)
               .sort((a, b) => a.due_time.localeCompare(b.due_time)); // Earliest first
             referenceInspection = activitiesAfterSlot[0];
+            
+            // If no following appointment, fallback to any activity on this day
+            if (!referenceInspection && dayActivities.length > 0) {
+              referenceInspection = dayActivities[0]; // Use first available activity
+              console.log(`🔄 No following appointment for 9am on ${dayString}, using fallback: ${referenceInspection.personAddress?.substring(0, 30)}`);
+            }
           } else {
             // For other slots, use the previous appointment
             const activitiesBeforeSlot = dayActivities
@@ -283,23 +289,31 @@ const InspectionDashboard = ({ pipedriveData }) => {
               const dealsWithDistance = sortedDeals.filter(d => d.distanceInfo?.minDistance !== null);
               
               if (dealsWithDistance.length > 0) {
+                const within1km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 1).length;
                 const within5km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length;
                 const within10km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length;
                 const within15km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length;
                 
                 counts[`${dayString}-${timeSlot}`] = {
-                  within5km,
+                  within1km,
+                  within5km: within5km - within1km, // 1-5km range only
                   within10km: within10km - within5km, // 5-10km range only
                   within15km: within15km - within10km, // 10-15km range only
-                  radiusText: within5km > 0 ? '5km' : (within10km > within5km ? '10km' : '15km'),
+                  radiusText: within1km > 0 ? '1km' : (within5km > within1km ? '5km' : (within10km > within5km ? '10km' : '15km')),
                   referenceAddress: referenceInspection.personAddress?.substring(0, 40) || 'Unknown'
                 };
                 
-                console.log(`🔍 ${dayString} ${timeSlot}: ${within5km}/5km, ${within10km-within5km}/5-10km, ${within15km-within10km}/10-15km near ${referenceInspection.personAddress?.substring(0, 30)}`);
+                console.log(`🔍 ${dayString} ${timeSlot}: ${within1km}/1km, ${within5km-within1km}/1-5km, ${within10km-within5km}/5-10km, ${within15km-within10km}/10-15km near ${referenceInspection.personAddress?.substring(0, 30)}`);
               }
             } catch (error) {
               console.error(`Error calculating deals for ${dayString} ${timeSlot}:`, error);
             }
+          } else {
+            console.warn(`⚠️ No reference inspection found for ${dayString} ${timeSlot}:`, {
+              timeSlot,
+              totalDayActivities: dayActivities.length,
+              availableSlots: dayActivities.map(a => `${a.due_time}: ${a.subject?.substring(0, 30)}`)
+            });
           }
         }
       }
@@ -394,26 +408,40 @@ const InspectionDashboard = ({ pipedriveData }) => {
       setSelectedDate(date);
     }
     
-    // If a timeSlot is provided, find the previous inspection for sorting
+    // If a timeSlot is provided, find the reference inspection for sorting
     if (timeSlot && date) {
       const dayActivities = enrichedMapActivities.filter(a => a.due_date === format(date, 'yyyy-MM-dd'));
+      let referenceInspection = null;
       
-      // Sort activities by time to find the one before this timeSlot
-      const sortedActivities = dayActivities
-        .filter(a => a.due_time && a.due_time < timeSlot)
-        .sort((a, b) => a.due_time.localeCompare(b.due_time));
+      if (timeSlot === '09:00') {
+        // For 9am, use the following appointment (next inspection)
+        const activitiesAfterSlot = dayActivities
+          .filter(a => a.due_time && a.due_time > timeSlot)
+          .sort((a, b) => a.due_time.localeCompare(b.due_time)); // Earliest first
+        referenceInspection = activitiesAfterSlot[0];
+        
+        // If no following appointment, fallback to any activity on this day
+        if (!referenceInspection && dayActivities.length > 0) {
+          referenceInspection = dayActivities[0]; // Use first available activity
+          console.log(`🔄 No following appointment for 9am modal, using fallback: ${referenceInspection.personAddress?.substring(0, 30)}`);
+        }
+      } else {
+        // For other slots, use the previous appointment
+        const activitiesBeforeSlot = dayActivities
+          .filter(a => a.due_time && a.due_time < timeSlot)
+          .sort((a, b) => a.due_time.localeCompare(b.due_time));
+        referenceInspection = activitiesBeforeSlot[activitiesBeforeSlot.length - 1]; // Last one before timeSlot
+      }
       
-      const previousInspection = sortedActivities[sortedActivities.length - 1]; // Last one before timeSlot
-      
-      if (previousInspection) {
-        console.log(`🎯 Opening deals console for ${timeSlot} with previous inspection:`, {
-          time: previousInspection.due_time,
-          address: previousInspection.personAddress,
-          coordinates: previousInspection.coordinates
+      if (referenceInspection) {
+        console.log(`🎯 Opening deals console for ${timeSlot} with reference inspection:`, {
+          time: referenceInspection.due_time,
+          address: referenceInspection.personAddress,
+          coordinates: referenceInspection.coordinates
         });
         
         // Store the sort-by inspection for DealsDebugConsole
-        window.dealsSortByInspection = previousInspection;
+        window.dealsSortByInspection = referenceInspection;
       }
     }
     

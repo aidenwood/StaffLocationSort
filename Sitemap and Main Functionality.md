@@ -30,7 +30,9 @@ This application is a staff location sorting system that integrates with Pipedri
 
 **Deal Recommendation Time Slot System:**
 - **Individual Calculations**: Each time slot (9am, 11am, 1pm, 3pm) calculates deals based on its specific reference inspection
-- **Reference Logic**: 9am uses FOLLOWING appointment, others use PREVIOUS appointment
+- **Reference Logic**: 
+  - **9am slots**: Use FOLLOWING appointment (e.g., 11am booking) - first appointment of day, route to next destination
+  - **11am/1pm/3pm slots**: Use PREVIOUS appointment - route from last completed inspection
 - **Week-Wide Scope**: Calculates for all 28 time slots (7 days × 4 slots) across the current week
 - **Color Coding**: Green (5km) > Yellow (10km) > Orange (15km) - matches debug console
 - **Button Format**: Shows "X Deals (5km)" with radius indicator
@@ -199,7 +201,10 @@ graph TD
 2. **Day Activities Filter**: Gets inspections for each specific day with coordinates
 3. **Reference Inspection Logic**:
    - `timeSlot === '09:00'`: Uses FOLLOWING appointment (earliest after 9am)
+     - **Rationale**: 9am is first appointment of day, find deals near where inspector goes NEXT
+     - **Example**: 9am slot uses 11am appointment address for deal proximity
    - Other slots: Uses PREVIOUS appointment (latest before slot time)
+     - **Rationale**: Find deals near where inspector just WAS for efficient routing
 4. **Deal Calculation**: Calls `sortDealsByDistance(deals, [referenceInspection])`
 5. **Range Counting**: Filters deals into 5km, 5-10km, 10-15km buckets
 6. **State Storage**: Stores in `timeSlotDealCounts` keyed by `${dayString}-${timeSlot}`

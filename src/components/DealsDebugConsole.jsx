@@ -132,6 +132,7 @@ const DealsDebugConsole = ({
         
         if (dealsWithDistance.length > 0) {
           const stats = {
+            within_1km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 1).length,
             within_5km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length,
             within_10km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length,
             within_15km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length,
@@ -145,7 +146,10 @@ const DealsDebugConsole = ({
         
         // Auto-select smallest radius with deals when opened from calendar button
         if (window.dealsSortByInspection && stats) {
-          if (stats.within_5km > 0) {
+          if (stats.within_1km > 0) {
+            setSelectedDistanceFilter(1);
+            console.log(`🎯 Auto-selected 1km radius (${stats.within_1km} deals)`);
+          } else if (stats.within_5km > 0) {
             setSelectedDistanceFilter(5);
             console.log(`🎯 Auto-selected 5km radius (${stats.within_5km} deals)`);
           } else if (stats.within_10km > 0) {
@@ -270,7 +274,19 @@ const DealsDebugConsole = ({
             </span>
           </div>
           
-          <div className="grid grid-cols-4 gap-6">
+          <div className="grid grid-cols-5 gap-4">
+            <button
+              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 1 ? null : 1)}
+              className={`text-center p-3 rounded-lg transition-colors ${
+                selectedDistanceFilter === 1 
+                  ? 'bg-purple-600 text-white shadow-lg' 
+                  : 'hover:bg-purple-50 text-purple-600'
+              }`}
+            >
+              <div className="text-2xl font-bold mb-1">{distanceStats?.within_1km || 0}</div>
+              <div className="text-xs font-medium">Within 1km</div>
+              <div className="text-xs opacity-75">Walking distance</div>
+            </button>
             <button
               onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 5 ? null : 5)}
               className={`text-center p-3 rounded-lg transition-colors ${
