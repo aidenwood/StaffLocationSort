@@ -493,12 +493,15 @@ export const calculateDealDistances = (deal, inspectionActivities) => {
         coordSource
       });
       
-      console.log('📏 Distance calculated:', {
-        dealTitle: deal.title,
-        activitySubject: activity.subject,
-        distance: Math.round(distance * 100) / 100,
-        coordSource
-      });
+      // Reduced logging - only log first calculation for verification
+      if (distances.length === 0) {
+        console.log('📏 First distance calculated:', {
+          dealTitle: deal.title,
+          activitySubject: activity.subject,
+          distance: Math.round(distance * 100) / 100,
+          coordSource
+        });
+      }
     } else {
       console.warn('⚠️ No valid coordinates found for activity:', {
         activityId: activity.id,

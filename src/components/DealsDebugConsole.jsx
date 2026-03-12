@@ -25,6 +25,7 @@ const DealsDebugConsole = ({
   const [selectedRegion, setSelectedRegion] = useState('R1');
   const [dealType, setDealType] = useState('all'); // 'all' or 'recommendations'
   const [sortByDistance, setSortByDistance] = useState(true); // Default to true
+  const [selectedSortInspection, setSelectedSortInspection] = useState('all'); // 'all' or inspection ID
   const [distanceStats, setDistanceStats] = useState(null);
   const [selectedDistanceFilter, setSelectedDistanceFilter] = useState(null); // 5, 10, 15 or null for all
   const [proximityAnalysis, setProximityAnalysis] = useState(null);
@@ -97,33 +98,34 @@ const DealsDebugConsole = ({
       if (sortByDistance && inspectionActivities.length > 0) {
         console.log(`📏 Sorting ${processedDeals.length} deals by distance to ${inspectionActivities.length} inspection addresses`);
         
-        // Debug logging
-        console.log('📊 Debug info:');
-        console.log('- Deals with coordinates:', processedDeals.filter(d => d.coordinates).length);
-        console.log('- Address sources breakdown:', {
-          deal_address_field: processedDeals.filter(d => d.addressSource === 'deal_address_field').length,
-          person_address: processedDeals.filter(d => d.addressSource === 'person_address').length,
-          org_address: processedDeals.filter(d => d.addressSource === 'org_address').length,
-          parsed_from_title: processedDeals.filter(d => d.addressSource === 'parsed_from_title').length,
-          no_address: processedDeals.filter(d => !d.address).length
-        });
-        console.log('- Inspection activities with coordinates:', inspectionActivities.filter(a => 
+        // Summary logging only
+        const dealsWithCoords = processedDeals.filter(d => d.coordinates).length;
+        const inspectionsWithCoords = inspectionActivities.filter(a => 
           a.coordinates || a.personAddress?.coordinates || (a.lat && a.lng)
-        ).length);
+        ).length;
+        console.log(`📊 Sorting Summary: ${dealsWithCoords}/${processedDeals.length} deals have coordinates, ${inspectionsWithCoords}/${inspectionActivities.length} inspections have coordinates`);
         
-        // Sample inspection activity structure
-        if (inspectionActivities.length > 0) {
-          const sample = inspectionActivities[0];
-          console.log('- Sample inspection activity:', {
-            id: sample.id,
-            subject: sample.subject,
-            hasCoordinates: !!sample.coordinates,
-            hasPersonAddress: !!sample.personAddress,
-            hasLatLng: !!(sample.lat && sample.lng)
-          });
+        // Determine which inspections to use for sorting
+        let sortingInspections = inspectionActivities;
+        
+        // Check for sort-by inspection from window (set by calendar button click)
+        if (window.dealsSortByInspection) {
+          console.log(`🎯 Sorting by specific inspection from calendar: ${window.dealsSortByInspection.due_time} - ${window.dealsSortByInspection.personAddress}`);
+          sortingInspections = [window.dealsSortByInspection];
+          // Auto-select this inspection in dropdown
+          setSelectedSortInspection(window.dealsSortByInspection.id.toString());
+          // Clear the window variable
+          window.dealsSortByInspection = null;
+        } else if (selectedSortInspection !== 'all') {
+          // Use specific inspection from dropdown
+          const selectedInspection = inspectionActivities.find(a => a.id.toString() === selectedSortInspection);
+          if (selectedInspection) {
+            console.log(`🎯 Sorting by selected inspection: ${selectedInspection.due_time} - ${selectedInspection.personAddress}`);
+            sortingInspections = [selectedInspection];
+          }
         }
         
-        processedDeals = sortDealsByDistance(processedDeals, inspectionActivities);
+        processedDeals = sortDealsByDistance(processedDeals, sortingInspections);
         
         // Calculate distance statistics
         const dealsWithDistance = processedDeals.filter(d => d.distanceInfo && d.distanceInfo.minDistance !== null);
@@ -191,7 +193,7 @@ const DealsDebugConsole = ({
       fetchDeals();
       checkHealth();
     }
-  }, [isOpen, selectedRegion, dealType, sortByDistance]);
+  }, [isOpen, selectedRegion, dealType, sortByDistance, selectedSortInspection]);
 
   // Update region when inspector or inspections change
   useEffect(() => {
@@ -353,6 +355,25 @@ const DealsDebugConsole = ({
                 <span className="text-xs text-gray-500">
                   ({inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''} on {selectedDate ? format(selectedDate, 'MMM d') : 'selected date'})
                 </span>
+              </div>
+            )}
+            
+            {/* Sort by specific inspection dropdown */}
+            {sortByDistance && inspectionActivities.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Sort by:</label>
+                <select
+                  value={selectedSortInspection}
+                  onChange={(e) => setSelectedSortInspection(e.target.value)}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="all">All Inspections</option>
+                  {inspectionActivities.map(activity => (
+                    <option key={activity.id} value={activity.id.toString()}>
+                      {activity.due_time} - {activity.personAddress?.substring(0, 30) || activity.subject?.substring(0, 30)}...
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 
