@@ -397,37 +397,89 @@ export const getRecommendationDeals = async (region, date = new Date()) => {
  */
 export const calculateDealDistances = (deal, inspectionActivities) => {
   if (!deal.coordinates || !Array.isArray(inspectionActivities)) {
+    console.log('❌ Deal distance calculation failed:', {
+      dealHasCoords: !!deal.coordinates,
+      activitiesIsArray: Array.isArray(inspectionActivities),
+      activitiesCount: inspectionActivities?.length || 0
+    });
     return { minDistance: null, closestActivity: null, allDistances: [] };
   }
 
   const distances = [];
   
   for (const activity of inspectionActivities) {
-    // Try multiple coordinate sources
+    // Try multiple coordinate sources with enhanced debugging
     let activityCoords = null;
+    let coordSource = null;
     
-    if (activity.coordinates) {
+    // Check for coordinates in multiple formats
+    if (activity.coordinates && activity.coordinates.lat && activity.coordinates.lng) {
       activityCoords = activity.coordinates;
-    } else if (activity.personAddress?.coordinates) {
+      coordSource = 'activity.coordinates';
+    } else if (activity.personAddress?.coordinates && activity.personAddress.coordinates.lat && activity.personAddress.coordinates.lng) {
       activityCoords = activity.personAddress.coordinates;
+      coordSource = 'activity.personAddress.coordinates';
     } else if (activity.lat && activity.lng) {
-      activityCoords = { lat: activity.lat, lng: activity.lng };
+      activityCoords = { lat: parseFloat(activity.lat), lng: parseFloat(activity.lng) };
+      coordSource = 'activity.lat/lng';
+    } else if (activity.location_lat && activity.location_lng) {
+      activityCoords = { lat: parseFloat(activity.location_lat), lng: parseFloat(activity.location_lng) };
+      coordSource = 'activity.location_lat/lng';
+    } else if (activity.enrichedCoordinates) {
+      activityCoords = activity.enrichedCoordinates;
+      coordSource = 'activity.enrichedCoordinates';
     }
     
     if (activityCoords && activityCoords.lat && activityCoords.lng) {
+      // Validate coordinates are numbers
+      const lat = parseFloat(activityCoords.lat);
+      const lng = parseFloat(activityCoords.lng);
+      
+      if (isNaN(lat) || isNaN(lng)) {
+        console.warn('⚠️ Invalid coordinates found:', { activityCoords, coordSource, activityId: activity.id });
+        continue;
+      }
+      
       const distance = calculateDistance(
         deal.coordinates.lat,
         deal.coordinates.lng,
-        activityCoords.lat,
-        activityCoords.lng
+        lat,
+        lng
       );
       
       distances.push({
         activity,
         distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
         activityAddress: activity.personAddress?.formatted_address || 
+                        activity.personAddress?.address ||
+                        activity.personAddress ||
                         activity.subject?.replace(/.*?(?=\d)/, '').trim() || 
-                        'Unknown address'
+                        'Unknown address',
+        coordSource
+      });
+      
+      console.log('📏 Distance calculated:', {
+        dealTitle: deal.title,
+        activitySubject: activity.subject,
+        distance: Math.round(distance * 100) / 100,
+        coordSource
+      });
+    } else {
+      console.warn('⚠️ No valid coordinates found for activity:', {
+        activityId: activity.id,
+        subject: activity.subject,
+        hasCoordinates: !!activity.coordinates,
+        hasPersonAddress: !!activity.personAddress,
+        hasLatLng: !!(activity.lat && activity.lng),
+        hasLocationLatLng: !!(activity.location_lat && activity.location_lng),
+        debugCoords: {
+          coordinates: activity.coordinates,
+          personAddress: activity.personAddress,
+          lat: activity.lat,
+          lng: activity.lng,
+          location_lat: activity.location_lat,
+          location_lng: activity.location_lng
+        }
       });
     }
   }

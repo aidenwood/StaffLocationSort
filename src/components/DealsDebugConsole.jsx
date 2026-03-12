@@ -25,6 +25,7 @@ const DealsDebugConsole = ({
   const [dealType, setDealType] = useState('all'); // 'all' or 'recommendations'
   const [sortByDistance, setSortByDistance] = useState(true); // Default to true
   const [distanceStats, setDistanceStats] = useState(null);
+  const [selectedDistanceFilter, setSelectedDistanceFilter] = useState(null); // 5, 10, 15 or null for all
 
   // Get region for current inspector
   const currentInspector = inspectors?.find(i => i.id === selectedInspector);
@@ -152,6 +153,15 @@ const DealsDebugConsole = ({
     }
   };
 
+  // Filter deals based on selected distance
+  const filteredDeals = selectedDistanceFilter 
+    ? deals.filter(deal => 
+        deal.distanceInfo && 
+        deal.distanceInfo.minDistance !== null && 
+        deal.distanceInfo.minDistance <= selectedDistanceFilter
+      )
+    : deals;
+
   const checkHealth = async () => {
     try {
       const health = await healthCheckDeals();
@@ -231,26 +241,54 @@ const DealsDebugConsole = ({
           </div>
           
           <div className="grid grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600 mb-1">{distanceStats?.within_5km || 0}</div>
-              <div className="text-xs text-green-700 font-medium">Within 5km</div>
-              <div className="text-xs text-gray-500">Immediate area</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600 mb-1">{distanceStats?.within_10km || 0}</div>
-              <div className="text-xs text-yellow-700 font-medium">Within 10km</div>
-              <div className="text-xs text-gray-500">Close proximity</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600 mb-1">{distanceStats?.within_15km || 0}</div>
-              <div className="text-xs text-orange-700 font-medium">Within 15km</div>
-              <div className="text-xs text-gray-500">Reasonable drive</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600 mb-1">{distanceStats?.total_with_distance || 0}</div>
-              <div className="text-xs text-gray-700 font-medium">Total Mapped</div>
-              <div className="text-xs text-gray-500">With coordinates</div>
-            </div>
+            <button
+              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 5 ? null : 5)}
+              className={`text-center p-3 rounded-lg transition-colors ${
+                selectedDistanceFilter === 5 
+                  ? 'bg-green-600 text-white shadow-lg' 
+                  : 'hover:bg-green-50 text-green-600'
+              }`}
+            >
+              <div className="text-2xl font-bold mb-1">{distanceStats?.within_5km || 0}</div>
+              <div className="text-xs font-medium">Within 5km</div>
+              <div className="text-xs opacity-75">Immediate area</div>
+            </button>
+            <button
+              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 10 ? null : 10)}
+              className={`text-center p-3 rounded-lg transition-colors ${
+                selectedDistanceFilter === 10 
+                  ? 'bg-yellow-600 text-white shadow-lg' 
+                  : 'hover:bg-yellow-50 text-yellow-600'
+              }`}
+            >
+              <div className="text-2xl font-bold mb-1">{distanceStats?.within_10km || 0}</div>
+              <div className="text-xs font-medium">Within 10km</div>
+              <div className="text-xs opacity-75">Close proximity</div>
+            </button>
+            <button
+              onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 15 ? null : 15)}
+              className={`text-center p-3 rounded-lg transition-colors ${
+                selectedDistanceFilter === 15 
+                  ? 'bg-orange-600 text-white shadow-lg' 
+                  : 'hover:bg-orange-50 text-orange-600'
+              }`}
+            >
+              <div className="text-2xl font-bold mb-1">{distanceStats?.within_15km || 0}</div>
+              <div className="text-xs font-medium">Within 15km</div>
+              <div className="text-xs opacity-75">Reasonable drive</div>
+            </button>
+            <button
+              onClick={() => setSelectedDistanceFilter(null)}
+              className={`text-center p-3 rounded-lg transition-colors ${
+                selectedDistanceFilter === null 
+                  ? 'bg-gray-600 text-white shadow-lg' 
+                  : 'hover:bg-gray-50 text-gray-600'
+              }`}
+            >
+              <div className="text-2xl font-bold mb-1">{distanceStats?.total_with_distance || 0}</div>
+              <div className="text-xs font-medium">All Deals</div>
+              <div className="text-xs opacity-75">Show all</div>
+            </button>
           </div>
         </div>
 
@@ -316,10 +354,18 @@ const DealsDebugConsole = ({
               'Loading...'
             ) : (
               <>
-                {deals.length} deals found
+                {selectedDistanceFilter 
+                  ? `${filteredDeals.length} deals within ${selectedDistanceFilter}km (${deals.length} total)`
+                  : `${deals.length} deals found`
+                }
                 {sortByDistance && inspectionActivities.length > 0 && (
                   <span className="ml-2 text-blue-600 font-medium">
                     (sorted by distance)
+                  </span>
+                )}
+                {selectedDistanceFilter && (
+                  <span className="ml-2 text-orange-600 font-medium">
+                    (filtered)
                   </span>
                 )}
               </>
@@ -344,15 +390,23 @@ const DealsDebugConsole = ({
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent"></div>
               <span className="ml-3 text-gray-600">Loading deals...</span>
             </div>
-          ) : deals.length === 0 ? (
+          ) : filteredDeals.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <MapPin className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No deals found for this region</p>
-              <p className="text-sm mt-1">Try refreshing or check the filter configuration</p>
+              <p>{selectedDistanceFilter 
+                  ? `No deals found within ${selectedDistanceFilter}km of today's inspections`
+                  : 'No deals found for this region'
+                }</p>
+              <p className="text-sm mt-1">
+                {selectedDistanceFilter 
+                  ? 'Try increasing the distance filter or check if inspections have coordinates'
+                  : 'Try refreshing or check the filter configuration'
+                }
+              </p>
             </div>
           ) : (
             <div className="grid gap-4">
-              {deals.map((deal, index) => (
+              {filteredDeals.map((deal, index) => (
                 <div key={deal.id || index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
@@ -440,6 +494,11 @@ const DealsDebugConsole = ({
                         <span className="font-medium">Closest to: {deal.distanceInfo.closestAddress}</span>
                       </div>
                       <div>Distance: {deal.distanceInfo.minDistance?.toFixed(1)}km</div>
+                      {deal.distanceInfo.allDistances?.[0]?.coordSource && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Coord source: {deal.distanceInfo.allDistances[0].coordSource}
+                        </div>
+                      )}
                       {deal.distanceInfo.allDistances && deal.distanceInfo.allDistances.length > 1 && (
                         <div className="text-xs text-gray-500 mt-1">
                           Other inspections: {deal.distanceInfo.allDistances.slice(1, 3).map(d => d.distance.toFixed(1) + 'km').join(', ')}
