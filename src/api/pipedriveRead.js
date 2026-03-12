@@ -81,6 +81,33 @@ const checkInspectorNameMatch = (subject, inspectorName, inspectorAliases = []) 
 const PIPEDRIVE_BASE_URL = 'https://api.pipedrive.com/v1';
 const PIPEDRIVE_V2_BASE_URL = 'https://api.pipedrive.com/api/v2';
 
+// Retry utility with exponential backoff
+const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
+  let lastError;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      
+      // Don't retry for non-retriable errors
+      if (error.response?.status && ![429, 502, 503, 504].includes(error.response.status)) {
+        throw error;
+      }
+      
+      // Don't wait on the last attempt
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        console.log(`⏳ Rate limited (${error.response?.status || 'Network Error'}), retrying in ${Math.round(delay)}ms... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
+};
+
 // Create axios instance for Pipedrive API
 const createPipedriveClient = (useV2 = false) => {
   const apiKey = import.meta.env.VITE_PIPEDRIVE_API_KEY;
@@ -89,7 +116,7 @@ const createPipedriveClient = (useV2 = false) => {
     throw new Error('Pipedrive API key not configured');
   }
 
-  return axios.create({
+  const client = axios.create({
     baseURL: useV2 ? PIPEDRIVE_V2_BASE_URL : PIPEDRIVE_BASE_URL,
     timeout: 30000,
     params: {
@@ -99,6 +126,14 @@ const createPipedriveClient = (useV2 = false) => {
       'Content-Type': 'application/json',
     }
   });
+
+  // Add retry interceptor for rate limits
+  const originalGet = client.get;
+  client.get = async (...args) => {
+    return retryWithBackoff(() => originalGet.apply(client, args));
+  };
+
+  return client;
 };
 
 // Fetch activities using server-side filtering with filter_id (V5 approach)
@@ -256,11 +291,12 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
       });
       console.log('   📊 Activity breakdown:', typeBreakdown);
       
-      // 🏷️ DEAL LABELS: Fetch deal labels for activities that have deal_id
-      console.log('🏷️ Fetching deal labels for activities with deal_id...');
-      for (let i = 0; i < Math.min(filtered.length, 50); i++) {
+      // 🏷️ DEAL LABELS: Fetch deal labels for a LIMITED set of activities to avoid rate limits
+      console.log('🏷️ Fetching deal labels for sample activities with deal_id (limited to 5 to avoid rate limits)...');
+      let labelsProcessed = 0;
+      for (let i = 0; i < Math.min(filtered.length, 20) && labelsProcessed < 5; i++) {
         const activity = filtered[i];
-        if (activity.deal_id) {
+        if (activity.deal_id && labelsProcessed < 5) {
           try {
             // Use V1 client for deals endpoint
             const v1Client = createPipedriveClient(false); // Force V1
@@ -268,6 +304,12 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
             if (dealResponse.data.success && dealResponse.data.data && dealResponse.data.data.label) {
               activity.label = dealResponse.data.data.label;
               console.log(`📋 Deal ${activity.deal_id} label: "${activity.label}" for activity "${activity.subject}"`);
+            }
+            labelsProcessed++;
+            
+            // Add small delay between requests to avoid hammering the API
+            if (labelsProcessed < 5) {
+              await new Promise(resolve => setTimeout(resolve, 200));
             }
           } catch (error) {
             console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
@@ -583,60 +625,76 @@ export const fetchPersonAddressForActivity = async (activity) => {
 // GET: Enrich activities with person addresses and geocoded coordinates
 export const enrichActivitiesWithAddresses = async (activities) => {
   try {
-    console.log(`🏠 Enriching ${activities.length} activities with person addresses and coordinates...`);
+    console.log(`🏠 Enriching ${activities.length} activities with person addresses and coordinates (batched to avoid rate limits)...`);
     
-    const enrichedActivities = await Promise.all(
-      activities.map(async (activity) => {
-        const address = await fetchPersonAddressForActivity(activity);
-        
-        // Fetch deal label for region code
-        let dealLabel = null;
-        if (activity.deal_id) {
-          try {
-            const v1Client = createPipedriveClient(false); // Force V1 for deals
-            const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
-            if (dealResponse.data.success && dealResponse.data.data.label) {
-              dealLabel = dealResponse.data.data.label;
-              console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
+    const enrichedActivities = [];
+    const batchSize = 3; // Process only 3 activities at a time to avoid rate limits
+    
+    for (let i = 0; i < activities.length; i += batchSize) {
+      const batch = activities.slice(i, i + batchSize);
+      console.log(`   Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(activities.length/batchSize)} (${batch.length} activities)`);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (activity) => {
+          const address = await fetchPersonAddressForActivity(activity);
+          
+          // Fetch deal label for region code (limited)
+          let dealLabel = null;
+          if (activity.deal_id) {
+            try {
+              const v1Client = createPipedriveClient(false); // Force V1 for deals
+              const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
+              if (dealResponse.data.success && dealResponse.data.data.label) {
+                dealLabel = dealResponse.data.data.label;
+                console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
+              }
+            } catch (error) {
+              console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
             }
-          } catch (error) {
-            console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
           }
-        }
-        
-        // If we found an address, geocode it
-        if (address) {
-          try {
-            const { geocodeAddress } = await import('../services/geocoding.js');
-            const coordinates = await geocodeAddress(address);
-            
-            if (coordinates) {
-              console.log(`   📍 Geocoded activity "${activity.subject}": ${coordinates.lat}, ${coordinates.lng}`);
-              return {
-                ...activity,
-                personAddress: address,
-                coordinates, // Add coordinates for distance calculations
-                lat: coordinates.lat, // Also add individual lat/lng for compatibility
-                lng: coordinates.lng,
-                addressSource: 'person_address_geocoded',
-                label: dealLabel || null
-              };
-            } else {
-              console.warn(`   ⚠️ Failed to geocode address: "${address}"`);
+          
+          // If we found an address, geocode it
+          if (address) {
+            try {
+              const { geocodeAddress } = await import('../services/geocoding.js');
+              const coordinates = await geocodeAddress(address);
+              
+              if (coordinates) {
+                console.log(`   📍 Geocoded activity "${activity.subject}": ${coordinates.lat}, ${coordinates.lng}`);
+                return {
+                  ...activity,
+                  personAddress: address,
+                  coordinates, // Add coordinates for distance calculations
+                  lat: coordinates.lat, // Also add individual lat/lng for compatibility
+                  lng: coordinates.lng,
+                  addressSource: 'person_address_geocoded',
+                  label: dealLabel || null
+                };
+              } else {
+                console.warn(`   ⚠️ Failed to geocode address: "${address}"`);
+              }
+            } catch (geocodeError) {
+              console.warn(`   ⚠️ Geocoding error for "${address}":`, geocodeError.message);
             }
-          } catch (geocodeError) {
-            console.warn(`   ⚠️ Geocoding error for "${address}":`, geocodeError.message);
           }
-        }
-        
-        return {
-          ...activity,
-          personAddress: address,
-          addressSource: address ? 'person_address' : null,
-          label: dealLabel || null
-        };
-      })
-    );
+          
+          return {
+            ...activity,
+            personAddress: address,
+            addressSource: address ? 'person_address' : null,
+            label: dealLabel || null
+          };
+        })
+      );
+      
+      enrichedActivities.push(...batchResults);
+      
+      // Add delay between batches to avoid rate limits
+      if (i + batchSize < activities.length) {
+        console.log(`   ⏳ Waiting 500ms before next batch to avoid rate limits...`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
     
     const withAddresses = enrichedActivities.filter(a => a.personAddress).length;
     const withCoordinates = enrichedActivities.filter(a => a.coordinates).length;

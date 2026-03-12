@@ -106,8 +106,24 @@ const InspectionDashboard = ({ pipedriveData }) => {
         setAddressMap(prev => {
           const updated = { ...prev };
           enriched.forEach(a => {
-            if (a.personAddress) updated[a.id] = a.personAddress;
+            if (a.personAddress) {
+              // Store the full enriched data including coordinates
+              updated[a.id] = {
+                personAddress: a.personAddress,
+                coordinates: a.coordinates,
+                lat: a.lat,
+                lng: a.lng,
+                addressSource: a.addressSource,
+                label: a.label
+              };
+              console.log(`📍 Added to addressMap: Activity ${a.id}`, {
+                hasPersonAddress: !!a.personAddress,
+                hasCoordinates: !!a.coordinates,
+                addressSource: a.addressSource
+              });
+            }
           });
+          console.log(`🗺️ AddressMap now contains ${Object.keys(updated).length} activities`);
           return updated;
         });
       } catch (err) {
@@ -119,26 +135,81 @@ const InspectionDashboard = ({ pipedriveData }) => {
 
   // Merge addresses into all activities for calendar + map, preserving existing coordinates
   const enrichedActivities = useMemo(() => {
+    console.log(`🔄 Building enrichedActivities from ${activities?.length || 0} activities and ${Object.keys(addressMap).length} addressMap entries`);
+    
     return activities.map(a => {
       // If activity already has coordinates from App.jsx, keep them
-      if (a.coordinates) return a;
+      if (a.coordinates) {
+        console.log(`   ✅ Activity ${a.id} already has coordinates`);
+        return a;
+      }
       
-      // Otherwise, add address from addressMap if available
-      return addressMap[a.id] ? { ...a, personAddress: addressMap[a.id] } : a;
+      // Otherwise, add enriched data from addressMap if available
+      if (addressMap[a.id]) {
+        const enrichedData = addressMap[a.id];
+        console.log(`   📍 Enriching activity ${a.id} with addressMap data:`, {
+          hasPersonAddress: !!enrichedData.personAddress,
+          hasCoordinates: !!enrichedData.coordinates
+        });
+        return {
+          ...a,
+          personAddress: enrichedData.personAddress,
+          coordinates: enrichedData.coordinates,
+          lat: enrichedData.lat,
+          lng: enrichedData.lng,
+          addressSource: enrichedData.addressSource,
+          label: enrichedData.label
+        };
+      }
+      
+      console.log(`   ⚠️ Activity ${a.id} not found in addressMap`);
+      return a;
     });
   }, [activities, addressMap]);
 
-  // Get enriched day activities for the map
+  // Get enriched day activities for the map (inspector-specific)
   const dateString = format(selectedDate, 'yyyy-MM-dd');
   const enrichedMapActivities = useMemo(() => {
-    return enrichedActivities.filter(a =>
+    const filtered = enrichedActivities.filter(a =>
       Number(a.owner_id) === Number(selectedInspector) &&
       a.due_date === dateString &&
       !a.done &&
       a.due_time && a.due_time !== '00:00:00' &&
       !(a.subject && a.subject.includes('Inspector ENG Follow up'))
     );
+    
+    console.log(`🔍 EnrichedMapActivities debug for ${dateString}:`);
+    console.log(`   Selected inspector: ${selectedInspector}`);
+    console.log(`   Total enrichedActivities: ${enrichedActivities.length}`);
+    console.log(`   Filtered for inspector/date: ${filtered.length}`);
+    filtered.forEach((a, i) => {
+      console.log(`   Activity ${i + 1}:`, {
+        id: a.id,
+        subject: a.subject?.substring(0, 50) + '...',
+        hasPersonAddress: !!a.personAddress,
+        hasCoordinates: !!a.coordinates,
+        addressSource: a.addressSource
+      });
+    });
+    
+    return filtered;
   }, [enrichedActivities, selectedInspector, dateString]);
+
+  // Get ALL inspection activities for the date (for distance sorting)
+  const allDayInspectionActivities = useMemo(() => {
+    const filtered = enrichedActivities.filter(a =>
+      a.due_date === dateString &&
+      !a.done &&
+      a.due_time && a.due_time !== '00:00:00' &&
+      !(a.subject && a.subject.includes('Inspector ENG Follow up'))
+    );
+    
+    console.log(`🌍 AllDayInspectionActivities for ${dateString}: ${filtered.length} total activities`);
+    const withCoords = filtered.filter(a => a.coordinates);
+    console.log(`   ${withCoords.length} have coordinates for distance calculations`);
+    
+    return filtered;
+  }, [enrichedActivities, dateString]);
 
   const handleTimeSlotSelection = (slotData) => {
     setSelectedTimeSlot(slotData);

@@ -10,6 +10,33 @@ import { calculateDistance } from '../utils/regionValidation.js';
 // Base Pipedrive API configuration
 const PIPEDRIVE_BASE_URL = 'https://api.pipedrive.com/v1';
 
+// Retry utility with exponential backoff
+const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
+  let lastError;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      
+      // Don't retry for non-retriable errors
+      if (error.response?.status && ![429, 502, 503, 504].includes(error.response.status)) {
+        throw error;
+      }
+      
+      // Don't wait on the last attempt
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        console.log(`⏳ Rate limited (${error.response?.status || 'Network Error'}), retrying in ${Math.round(delay)}ms... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  throw lastError;
+};
+
 // Create axios instance for Pipedrive API
 const createPipedriveClient = () => {
   const apiKey = import.meta.env.VITE_PIPEDRIVE_API_KEY;
@@ -18,7 +45,7 @@ const createPipedriveClient = () => {
     throw new Error('Pipedrive API key not configured');
   }
 
-  return axios.create({
+  const client = axios.create({
     baseURL: PIPEDRIVE_BASE_URL,
     timeout: 30000,
     params: {
@@ -28,6 +55,14 @@ const createPipedriveClient = () => {
       'Content-Type': 'application/json',
     }
   });
+
+  // Add retry interceptor for rate limits
+  const originalGet = client.get;
+  client.get = async (...args) => {
+    return retryWithBackoff(() => originalGet.apply(client, args));
+  };
+
+  return client;
 };
 
 // Regional deal filters mapping
