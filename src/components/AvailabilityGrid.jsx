@@ -4,14 +4,25 @@ import { Calendar, Grid3x3, ChevronLeft, ChevronRight, MapPin, Users, ArrowLeft,
 import { validateAddressInServiceArea, regionCenters } from '../utils/regionValidation.js';
 import DatePickerDropdown from './DatePickerDropdown';
 import DealsDebugConsole from './DealsDebugConsole';
+import RosterCellEditor from './RosterCellEditor';
+import { useRosterData } from '../hooks/useRosterData';
 
 const AvailabilityGrid = ({ pipedriveData }) => {
   const [startDate, setStartDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedInspector, setSelectedInspector] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showRegionalBreakdown, setShowRegionalBreakdown] = useState(false);
+  const [expandedRegion, setExpandedRegion] = useState(null); // Track which region is expanded
   const [showDealsConsole, setShowDealsConsole] = useState(false);
   const [selectedRegionData, setSelectedRegionData] = useState(null);
+  const [editingCell, setEditingCell] = useState(null);
+
+  // Get roster data for the current date range
+  const endDate = addDays(startDate, 27); // 4 weeks
+  const { rosterData, loading: rosterLoading, updateRoster, getRosterForDate } = useRosterData(
+    startDate,
+    endDate
+  );
 
   const {
     activities: allActivities,
@@ -54,6 +65,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
 
     const data = {};
     const dailyTotals = {}; // Track total inspections per day
+    const locationData = {}; // Track location-specific data from Label field
     const INSPECTOR_DAILY_CAPACITY = 4; // Each inspector can handle 4 inspections per day
     
     const loadSummary = {
@@ -293,12 +305,185 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       regionalData[dayString] = regionTotals;
     });
 
+    // Process all activities for location data (separate from inspector-specific processing)
+    weekdays.forEach(day => {
+      const dayString = format(day, 'yyyy-MM-dd');
+      if (!locationData[dayString]) {
+        locationData[dayString] = {};
+      }
+
+      // Get all activities for this day across all inspectors
+      const dayActivities = allActivities.filter(activity => 
+        activity.due_date === dayString &&
+        !activity.done &&
+        activity.due_time && activity.due_time !== '00:00:00'
+      );
+
+      dayActivities.forEach(activity => {
+        let region = 'Unknown';
+        let isFromLabel = false;
+
+        // Use Label field if available (should contain 3-digit codes)
+        if (activity.label) {
+          console.log('🏷️ Raw label field for activity:', activity.subject, 'Label:', activity.label);
+          
+          let labelValue = '';
+          
+          // Handle different label field formats
+          if (typeof activity.label === 'string') {
+            labelValue = activity.label.trim();
+          } else if (typeof activity.label === 'object' && activity.label !== null) {
+            // Label might be an object with properties
+            labelValue = activity.label.value || activity.label.name || JSON.stringify(activity.label);
+            console.log('🏷️ Label is object:', activity.label);
+          }
+          
+          if (labelValue) {
+            isFromLabel = true;
+            console.log('🔍 Processing label value:', labelValue);
+            
+            // Map 3-digit codes to locations (you'll need to provide the actual mappings)
+            const locationCodeMap = {
+              // Brisbane Metro
+              '001': 'Brisbane',
+              '002': 'Brisbane North', 
+              '003': 'Brisbane South',
+              '004': 'Brisbane West',
+              '005': 'Brisbane East',
+              // Logan
+              '010': 'Logan',
+              '011': 'Logan Central',
+              '012': 'Logan West',
+              // Ipswich  
+              '020': 'Ipswich',
+              '021': 'Ipswich Central',
+              // Gold Coast
+              '030': 'Gold Coast',
+              '031': 'Gold Coast North',
+              '032': 'Gold Coast Central',
+              '033': 'Gold Coast South',
+              // Sunshine Coast
+              '040': 'Sunshine Coast',
+              '041': 'Sunshine Coast North',
+              '042': 'Sunshine Coast South',
+              // Toowoomba
+              '050': 'Toowoomba',
+              // Gympie/Maryborough
+              '060': 'Gympie',
+              '061': 'Maryborough',
+              // Warwick/Stanthorpe  
+              '070': 'Warwick',
+              '071': 'Stanthorpe',
+              // Grafton/Coffs
+              '080': 'Grafton',
+              '081': 'Coffs Harbour',
+              // Glen Innes/Armidale
+              '090': 'Glen Innes', 
+              '091': 'Armidale',
+              // Newcastle
+              '100': 'Newcastle'
+            };
+            
+            // Check if it's a 3-digit code
+            if (locationCodeMap[labelValue]) {
+              region = locationCodeMap[labelValue];
+              console.log(`✅ Mapped code ${labelValue} to ${region}`);
+            } else {
+              // Fallback to text-based matching for non-code labels
+              const labelUpper = labelValue.toUpperCase();
+              if (labelUpper.includes('GOLD COAST')) region = 'Gold Coast';
+              else if (labelUpper.includes('LOGAN')) region = 'Logan';
+              else if (labelUpper.includes('IPSWICH')) region = 'Ipswich';
+              else if (labelUpper.includes('BRISBANE')) region = 'Brisbane';
+              else if (labelUpper.includes('SUNSHINE COAST')) region = 'Sunshine Coast';
+              else if (labelUpper.includes('TOOWOOMBA')) region = 'Toowoomba';
+              else if (labelUpper.includes('GYMPIE')) region = 'Gympie';
+              else if (labelUpper.includes('MARYBOROUGH')) region = 'Maryborough';
+              else if (labelUpper.includes('WARWICK')) region = 'Warwick';
+              else if (labelUpper.includes('STANTHORPE')) region = 'Stanthorpe';
+              else if (labelUpper.includes('GRAFTON')) region = 'Grafton';
+              else if (labelUpper.includes('COFFS')) region = 'Coffs Harbour';
+              else if (labelUpper.includes('GLEN INNES')) region = 'Glen Innes';
+              else if (labelUpper.includes('ARMIDALE')) region = 'Armidale';
+              else if (labelUpper.includes('NEWCASTLE')) region = 'Newcastle';
+              else {
+                region = `Code: ${labelValue}`;
+                console.log(`❓ Unknown label: "${labelValue}"`);
+              }
+            }
+          }
+        }
+
+        // Use location object if no label
+        if (region === 'Unknown' && activity.location?.locality) {
+          const locality = activity.location.locality.toLowerCase();
+          if (locality.includes('gold coast')) region = 'Gold Coast';
+          else if (locality.includes('logan')) region = 'Logan';
+          else if (locality.includes('ipswich')) region = 'Ipswich';
+          else if (locality.includes('brisbane')) region = 'Brisbane';
+          else if (locality.includes('sunshine coast')) region = 'Sunshine Coast';
+          else if (locality.includes('toowoomba')) region = 'Toowoomba';
+        }
+
+        // Map regions to parent regions for nested breakdown
+        let parentRegion = null;
+        let specificLocation = region;
+
+        if (region.includes('Brisbane') || region.includes('Logan') || region.includes('Ipswich') || region.includes('Gold Coast')) {
+          parentRegion = 'R01 - Brisbane/Logan/Ipswich';
+          specificLocation = region;
+        } else if (region.includes('Gympie') || region.includes('Maryborough')) {
+          parentRegion = 'R02 - Gympie/Maryborough';
+          specificLocation = region;
+        } else if (region.includes('Sunshine Coast')) {
+          parentRegion = 'R03 - Sunshine Coast';
+          specificLocation = 'Sunshine Coast';
+        } else if (region.includes('Toowoomba')) {
+          parentRegion = 'R04 - Toowoomba';
+          specificLocation = 'Toowoomba';
+        } else if (region.includes('Warwick') || region.includes('Stanthorpe')) {
+          parentRegion = 'R05 - Warwick/Stanthorpe';
+          specificLocation = region;
+        } else if (region.includes('Grafton') || region.includes('Coffs')) {
+          parentRegion = 'R07 - Grafton/Coffs';
+          specificLocation = region;
+        } else if (region.includes('Glen Innes') || region.includes('Armidale')) {
+          parentRegion = 'R08 - Glen Innes/Armidale';
+          specificLocation = region;
+        } else if (region.includes('Newcastle')) {
+          parentRegion = 'R09 - Newcastle';
+          specificLocation = 'Newcastle';
+        }
+
+        // Track location data if we have a parent region
+        if (parentRegion && region !== 'Unknown') {
+          if (!locationData[dayString][parentRegion]) {
+            locationData[dayString][parentRegion] = {};
+          }
+          if (!locationData[dayString][parentRegion][specificLocation]) {
+            locationData[dayString][parentRegion][specificLocation] = { count: 0, activities: [] };
+          }
+          locationData[dayString][parentRegion][specificLocation].count++;
+          locationData[dayString][parentRegion][specificLocation].activities.push(activity);
+        }
+      });
+    });
+
     // Single clean console log with summary
     if (loadSummary.activitiesFound > 0) {
       console.log('📅 AVAILABILITY GRID: Loaded inspection data', loadSummary);
+      console.log('📍 Location Data (detailed):', JSON.stringify(locationData, null, 2));
+      
+      // Show which regions have location data
+      Object.keys(locationData).forEach(date => {
+        console.log(`📅 ${date}:`, Object.keys(locationData[date]));
+        Object.keys(locationData[date]).forEach(region => {
+          console.log(`  🏙️ ${region}:`, Object.keys(locationData[date][region]));
+        });
+      });
     }
 
-    return { inspectorData: data, capacityData, regionalData };
+    return { inspectorData: data, capacityData, regionalData, locationData };
   }, [allActivities, filteredInspectors, weekdays]);
 
   // Capacity utilization color coding
@@ -359,6 +544,24 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       return 'bg-gray-100 text-gray-600';
     }
     
+    // Map region codes to colors
+    const regionCodeColors = {
+      'R01': 'bg-blue-100 text-blue-800',
+      'R02': 'bg-green-100 text-green-800',
+      'R03': 'bg-purple-100 text-purple-800',
+      'R04': 'bg-red-100 text-red-800',
+      'R05': 'bg-yellow-100 text-yellow-800',
+      'R06': 'bg-orange-100 text-orange-800',
+      'R07': 'bg-pink-100 text-pink-800',
+      'R08': 'bg-indigo-100 text-indigo-800',
+      'R09': 'bg-teal-100 text-teal-800'
+    };
+    
+    // Check if it's a region code first
+    if (regionCodeColors[region]) {
+      return regionCodeColors[region];
+    }
+    
     // Only color actual Label field data
     const colors = {
       'Brisbane': 'bg-blue-100 text-blue-800',
@@ -369,6 +572,18 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       'Toowoomba': 'bg-red-100 text-red-800'
     };
     return colors[region] || 'bg-gray-100 text-gray-600';
+  };
+
+  // Status color mapping for roster status
+  const getStatusColor = (status) => {
+    const statusColors = {
+      'working': 'bg-green-100 text-green-800',
+      'sick': 'bg-red-100 text-red-800',
+      'rain': 'bg-blue-100 text-blue-800',
+      'rdo': 'bg-yellow-100 text-yellow-800',
+      'annual_leave': 'bg-purple-100 text-purple-800'
+    };
+    return statusColors[status] || 'bg-gray-100 text-gray-600';
   };
 
   const navigateWeeks = (direction) => {
@@ -818,12 +1033,24 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                       return getRegionNumber(a) - getRegionNumber(b);
                     })
                     .map((regionKey) => (
-                    <tr key={regionKey} className="bg-blue-50 border-b border-blue-100">
-                      <td className="w-48 h-16 px-6 py-2 text-sm font-medium text-blue-900 border-r border-blue-200 sticky left-0 bg-blue-50 z-10">
-                        <div className="pl-6 flex items-center h-full">
-                          <div>{regionKey}</div>
-                        </div>
-                      </td>
+                    <React.Fragment key={regionKey}>
+                      {/* Main regional row with nested dropdown */}
+                      <tr className="bg-blue-50 border-b border-blue-100">
+                        <td className="w-48 h-16 px-6 py-2 text-sm font-medium text-blue-900 border-r border-blue-200 sticky left-0 bg-blue-50 z-10">
+                          <div className="pl-6 flex items-center gap-2 h-full">
+                            <button
+                              onClick={() => setExpandedRegion(expandedRegion === regionKey ? null : regionKey)}
+                              className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                            >
+                              {expandedRegion === regionKey ? (
+                                <ChevronUp className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+                            <div>{regionKey}</div>
+                          </div>
+                        </td>
                       {weekdays.map((day, dayIndex) => {
                         const dayString = format(day, 'yyyy-MM-dd');
                         const regionalCapacity = gridData.regionalData?.[dayString]?.[regionKey] || { 
@@ -848,7 +1075,48 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                           </td>
                         );
                       })}
-                    </tr>
+                      </tr>
+                      
+                      {/* Location-specific breakdown when region is expanded */}
+                      {expandedRegion === regionKey && (() => {
+                        const firstDay = format(weekdays[0], 'yyyy-MM-dd');
+                        const locationData = gridData.locationData?.[firstDay]?.[regionKey] || {};
+                        console.log(`🔍 Checking location data for ${regionKey} on ${firstDay}:`, locationData);
+                        console.log(`📊 All location data:`, gridData.locationData);
+                        return Object.keys(locationData).length > 0;
+                      })() && (
+                        Object.keys(gridData.locationData[format(weekdays[0], 'yyyy-MM-dd')]?.[regionKey] || {})
+                          .sort()
+                          .map((locationKey) => (
+                            <tr key={`${regionKey}-${locationKey}`} className="bg-green-50 border-b border-green-100">
+                              <td className="w-48 h-16 px-8 py-2 text-sm font-medium text-green-900 border-r border-green-200 sticky left-0 bg-green-50 z-10">
+                                <div className="pl-8 flex items-center h-full">
+                                  <div>{locationKey}</div>
+                                </div>
+                              </td>
+                              {weekdays.map((day, dayIndex) => {
+                                const dayString = format(day, 'yyyy-MM-dd');
+                                const locationCount = gridData.locationData?.[dayString]?.[regionKey]?.[locationKey]?.count || 0;
+                                
+                                return (
+                                  <td 
+                                    key={dayIndex}
+                                    className="w-20 h-16 px-1 py-1 text-center border-r border-green-100 relative cursor-pointer hover:opacity-80"
+                                    title={`${locationKey} on ${format(day, 'MMM d')}: ${locationCount} inspections - Click for deals`}
+                                    onClick={() => handleCapacityCellClick(locationKey, format(day, 'yyyy-MM-dd'), 'location')}
+                                  >
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <div className="text-sm font-medium text-green-900">
+                                        {locationCount > 0 ? locationCount : '-'}
+                                      </div>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))
+                      )}
+                    </React.Fragment>
                   ))}
                 </>
               )}
@@ -867,6 +1135,8 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                   {weekdays.map((day, dayIndex) => {
                     const dayString = format(day, 'yyyy-MM-dd');
                     const dayData = gridData.inspectorData?.[inspector.id]?.[dayString] || { count: 0, dominantRegion: '', activities: [] };
+                    const existingRoster = getRosterForDate(inspector.id, day);
+                    const isEditingThisCell = editingCell && editingCell.inspectorId === inspector.id && editingCell.date === dayString;
                     
                     return (
                       <td 
@@ -874,23 +1144,66 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                         className="w-20 h-16 px-1 py-1 text-center border-r border-gray-100 relative"
                         title={`${inspector.name} - ${format(day, 'MMM d')}: ${dayData.count} inspections${dayData.dominantRegion ? ` in ${dayData.dominantRegion}` : ''}${isOutOfRegion(inspector, dayData.dominantRegion) ? ' - OUT OF REGION!' : ''}`}
                       >
-                        {dayData.count > 0 ? (
-                          <div className="space-y-1">
-                            <div className="text-lg font-bold text-gray-900">
-                              {dayData.count}
-                            </div>
-                            {dayData.dominantRegion && (
-                              <div className={`text-xs px-1 py-0.5 rounded-md flex items-center gap-1 ${isOutOfRegion(inspector, dayData.dominantRegion) ? 'bg-red-500 text-white' : getRegionColor(dayData.dominantRegion)}`}>
-                                {isOutOfRegion(inspector, dayData.dominantRegion) && (
-                                  <AlertTriangle className="w-2.5 h-2.5" />
-                                )}
-                                <span>{dayData.dominantRegion}</span>
+                        <div 
+                          className="h-full relative cursor-pointer hover:bg-gray-100 rounded transition-colors"
+                          onClick={() => setEditingCell({ inspectorId: inspector.id, inspectorName: inspector.name, date: dayString })}
+                        >
+                          {dayData.count > 0 ? (
+                            <div className="space-y-1 relative z-10">
+                              <div className="text-lg font-bold text-gray-900">
+                                {dayData.count}
                               </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-gray-300">-</div>
-                        )}
+                              {(existingRoster?.region_code || dayData.dominantRegion) && (
+                                <div className={`text-xs px-1 py-0.5 rounded-md flex items-center gap-1 ${
+                                  existingRoster?.status && existingRoster.status !== 'working' 
+                                    ? getStatusColor(existingRoster.status)
+                                    : isOutOfRegion(inspector, existingRoster?.region_code || dayData.dominantRegion) 
+                                      ? 'bg-red-500 text-white' 
+                                      : getRegionColor(existingRoster?.region_code || dayData.dominantRegion)
+                                }`}>
+                                  {isOutOfRegion(inspector, existingRoster?.region_code || dayData.dominantRegion) && (
+                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                  )}
+                                  <span>{existingRoster?.region_code || dayData.dominantRegion}</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="h-full flex items-center justify-center">
+                              {existingRoster ? (
+                                <div className={`text-xs px-2 py-1 rounded-md ${
+                                  existingRoster.status === 'working' && existingRoster.region_code
+                                    ? getRegionColor(existingRoster.region_code)
+                                    : getStatusColor(existingRoster.status)
+                                }`}>
+                                  {existingRoster.status === 'working' && existingRoster.region_code 
+                                    ? existingRoster.region_code 
+                                    : existingRoster.status === 'sick' ? 'Sick'
+                                    : existingRoster.status === 'rain' ? 'Rain'
+                                    : existingRoster.status === 'rdo' ? 'RDO'
+                                    : existingRoster.status === 'annual_leave' ? 'Leave'
+                                    : 'Available'
+                                  }
+                                </div>
+                              ) : (
+                                <div className="text-gray-300">-</div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {isEditingThisCell && (
+                            <RosterCellEditor
+                              inspector={{ id: inspector.id, name: inspector.name }}
+                              date={dayString}
+                              currentRegion={{ code: existingRoster?.region_code, name: existingRoster?.region_name }}
+                              onClose={() => setEditingCell(null)}
+                              onSave={(rosterData) => {
+                                // The hook will handle the update
+                                setEditingCell(null);
+                              }}
+                            />
+                          )}
+                        </div>
                       </td>
                     );
                   })}
