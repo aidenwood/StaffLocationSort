@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { format, addDays, subDays, startOfWeek } from 'date-fns';
+import { format, addDays, subDays, startOfWeek, getDay } from 'date-fns';
 import {
   Calendar,
   Users,
@@ -29,6 +29,23 @@ import { inspectors } from '../data/mockActivities';
 import { useApiDebug } from '../hooks/useApiDebug.js';
 import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
 import { getDealsForRegion, sortDealsByDistance } from '../api/pipedriveDeals.js';
+
+// Helper functions to skip weekends
+const getNextBusinessDay = (date) => {
+  let nextDay = addDays(date, 1);
+  while (getDay(nextDay) === 0 || getDay(nextDay) === 6) { // 0 = Sunday, 6 = Saturday
+    nextDay = addDays(nextDay, 1);
+  }
+  return nextDay;
+};
+
+const getPreviousBusinessDay = (date) => {
+  let prevDay = subDays(date, 1);
+  while (getDay(prevDay) === 0 || getDay(prevDay) === 6) { // 0 = Sunday, 6 = Saturday
+    prevDay = subDays(prevDay, 1);
+  }
+  return prevDay;
+};
 
 const InspectionDashboard = ({ pipedriveData }) => {
   const [selectedInspector, setSelectedInspector] = useState(2); // Ben Thompson (ID 2) for consistency with working Activities page
@@ -285,6 +302,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
                 const within5km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length;
                 const within10km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length;
                 const within15km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length;
+                const within30km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 30).length;
                 
                 counts[`${dayString}-${timeSlot}`] = {
                   within1km,
@@ -292,7 +310,8 @@ const InspectionDashboard = ({ pipedriveData }) => {
                   within5km: within5km - within2_5km, // 2.5-5km range only
                   within10km: within10km - within5km, // 5-10km range only
                   within15km: within15km - within10km, // 10-15km range only
-                  radiusText: within1km > 0 ? '1km' : (within2_5km > within1km ? '2.5km' : (within5km > within2_5km ? '5km' : (within10km > within5km ? '10km' : '15km'))),
+                  within30km: within30km - within15km, // 15-30km range only
+                  radiusText: within1km > 0 ? '1km' : (within2_5km > within1km ? '2.5km' : (within5km > within2_5km ? '5km' : (within10km > within5km ? '10km' : (within15km > within10km ? '15km' : '30km')))),
                   referenceAddress: referenceInspection.personAddress?.substring(0, 40) || 'Unknown'
                 };
                 
@@ -384,7 +403,13 @@ const InspectionDashboard = ({ pipedriveData }) => {
   };
 
   const handleDateChange = (newDate) => {
-    setSelectedDate(newDate);
+    // If the selected date is a weekend, move to the next business day
+    const dayOfWeek = getDay(newDate);
+    if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
+      setSelectedDate(getNextBusinessDay(newDate));
+    } else {
+      setSelectedDate(newDate);
+    }
   };
 
   const handleRetryConnection = () => {
@@ -514,7 +539,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
             {/* Date Control */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
               <button
-                onClick={() => handleDateChange(subDays(selectedDate, 1))}
+                onClick={() => handleDateChange(getPreviousBusinessDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Previous day"
               >
@@ -528,7 +553,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
               />
               
               <button
-                onClick={() => handleDateChange(addDays(selectedDate, 1))}
+                onClick={() => handleDateChange(getNextBusinessDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Next day"
               >
@@ -676,7 +701,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
             {/* Date Control */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
               <button
-                onClick={() => handleDateChange(subDays(selectedDate, 1))}
+                onClick={() => handleDateChange(getPreviousBusinessDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Previous day"
               >
@@ -690,7 +715,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
               />
               
               <button
-                onClick={() => handleDateChange(addDays(selectedDate, 1))}
+                onClick={() => handleDateChange(getNextBusinessDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Next day"
               >
@@ -791,7 +816,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
             {/* Center Right: Date Control */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
               <button
-                onClick={() => handleDateChange(subDays(selectedDate, 1))}
+                onClick={() => handleDateChange(getPreviousBusinessDay(selectedDate))}
                 className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Previous day"
               >
@@ -805,7 +830,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
               />
               
               <button
-                onClick={() => handleDateChange(addDays(selectedDate, 1))}
+                onClick={() => handleDateChange(getNextBusinessDay(selectedDate))}
                 className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Next day"
               >
@@ -1069,9 +1094,6 @@ const InspectionDashboard = ({ pipedriveData }) => {
               >
                 <MapPin className="w-3 h-3" />
               </button>
-            </div>
-            <div className="text-xs text-gray-500">
-              {activities?.length || 0}
             </div>
           </div>
         </div>

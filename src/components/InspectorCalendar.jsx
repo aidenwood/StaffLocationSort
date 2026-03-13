@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addDays, subDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign, X, Target } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign, X, Target, ExternalLink } from 'lucide-react';
 import { getActivityTypeByKey } from '../data/mockActivities';
 import { convertToAustralianTime } from '../utils/timezone';
 
@@ -413,6 +413,21 @@ const InspectorCalendar = ({
               <div className="text-gray-600">{activity.note}</div>
             </div>
           )}
+
+          {/* Open in Pipedrive */}
+          {activity.id && (
+            <div className="pt-2 border-t border-gray-200">
+              <a
+                href={`https://rebuildrelief.pipedrive.com/activity/${activity.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Open in Pipedrive</span>
+              </a>
+            </div>
+          )}
           </div>
         </div>
       </div>
@@ -654,6 +669,7 @@ const InspectorCalendar = ({
                                             const within5km = counts?.within5km || 0;
                                             const within10km = counts?.within10km || 0;
                                             const within15km = counts?.within15km || 0;
+                                            const within30km = counts?.within30km || 0;
                                             const radiusText = counts?.radiusText || '';
                                             
                                             // Determine display count, color, and radius (vibrant purple for 1km, then existing colors)
@@ -681,6 +697,10 @@ const InspectorCalendar = ({
                                               displayCount = within15km;
                                               colorClass = "bg-orange-600 hover:bg-orange-700"; // Orange for 15km
                                               selectedRadius = 15;
+                                            } else if (within30km > 0) {
+                                              displayCount = within30km;
+                                              colorClass = "bg-red-600 hover:bg-red-700"; // Red for 30km
+                                              selectedRadius = 30;
                                             }
                                             
                                             // Only show button if there are deals or if we haven't calculated yet

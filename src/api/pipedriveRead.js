@@ -287,8 +287,8 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
       console.log('   📊 Activity breakdown:', typeBreakdown);
       
       // 🏷️ DEAL LABELS: Fetch deal labels for a LIMITED set of activities to avoid rate limits
-      console.log('🏷️ Fetching deal labels for sample activities with deal_id (limited to 5 to avoid rate limits)...');
       let labelsProcessed = 0;
+      const labelResults = [];
       for (let i = 0; i < Math.min(filtered.length, 20) && labelsProcessed < 5; i++) {
         const activity = filtered[i];
         if (activity.deal_id && labelsProcessed < 5) {
@@ -298,7 +298,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
             const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
             if (dealResponse.data.success && dealResponse.data.data && dealResponse.data.data.label) {
               activity.label = dealResponse.data.data.label;
-              console.log(`📋 Deal ${activity.deal_id} label: "${activity.label}" for activity "${activity.subject}"`);
+              labelResults.push(`Deal ${activity.deal_id}: "${activity.label}"`);
             }
             labelsProcessed++;
             
@@ -312,28 +312,14 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
         }
       }
       
-      // 🔍 DEBUG: Log sample activity to find address field
-      const sampleActivity = filtered[0];
-      console.log('🏠 ADDRESS DEBUG - Sample activity fields:');
-      console.log('   location:', sampleActivity.location);
-      console.log('   address:', sampleActivity.address);
-      console.log('   location_address:', sampleActivity.location_address);
-      console.log('   formatted_address:', sampleActivity.formatted_address);
-      console.log('   label:', sampleActivity.label);
-      
-      // Check for custom fields (40-char hashes that might contain address)
-      const customFields = {};
-      Object.keys(sampleActivity).forEach(key => {
-        if (key.length === 40) {
-          customFields[key] = sampleActivity[key];
-        }
-      });
-      if (Object.keys(customFields).length > 0) {
-        console.log('   🔧 Custom fields (potential address):', customFields);
+      if (labelResults.length > 0) {
+        console.log(`🏷️ Fetched ${labelResults.length} deal labels: ${labelResults.join(', ')}`);
       }
       
-      // List all fields for investigation
-      console.log('   📝 All available fields:', Object.keys(sampleActivity).join(', '));
+      // 🔍 DEBUG: Sample activity address analysis
+      const sampleActivity = filtered[0];
+      const customFields = Object.keys(sampleActivity).filter(key => key.length === 40);
+      console.log(`🏠 Activity address debug - Sample fields: location=${sampleActivity.location}, label=${sampleActivity.label}, custom fields: ${customFields.length}`);
     }
 
     return filtered;
@@ -508,7 +494,6 @@ export const fetchPersonAddressForActivity = async (activity) => {
           personId = dealData.person_id;
         }
         dealLabel = dealData.label;
-        console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
       }
     } else if (activity.deal_id) {
       // Even if we have person_id, still fetch deal label
@@ -517,7 +502,6 @@ export const fetchPersonAddressForActivity = async (activity) => {
         const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
         if (dealResponse.data.success && dealResponse.data.data.label) {
           dealLabel = dealResponse.data.data.label;
-          console.log(`📋 Fetched deal ${activity.deal_id} label: "${dealLabel}" for activity "${activity.subject}"`);
         }
       } catch (error) {
         console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
@@ -535,7 +519,6 @@ export const fetchPersonAddressForActivity = async (activity) => {
         if (person[PERSON_ADDRESS_HASH] && typeof person[PERSON_ADDRESS_HASH] === 'string') {
           const address = String(person[PERSON_ADDRESS_HASH]).trim();
           if (address && !address.includes('Lead Gen') && !address.includes('Advertising') && !address.includes('Region:')) {
-            console.log(`   ✅ Found person address in hash field '${PERSON_ADDRESS_HASH}':`, address);
             return address;
           }
         }
@@ -559,7 +542,6 @@ export const fetchPersonAddressForActivity = async (activity) => {
             // Skip marketing text
             if (!value.includes('Lead Gen') && !value.includes('Advertising') && !value.includes('Region:')) {
               address = value;
-              console.log(`   ✅ Found address in field '${fieldName}':`, address);
               break;
             }
           }
@@ -572,7 +554,6 @@ export const fetchPersonAddressForActivity = async (activity) => {
               const value = String(person[key]).trim();
               if (value && !value.includes('Lead Gen') && !value.includes('Advertising') && !value.includes('Region:')) {
                 address = value;
-                console.log(`   ✅ Found address in custom formatted field '${key}':`, address);
               }
             }
           });
@@ -595,7 +576,6 @@ export const fetchPersonAddressForActivity = async (activity) => {
                   !value.includes('Lead Gen') && !value.includes('Advertising') && 
                   !value.includes('Region:') && !value.includes('Landing Page')) {
                 address = value;
-                console.log(`   ✅ Found street address in custom field '${key}':`, address);
               }
             }
           });

@@ -158,6 +158,11 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       setGeocodedAppointments(geocoded);
       setIsGeocoding?.(false);
 
+      // Summary log instead of individual geocoding logs
+      const geocodedCount = geocoded.filter(a => a.coordinates).length;
+      const totalCount = geocoded.length;
+      console.log(`📍 Geocoded ${geocodedCount}/${totalCount} appointments`);
+
       // Auto-center and zoom map based on geocoded locations (only if not currently processing map operations)
       // ⚠️ URGENT: mapOperationsInProgress prevents concurrent map operations that cause loops
       if (map && geocoded.length > 0 && !mapOperationsInProgress.current) {
@@ -455,47 +460,163 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
   // Calculate route when appointments change
   // ⚠️ URGENT: Uses ref pattern for onRouteCalculated to avoid callback dependency loops  
   useEffect(() => {
+    console.log(`🗺️ Route calculation triggered: ${geocodedAppointments.length} geocoded appointments`);
+    
+    if (geocodedAppointments.length > 0) {
+      console.log('📍 Appointments for route:', geocodedAppointments.map(a => ({
+        subject: a.subject,
+        time: a.due_time,
+        hasCoordinates: !!a.coordinates
+      })));
+    }
     if (!map || !directionsRenderer || geocodedAppointments.length < 2) {
+      // Clear any existing route when we don't have enough appointments
+      if (directionsRenderer) {
+        directionsRenderer.setDirections({ routes: [] });
+      }
       onRouteCalculatedRef.current?.(0);
       return;
     }
 
-    const directionsService = new window.google.maps.DirectionsService();
-    
-    // Create waypoints from appointments (excluding first and last)
-    const waypoints = geocodedAppointments.slice(1, -1).map(appointment => ({
-      location: appointment.coordinates,
-      stopover: true
-    }));
+    // Use new Route.computeRoutes API instead of deprecated DirectionsService
+    const calculateRoute = async () => {
+      try {
+        // Check if new API is available, fallback to old API if needed
+        if (!window.google.maps.routes?.Route?.computeRoutes) {
+          console.warn('⚠️ New Route API not available, falling back to DirectionsService');
+          return calculateRouteFallback();
+        }
 
-    const origin = geocodedAppointments[0].coordinates;
-    const destination = geocodedAppointments[geocodedAppointments.length - 1].coordinates;
+        // Create waypoints from appointments (excluding first and last)
+        const intermediates = geocodedAppointments.slice(1, -1).map(appointment => ({
+          location: {
+            latLng: appointment.coordinates
+          }
+        }));
 
-    directionsService.route({
-      origin,
-      destination,
-      waypoints,
-      travelMode: window.google.maps.TravelMode.DRIVING,
-      optimizeWaypoints: true,
-      avoidTolls: true
-    }, (result, status) => {
-      if (status === 'OK') {
-        directionsRenderer.setDirections(result);
+        const origin = geocodedAppointments[0].coordinates;
+        const destination = geocodedAppointments[geocodedAppointments.length - 1].coordinates;
+
+        const request = {
+          origin: {
+            location: {
+              latLng: origin
+            }
+          },
+          destination: {
+            location: {
+              latLng: destination
+            }
+          },
+          intermediates,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+          routingPreference: window.google.maps.RoutingPreference.TRAFFIC_AWARE,
+          computeAlternativeRoutes: false,
+          routeModifiers: {
+            avoidTolls: true,
+            avoidHighways: false,
+            avoidFerries: false
+          },
+          languageCode: "en-US",
+          units: window.google.maps.UnitSystem.METRIC
+        };
+
+        const { routes } = await window.google.maps.routes.Route.computeRoutes(request);
+
+        if (routes && routes.length > 0) {
+          const route = routes[0];
+          
+          // Convert new API response to DirectionsResult format for compatibility with DirectionsRenderer
+          const directionsResult = {
+            routes: [{
+              legs: route.legs.map(leg => ({
+                duration: {
+                  value: parseInt(leg.duration.replace('s', '')), // Convert "1234s" to 1234
+                  text: `${Math.round(parseInt(leg.duration.replace('s', '')) / 60)} mins`
+                },
+                distance: {
+                  value: parseInt(leg.distanceMeters),
+                  text: `${(parseInt(leg.distanceMeters) / 1000).toFixed(1)} km`
+                },
+                start_location: leg.startLocation.latLng,
+                end_location: leg.endLocation.latLng,
+                steps: leg.steps || []
+              })),
+              overview_polyline: {
+                points: route.polyline.encodedPolyline
+              },
+              warnings: [],
+              waypoint_order: route.optimizedIntermediateWaypointIndex || []
+            }],
+            status: 'OK'
+          };
+          
+          directionsRenderer.setDirections(directionsResult);
+          
+          // Calculate total drive time from legs
+          let totalTime = 0;
+          directionsResult.routes[0].legs.forEach(leg => {
+            totalTime += leg.duration.value; // Duration in seconds
+          });
+          
+          const totalMinutes = Math.round(totalTime / 60);
+          onRouteCalculatedRef.current?.(totalMinutes);
+          console.log(`🗺️ Route calculated: ${totalMinutes} minutes total drive time`);
+        } else {
+          throw new Error('No routes found');
+        }
+      } catch (error) {
+        console.warn('❌ Route calculation failed, trying fallback:', error);
+        calculateRouteFallback();
+      }
+    };
+
+    // Fallback to deprecated DirectionsService if new API fails
+    const calculateRouteFallback = () => {
+      try {
+        const directionsService = new window.google.maps.DirectionsService();
         
-        // Calculate total drive time from legs
-        let totalTime = 0;
-        result.routes[0].legs.forEach(leg => {
-          totalTime += leg.duration.value; // Duration in seconds
+        // Create waypoints from appointments (excluding first and last)
+        const waypoints = geocodedAppointments.slice(1, -1).map(appointment => ({
+          location: appointment.coordinates,
+          stopover: true
+        }));
+
+        const origin = geocodedAppointments[0].coordinates;
+        const destination = geocodedAppointments[geocodedAppointments.length - 1].coordinates;
+
+        directionsService.route({
+          origin,
+          destination,
+          waypoints,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+          optimizeWaypoints: true,
+          avoidTolls: true
+        }, (result, status) => {
+          if (status === 'OK') {
+            directionsRenderer.setDirections(result);
+            
+            // Calculate total drive time from legs
+            let totalTime = 0;
+            result.routes[0].legs.forEach(leg => {
+              totalTime += leg.duration.value; // Duration in seconds
+            });
+            
+            const totalMinutes = Math.round(totalTime / 60);
+            onRouteCalculatedRef.current?.(totalMinutes);
+            console.log(`🗺️ Route calculated (fallback): ${totalMinutes} minutes total drive time`);
+          } else {
+            console.warn('❌ Fallback directions request failed:', status);
+            onRouteCalculatedRef.current?.(0);
+          }
         });
-        
-        const totalMinutes = Math.round(totalTime / 60);
-        onRouteCalculatedRef.current?.(totalMinutes);
-        console.log(`🗺️ Route calculated: ${totalMinutes} minutes total drive time`);
-      } else {
-        console.warn('❌ Directions request failed:', status);
+      } catch (error) {
+        console.warn('❌ Fallback route calculation failed:', error);
         onRouteCalculatedRef.current?.(0);
       }
-    });
+    };
+
+    calculateRoute();
   }, [map, directionsRenderer, geocodedAppointments]);
 
   return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
@@ -552,13 +673,20 @@ const GoogleMapsView = ({
 
   // Use pre-enriched day activities from InspectionDashboard (with personAddress for geocoding)
   const todaysAppointments = React.useMemo(() => {
+    console.log(`📅 Computing appointments for ${selectedDate ? format(selectedDate, 'yyyy-MM-dd') : 'no date'}, inspector ${selectedInspector}`);
+    
     // If enriched activities are available, use them directly
     if (enrichedDayActivities && enrichedDayActivities.length > 0) {
-      return enrichedDayActivities.sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
+      const sorted = enrichedDayActivities.sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
+      console.log(`📅 Using ${sorted.length} enriched day activities`);
+      return sorted;
     }
 
     // Fallback: filter from all activities (without addresses)
-    if (!selectedInspector || !selectedDate) return [];
+    if (!selectedInspector || !selectedDate) {
+      console.log('📅 No inspector or date selected, returning empty appointments');
+      return [];
+    }
 
     const dateString = format(selectedDate, 'yyyy-MM-dd');
 
@@ -573,6 +701,7 @@ const GoogleMapsView = ({
       })
       .sort((a, b) => a.due_time.localeCompare(b.due_time));
 
+    console.log(`📅 Filtered ${filtered.length} appointments from ${activities.length} total activities`);
     return filtered;
   }, [selectedInspector, selectedDate, activities, enrichedDayActivities]);
 
@@ -661,7 +790,8 @@ const GoogleMapsView = ({
 
       <div className="flex-1">
         <Wrapper 
-          apiKey={GOOGLE_MAPS_API_KEY} 
+          apiKey={GOOGLE_MAPS_API_KEY}
+          libraries={['routes']}
           render={render}
         />
       </div>

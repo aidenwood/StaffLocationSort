@@ -110,16 +110,6 @@ const CACHE_DURATION = 60 * 60 * 1000; // 1 hour (improved for rate limiting)
  * @returns {Object} Transformed deal data
  */
 export const transformPipedriveDeal = (deal) => {
-  // Debug: Log address extraction for debugging (reduced frequency)
-  if (Math.random() < 0.02) { // Log ~2% of deals
-    const customAddress = deal['fc56b2671002827523bc3711b6a790f5ff00963f'];
-    console.log('📋 Address debug for deal', deal.id, ':', {
-      title: deal.title,
-      customDealAddress: customAddress || 'Not found',
-      personAddress: deal.person?.address || 'Not found',
-      hasCustomField: !!customAddress
-    });
-  }
 
   // Extract address with priority order:
   // 1. Custom 'Deal Address' field
@@ -262,6 +252,17 @@ export const fetchDealsWithFilter = async (filterId, options = {}) => {
     // Transform deals to standardized format
     const transformedDeals = allDeals.map(transformPipedriveDeal);
     
+    // Address analysis summary
+    const addressStats = transformedDeals.reduce((stats, deal) => {
+      if (deal.address) stats.withAddress++;
+      else stats.withoutAddress++;
+      return stats;
+    }, { withAddress: 0, withoutAddress: 0 });
+    
+    if (addressStats.withoutAddress > 0) {
+      console.log(`📋 Deal address analysis: ${addressStats.withAddress} with address, ${addressStats.withoutAddress} without`);
+    }
+    
     return {
       deals: transformedDeals,
       pagination: { total: allDeals.length },
@@ -346,9 +347,11 @@ export const getDealsForRegion = async (region, options = {}) => {
 export const enrichDealsWithAddresses = async (deals) => {
   console.log(`📍 Enriching ${deals.length} deals with geocoding...`);
   
+  let noAddressCount = 0;
+  
   const enriched = await Promise.all(deals.map(async (deal) => {
     if (!deal.address) {
-      console.warn(`⚠️ No address for deal: ${deal.title}`);
+      noAddressCount++;
       return deal;
     }
 
@@ -366,6 +369,9 @@ export const enrichDealsWithAddresses = async (deals) => {
 
   const successCount = enriched.filter(deal => deal.coordinates).length;
   console.log(`✅ Geocoded ${successCount}/${deals.length} deals successfully`);
+  if (noAddressCount > 0) {
+    console.log(`⚠️ ${noAddressCount} deals have no address`);
+  }
   
   return enriched;
 };
@@ -431,12 +437,48 @@ export const getRecommendationDeals = async (region, date = new Date()) => {
  * @returns {Object} - { minDistance, closestActivity, allDistances }
  */
 export const calculateDealDistances = (deal, inspectionActivities) => {
-  if (!deal.coordinates || !Array.isArray(inspectionActivities)) {
+  if (!deal.coordinates) {
     // Skip logging for deals without coordinates - handled in summary
     return { minDistance: null, closestActivity: null, allDistances: [] };
   }
 
   const distances = [];
+  
+  // Check if we have a grid region center for distance sorting
+  if (window.gridRegionCenter) {
+    const regionCenter = window.gridRegionCenter;
+    console.log(`📍 Using grid region center for distance sorting: ${regionCenter.name}`);
+    
+    const distance = calculateDistance(
+      deal.coordinates.lat,
+      deal.coordinates.lng,
+      regionCenter.lat,
+      regionCenter.lng
+    );
+    
+    distances.push({
+      activity: {
+        id: 'grid-region-center',
+        subject: `${regionCenter.name} Center`,
+        personAddress: regionCenter.name
+      },
+      distance: Math.round(distance * 100) / 100,
+      activityAddress: regionCenter.name,
+      coordSource: 'grid-region-center'
+    });
+    
+    // Return early with just the region center distance
+    return {
+      minDistance: Math.round(distance * 100) / 100,
+      closestActivity: distances[0].activity,
+      allDistances: distances
+    };
+  }
+
+  // Original logic for inspection activities
+  if (!Array.isArray(inspectionActivities)) {
+    return { minDistance: null, closestActivity: null, allDistances: [] };
+  }
   
   for (const activity of inspectionActivities) {
     // Try multiple coordinate sources with enhanced debugging

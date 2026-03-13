@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { X, RefreshCw, MapPin, DollarSign, User, Phone, Navigation, Target, Clock, ExternalLink, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { 
@@ -101,9 +101,13 @@ const DealsDebugConsole = ({
     return inspectorHomeRegion;
   };
   
-  const inspectorRegion = determineRegionFromInspections(inspectionActivities);
+  // ⚠️ URGENT: Memoize region calculation to prevent infinite loops in useEffect
+  const inspectorRegion = useMemo(() => {
+    return determineRegionFromInspections(inspectionActivities);
+  }, [inspectionActivities, inspectorHomeRegion]);
 
-  const fetchDeals = async (region = selectedRegion, type = dealType) => {
+  // ⚠️ URGENT: Wrap fetchDeals in useCallback to prevent infinite loops in useEffect
+  const fetchDeals = useCallback(async (region = selectedRegion, type = dealType) => {
     setLoading(true);
     setError(null);
     
@@ -157,6 +161,7 @@ const DealsDebugConsole = ({
             within_5km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 5).length,
             within_10km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 10).length,
             within_15km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 15).length,
+            within_30km: dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 30).length,
             total_with_distance: dealsWithDistance.length
           };
           setDistanceStats(stats);
@@ -174,6 +179,8 @@ const DealsDebugConsole = ({
             setSelectedDistanceFilter(10);
           } else if (stats.within_15km > 0) {
             setSelectedDistanceFilter(15);
+          } else if (stats.within_30km > 0) {
+            setSelectedDistanceFilter(30);
           }
         }
         
@@ -202,7 +209,7 @@ const DealsDebugConsole = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedRegion, dealType, sortByDistance, inspectionActivities, selectedSortInspection]);
 
   // Filter deals based on selected distance
   const filteredDeals = selectedDistanceFilter 
@@ -264,21 +271,26 @@ const DealsDebugConsole = ({
       }));
       
       onDealsUpdate(dealsToShow);
-    } else if (!isOpen) {
-      // Clear deals from map when console closes
-      setSelectedDeals([]); // Clear selections when closing
-      onDealsUpdate([]);
     }
   }, [isOpen, deals, hoveredDeal, selectedDeals]);
 
-  const checkHealth = async () => {
+  // Handle console closing separately to avoid infinite loop
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedDeals([]); // Clear selections when closing
+      onDealsUpdate([]);
+    }
+  }, [isOpen, onDealsUpdate]);
+
+  // ⚠️ URGENT: Wrap checkHealth in useCallback to prevent infinite loops in useEffect
+  const checkHealth = useCallback(async () => {
     try {
       const health = await healthCheckDeals();
       setHealthStatus(health);
     } catch (err) {
       setHealthStatus({ success: false, message: err.message });
     }
-  };
+  }, []);
 
   // Fetch deals when component opens or settings change
   useEffect(() => {
@@ -286,7 +298,7 @@ const DealsDebugConsole = ({
       fetchDeals();
       checkHealth();
     }
-  }, [isOpen, selectedRegion, dealType, sortByDistance, selectedSortInspection]);
+  }, [isOpen, selectedRegion, dealType, sortByDistance, selectedSortInspection, fetchDeals, checkHealth]);
 
   // Update region when inspector or inspections change
   useEffect(() => {
@@ -295,6 +307,42 @@ const DealsDebugConsole = ({
       setSelectedRegion(inspectorRegion);
     }
   }, [inspectorRegion, inspectionActivities]);
+
+  // Set region based on context from grid click
+  useEffect(() => {
+    if (context && context.source === 'availability-grid' && context.mappedRegion) {
+      console.log(`🎯 Grid Context: Setting region to ${context.mappedRegion} for ${context.regionKey}`);
+      setSelectedRegion(context.mappedRegion);
+      
+      // If it's a total view, we might want to show recommendations instead
+      if (context.regionType === 'total') {
+        setDealType('recommendations');
+      } else {
+        setDealType('all');
+      }
+
+      // For grid context with region center, create a mock inspection activity
+      // at the region center to enable proper distance sorting
+      if (context.regionCenter) {
+        console.log(`📍 Creating distance anchor at region center: ${context.regionCenter.lat}, ${context.regionCenter.lng}`);
+        
+        // Set a global variable that the distance sorting function can use
+        window.gridRegionCenter = {
+          lat: context.regionCenter.lat,
+          lng: context.regionCenter.lng,
+          name: context.regionKey
+        };
+      }
+    }
+  }, [context]);
+
+  // Clear grid region center when console is closed
+  useEffect(() => {
+    if (!isOpen && window.gridRegionCenter) {
+      console.log('🧹 Clearing grid region center');
+      delete window.gridRegionCenter;
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -325,9 +373,11 @@ const DealsDebugConsole = ({
           <div className="flex items-center gap-2 min-w-0">
             <MapPin className="w-4 h-4 text-purple-600 flex-shrink-0" />
             <h2 className="text-sm font-medium text-gray-900 truncate">
-              {context ? 
-                `Deals Console - ${context.formattedTime}, ${context.formattedDate}` : 
-                'Deals Console'
+              {context && context.source === 'availability-grid' ? 
+                `Deals Console - ${context.regionKey} - ${format(selectedDate, 'MMM d, yyyy')}` :
+                context ? 
+                  `Deals Console - ${context.formattedTime}, ${context.formattedDate}` : 
+                  'Deals Console'
               }
             </h2>
             {lastFetchTime && (
@@ -412,6 +462,14 @@ const DealsDebugConsole = ({
                   }`}
                 >
                   15km ({distanceStats?.within_15km || 0})
+                </button>
+                <button
+                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 30 ? null : 30)}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    selectedDistanceFilter === 30 ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                  }`}
+                >
+                  30km ({distanceStats?.within_30km || 0})
                 </button>
                 <button
                   onClick={() => setSelectedDistanceFilter(null)}

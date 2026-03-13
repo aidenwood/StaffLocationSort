@@ -26,12 +26,12 @@ export const geocodeAddress = async (address) => {
 
   // Check cache first
   if (geocodeCache.has(cleanAddress)) {
-    console.log(`📍 Using cached coordinates for: ${cleanAddress}`);
+    // Removed cache log to reduce console spam
     return geocodeCache.get(cleanAddress);
   }
 
   try {
-    console.log(`📍 Geocoding: ${cleanAddress}`);
+    // Removed individual geocoding logs to reduce console spam
     
     // Use Google Geocoding API
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanAddress)}&key=${GOOGLE_MAPS_API_KEY}`;

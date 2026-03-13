@@ -1,13 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks, subDays } from 'date-fns';
-import { Calendar, Grid3x3, ChevronLeft, ChevronRight, MapPin, Users, ArrowLeft, Columns2, Map } from 'lucide-react';
+import { Calendar, Grid3x3, ChevronLeft, ChevronRight, MapPin, Users, ArrowLeft, Columns2, Map, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { validateAddressInServiceArea, regionCenters } from '../utils/regionValidation.js';
 import DatePickerDropdown from './DatePickerDropdown';
+import DealsDebugConsole from './DealsDebugConsole';
 
 const AvailabilityGrid = ({ pipedriveData }) => {
   const [startDate, setStartDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedInspector, setSelectedInspector] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showRegionalBreakdown, setShowRegionalBreakdown] = useState(false);
+  const [showDealsConsole, setShowDealsConsole] = useState(false);
+  const [selectedRegionData, setSelectedRegionData] = useState(null);
 
   const {
     activities: allActivities,
@@ -49,6 +53,9 @@ const AvailabilityGrid = ({ pipedriveData }) => {
     }
 
     const data = {};
+    const dailyTotals = {}; // Track total inspections per day
+    const INSPECTOR_DAILY_CAPACITY = 4; // Each inspector can handle 4 inspections per day
+    
     const loadSummary = {
       totalActivities: allActivities?.length || 0,
       inspectors: filteredInspectors?.length || 0,
@@ -79,6 +86,12 @@ const AvailabilityGrid = ({ pipedriveData }) => {
 
         // Count inspections
         const count = dayActivities.length;
+        
+        // Add to daily totals for capacity calculation
+        if (!dailyTotals[dayString]) {
+          dailyTotals[dayString] = 0;
+        }
+        dailyTotals[dayString] += count;
 
         // Determine most common region
         let dominantRegion = '';
@@ -204,13 +217,140 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       }
     });
 
+    // Calculate capacity utilization for each day and regional breakdowns
+    const capacityData = {};
+    const regionalData = {};
+    
+    weekdays.forEach(day => {
+      const dayString = format(day, 'yyyy-MM-dd');
+      const totalInspections = dailyTotals[dayString] || 0;
+      const totalCapacity = filteredInspectors.length * INSPECTOR_DAILY_CAPACITY;
+      const utilizationPercent = totalCapacity > 0 ? (totalInspections / totalCapacity) * 100 : 0;
+      
+      capacityData[dayString] = {
+        totalInspections,
+        totalCapacity,
+        utilizationPercent: Math.round(utilizationPercent)
+      };
+      
+      // Calculate regional breakdown for this day
+      const regionTotals = {};
+      filteredInspectors.forEach(inspector => {
+        // Extract region code from inspector data
+        const regionCode = inspector.region || inspector.regionName || 'Unknown';
+        let regionKey = regionCode;
+        
+        // Parse region codes (R01-R09) with proper town names
+        if (regionCode.includes('R01')) regionKey = 'R01 - Brisbane/Logan/Ipswich';
+        else if (regionCode.includes('R02')) regionKey = 'R02 - Gympie/Maryborough';
+        else if (regionCode.includes('R03')) regionKey = 'R03 - Sunshine Coast';
+        else if (regionCode.includes('R04')) regionKey = 'R04 - Toowoomba';
+        else if (regionCode.includes('R05')) regionKey = 'R05 - Warwick/Stanthorpe';
+        else if (regionCode.includes('R06')) regionKey = 'R06 - Townsville';
+        else if (regionCode.includes('R07')) regionKey = 'R07 - Grafton/Coffs';
+        else if (regionCode.includes('R08')) regionKey = 'R08 - Glen Innes/Armidale';
+        else if (regionCode.includes('R09')) regionKey = 'R09 - Newcastle';
+        else if (regionCode.includes('Brisbane') || regionCode.includes('Logan') || regionCode.includes('Ipswich')) regionKey = 'R01 - Brisbane/Logan/Ipswich';
+        else if (regionCode.includes('Gympie') || regionCode.includes('Maryborough')) regionKey = 'R02 - Gympie/Maryborough';
+        else if (regionCode.includes('Gold Coast')) regionKey = 'Gold Coast Region';
+        else if (regionCode.includes('Sunshine Coast')) regionKey = 'R03 - Sunshine Coast';
+        else if (regionCode.includes('Toowoomba')) regionKey = 'R04 - Toowoomba';
+        else if (regionCode.includes('Warwick') || regionCode.includes('Stanthorpe')) regionKey = 'R05 - Warwick/Stanthorpe';
+        else if (regionCode.includes('Cairns')) regionKey = 'Cairns Region';
+        else if (regionCode.includes('Townsville')) regionKey = 'R06 - Townsville';
+        else if (regionCode.includes('Grafton') || regionCode.includes('Coffs')) regionKey = 'R07 - Grafton/Coffs';
+        else if (regionCode.includes('Mackay')) regionKey = 'Mackay Region';
+        else if (regionCode.includes('Glen Innes') || regionCode.includes('Armidale')) regionKey = 'R08 - Glen Innes/Armidale';
+        else if (regionCode.includes('Rockhampton')) regionKey = 'Rockhampton Region';
+        else if (regionCode.includes('Newcastle')) regionKey = 'R09 - Newcastle';
+        else if (regionCode.includes('Bundaberg')) regionKey = 'Bundaberg Region';
+        else regionKey = regionCode || 'Unknown Region';
+        
+        if (!regionTotals[regionKey]) {
+          regionTotals[regionKey] = {
+            inspectors: 0,
+            inspections: 0,
+            capacity: 0,
+            utilizationPercent: 0
+          };
+        }
+        
+        regionTotals[regionKey].inspectors++;
+        regionTotals[regionKey].capacity += INSPECTOR_DAILY_CAPACITY;
+        
+        const inspectorDayData = data[inspector.id]?.[dayString];
+        if (inspectorDayData) {
+          regionTotals[regionKey].inspections += inspectorDayData.count || 0;
+        }
+      });
+      
+      // Calculate utilization percentages for each region
+      Object.keys(regionTotals).forEach(regionKey => {
+        const region = regionTotals[regionKey];
+        region.utilizationPercent = region.capacity > 0 ? Math.round((region.inspections / region.capacity) * 100) : 0;
+      });
+      
+      regionalData[dayString] = regionTotals;
+    });
+
     // Single clean console log with summary
     if (loadSummary.activitiesFound > 0) {
       console.log('📅 AVAILABILITY GRID: Loaded inspection data', loadSummary);
     }
 
-    return data;
+    return { inspectorData: data, capacityData, regionalData };
   }, [allActivities, filteredInspectors, weekdays]);
+
+  // Capacity utilization color coding
+  const getCapacityColor = (utilizationPercent) => {
+    if (utilizationPercent >= 100) return 'bg-green-600'; // 100% - Perfect utilization
+    if (utilizationPercent >= 66) return 'bg-green-500'; // 66%+ - Good utilization
+    if (utilizationPercent >= 33) return 'bg-yellow-500'; // 33-65% - Medium utilization
+    if (utilizationPercent > 0) return 'bg-orange-500'; // 1-32% - Low utilization
+    return 'bg-gray-200'; // 0% - No utilization
+  };
+
+  // Get text color based on background
+  const getTextColor = (utilizationPercent) => {
+    return utilizationPercent > 0 ? 'text-white' : 'text-gray-600';
+  };
+
+  // Check if inspector is working outside their assigned region
+  const isOutOfRegion = (inspector, dominantRegion) => {
+    if (!inspector.region && !inspector.regionName) return false;
+    if (!dominantRegion || dominantRegion.includes('Unknown') || dominantRegion.includes('(est)')) return false;
+    
+    const inspectorRegion = (inspector.region || inspector.regionName || '').toLowerCase();
+    const workingRegion = dominantRegion.toLowerCase();
+    
+    // Map inspector regions to expected working regions
+    const regionMappings = {
+      'r01': ['brisbane', 'logan', 'ipswich'],
+      'r02': ['gympie', 'maryborough'], 
+      'r03': ['sunshine coast'],
+      'r04': ['toowoomba'],
+      'r05': ['warwick', 'stanthorpe'],
+      'r06': ['townsville'],
+      'r07': ['grafton', 'coffs'],
+      'r08': ['glen innes', 'armidale'],
+      'r09': ['newcastle']
+    };
+    
+    // Find inspector's region code
+    let inspectorRegionCode = null;
+    for (const [code, areas] of Object.entries(regionMappings)) {
+      if (inspectorRegion.includes(code) || areas.some(area => inspectorRegion.includes(area))) {
+        inspectorRegionCode = code;
+        break;
+      }
+    }
+    
+    if (!inspectorRegionCode) return false;
+    
+    // Check if working region matches inspector's region
+    const expectedAreas = regionMappings[inspectorRegionCode];
+    return !expectedAreas.some(area => workingRegion.includes(area));
+  };
 
   // Region color mapping - only color actual Label data, gray for estimates
   const getRegionColor = (region) => {
@@ -268,6 +408,60 @@ const AvailabilityGrid = ({ pipedriveData }) => {
 
   const handleBackToDashboard = () => {
     window.location.hash = '#dashboard';
+  };
+
+  const handleCapacityCellClick = (regionKey, date, regionType = 'total') => {
+    // Map region keys to region codes expected by the deals API
+    const regionMapping = {
+      'R01 - Brisbane/Logan/Ipswich': 'R1',
+      'R02 - Gympie/Maryborough': 'R2', 
+      'R03 - Sunshine Coast': 'R3',
+      'R04 - Toowoomba': 'R4',
+      'R05 - Warwick/Stanthorpe': 'R5',
+      'R06 - Townsville': 'R6',
+      'R07 - Grafton/Coffs': 'R7',
+      'R08 - Glen Innes/Armidale': 'R8',
+      'R09 - Newcastle': 'R9',
+      'Total': 'R1' // Default to R1 for total view, could be enhanced later
+    };
+
+    // Map to region center coordinates for distance sorting
+    const regionCenterMapping = {
+      'R01 - Brisbane/Logan/Ipswich': regionCenters.R01,
+      'R02 - Gympie/Maryborough': regionCenters.R02, 
+      'R03 - Sunshine Coast': regionCenters.R03,
+      'R04 - Toowoomba': regionCenters.R04,
+      'R05 - Warwick/Stanthorpe': regionCenters.R05,
+      'R06 - Townsville': regionCenters.R06,
+      'R07 - Grafton/Coffs': regionCenters.R07,
+      'R08 - Glen Innes/Armidale': regionCenters.R08,
+      'R09 - Newcastle': regionCenters.R09,
+      'Total': regionCenters.R01 // Default to R01 center for total view
+    };
+
+    const mappedRegion = regionMapping[regionKey] || 'R1';
+    const regionCenter = regionCenterMapping[regionKey] || regionCenters.R01;
+    
+    setSelectedRegionData({
+      regionKey,
+      mappedRegion,
+      date: new Date(date),
+      regionType,
+      regionCenter, // Add region center coordinates for distance sorting
+      // Get activities for that day from the region
+      inspectionActivities: allActivities.filter(activity => 
+        activity.due_date === date && 
+        !activity.done &&
+        activity.due_time && 
+        activity.due_time !== '00:00:00'
+      )
+    });
+    setShowDealsConsole(true);
+  };
+
+  const handleCloseDealsConsole = () => {
+    setShowDealsConsole(false);
+    setSelectedRegionData(null);
   };
 
   return (
@@ -540,21 +734,27 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 p-4 overflow-auto">
+      <div className="flex-1 p-4 overflow-hidden flex flex-col">
         {/* Grid */}
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="border border-gray-200 rounded-lg overflow-hidden flex-1 flex flex-col">
+        <div className="overflow-auto flex-1">
+          <table className="w-full relative table-fixed">
+            <colgroup>
+              <col className="w-48" />
+              {weekdays.map((_, index) => (
+                <col key={index} className="w-20" />
+              ))}
+            </colgroup>
             {/* Header row with dates */}
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 sticky top-0 z-20">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48 sticky left-0 bg-gray-50 z-30 border-r border-gray-200">
                   Inspector
                 </th>
                 {weekdays.map((day, index) => (
                   <th 
                     key={index}
-                    className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-24"
+                    className="w-20 h-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
                     <div>{format(day, 'EEE')}</div>
                     <div className="text-gray-400">{format(day, 'M/d')}</div>
@@ -563,25 +763,116 @@ const AvailabilityGrid = ({ pipedriveData }) => {
               </tr>
             </thead>
 
+            {/* Total capacity row */}
+            <tbody className="bg-white">
+              <tr className="border-b-2 border-gray-300 bg-gray-50">
+                <td className="w-48 h-16 px-4 py-2 text-sm font-bold text-gray-900 border-r border-gray-200 sticky left-0 bg-gray-50 z-10">
+                  <div className="flex items-center gap-2 h-full">
+                    <button
+                      onClick={() => setShowRegionalBreakdown(!showRegionalBreakdown)}
+                      className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                    >
+                      {showRegionalBreakdown ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </button>
+                    <div>
+                      <div>Total</div>
+                      <div className="text-xs text-gray-500">Daily Capacity</div>
+                    </div>
+                  </div>
+                </td>
+                {weekdays.map((day, dayIndex) => {
+                  const dayString = format(day, 'yyyy-MM-dd');
+                  const capacity = gridData.capacityData?.[dayString] || { totalInspections: 0, totalCapacity: 0, utilizationPercent: 0 };
+                  
+                  return (
+                    <td 
+                      key={dayIndex}
+                      className="w-20 h-16 px-1 py-1 text-center border-r border-gray-100 relative cursor-pointer hover:opacity-80"
+                      title={`${format(day, 'MMM d')}: ${capacity.totalInspections}/${capacity.totalCapacity} inspections (${capacity.utilizationPercent}% utilization) - Click for deals`}
+                      onClick={() => handleCapacityCellClick('Total', format(day, 'yyyy-MM-dd'), 'total')}
+                    >
+                      <div className={`w-full h-full flex items-center justify-center rounded-md ${getCapacityColor(capacity.utilizationPercent)}`}>
+                        <div className={`text-sm font-bold ${getTextColor(capacity.utilizationPercent)}`}>
+                          {capacity.totalInspections}/{capacity.totalCapacity}
+                        </div>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+              
+              {/* Regional breakdown rows */}
+              {showRegionalBreakdown && (
+                <>
+                  {Object.keys(gridData.regionalData?.[format(weekdays[0], 'yyyy-MM-dd')] || {})
+                    .sort((a, b) => {
+                      // Sort by region code R01, R02, R03, etc., then Unknown at end
+                      const getRegionNumber = (key) => {
+                        const match = key.match(/R(\d+)/);
+                        return match ? parseInt(match[1]) : 999; // Unknown regions go to end
+                      };
+                      return getRegionNumber(a) - getRegionNumber(b);
+                    })
+                    .map((regionKey) => (
+                    <tr key={regionKey} className="bg-blue-50 border-b border-blue-100">
+                      <td className="w-48 h-16 px-6 py-2 text-sm font-medium text-blue-900 border-r border-blue-200 sticky left-0 bg-blue-50 z-10">
+                        <div className="pl-6 flex items-center h-full">
+                          <div>{regionKey}</div>
+                        </div>
+                      </td>
+                      {weekdays.map((day, dayIndex) => {
+                        const dayString = format(day, 'yyyy-MM-dd');
+                        const regionalCapacity = gridData.regionalData?.[dayString]?.[regionKey] || { 
+                          inspections: 0, 
+                          capacity: 0, 
+                          utilizationPercent: 0,
+                          inspectors: 0
+                        };
+                        
+                        return (
+                          <td 
+                            key={dayIndex}
+                            className="w-20 h-16 px-1 py-1 text-center border-r border-blue-100 relative cursor-pointer hover:opacity-80"
+                            title={`${regionKey} - ${format(day, 'MMM d')}: ${regionalCapacity.inspections}/${regionalCapacity.capacity} inspections (${regionalCapacity.utilizationPercent}% utilization) - ${regionalCapacity.inspectors} inspectors - Click for deals`}
+                            onClick={() => handleCapacityCellClick(regionKey, format(day, 'yyyy-MM-dd'), 'regional')}
+                          >
+                            <div className={`w-full h-full flex items-center justify-center rounded-md ${getCapacityColor(regionalCapacity.utilizationPercent)}`}>
+                              <div className={`text-sm font-medium ${getTextColor(regionalCapacity.utilizationPercent)}`}>
+                                {regionalCapacity.inspections}/{regionalCapacity.capacity}
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </>
+              )}
+            </tbody>
+
             {/* Inspector rows */}
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredInspectors.map((inspector) => (
                 <tr key={inspector.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-4 text-sm font-medium text-gray-900 border-r border-gray-200">
-                    <div>
+                  <td className="w-48 h-16 px-4 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 sticky left-0 bg-white hover:bg-gray-50 z-10">
+                    <div className="flex flex-col justify-center h-full">
                       <div>{inspector.name}</div>
                       <div className="text-xs text-gray-500">{inspector.region || inspector.regionName}</div>
                     </div>
                   </td>
                   {weekdays.map((day, dayIndex) => {
                     const dayString = format(day, 'yyyy-MM-dd');
-                    const dayData = gridData[inspector.id]?.[dayString] || { count: 0, dominantRegion: '', activities: [] };
+                    const dayData = gridData.inspectorData?.[inspector.id]?.[dayString] || { count: 0, dominantRegion: '', activities: [] };
                     
                     return (
                       <td 
                         key={dayIndex}
-                        className="px-2 py-2 text-center border-r border-gray-100 relative"
-                        title={`${inspector.name} - ${format(day, 'MMM d')}: ${dayData.count} inspections${dayData.dominantRegion ? ` in ${dayData.dominantRegion}` : ''}`}
+                        className="w-20 h-16 px-1 py-1 text-center border-r border-gray-100 relative"
+                        title={`${inspector.name} - ${format(day, 'MMM d')}: ${dayData.count} inspections${dayData.dominantRegion ? ` in ${dayData.dominantRegion}` : ''}${isOutOfRegion(inspector, dayData.dominantRegion) ? ' - OUT OF REGION!' : ''}`}
                       >
                         {dayData.count > 0 ? (
                           <div className="space-y-1">
@@ -589,8 +880,11 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                               {dayData.count}
                             </div>
                             {dayData.dominantRegion && (
-                              <div className={`text-xs px-1 py-0.5 rounded-md ${getRegionColor(dayData.dominantRegion)}`}>
-                                {dayData.dominantRegion}
+                              <div className={`text-xs px-1 py-0.5 rounded-md flex items-center gap-1 ${isOutOfRegion(inspector, dayData.dominantRegion) ? 'bg-red-500 text-white' : getRegionColor(dayData.dominantRegion)}`}>
+                                {isOutOfRegion(inspector, dayData.dominantRegion) && (
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                )}
+                                <span>{dayData.dominantRegion}</span>
                               </div>
                             )}
                           </div>
@@ -608,18 +902,92 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       </div>
 
       {/* Legend */}
-      <div className="mt-4 flex items-center gap-4 text-xs text-gray-600">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-3 w-3" />
-          <span>Regional Distribution:</span>
-        </div>
-        {['Brisbane', 'Logan', 'Ipswich', 'Gold Coast', 'Sunshine Coast', 'Toowoomba'].map(region => (
-          <div key={region} className={`px-2 py-1 rounded-md ${getRegionColor(region)}`}>
-            {region}
+      <div className="mt-2 flex-shrink-0">
+        {/* Desktop - Single Row Layout */}
+        <div className="hidden lg:flex items-center gap-6 text-xs text-gray-600 overflow-x-auto py-2">
+          {/* Capacity Utilization */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Users className="h-3 w-3" />
+              <span className="font-medium">Capacity:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`px-1.5 py-0.5 rounded text-[10px] ${getCapacityColor(0)} ${getTextColor(0)}`}>0%</div>
+              <div className={`px-1.5 py-0.5 rounded text-[10px] ${getCapacityColor(20)} ${getTextColor(20)}`}>Low</div>
+              <div className={`px-1.5 py-0.5 rounded text-[10px] ${getCapacityColor(50)} ${getTextColor(50)}`}>Med</div>
+              <div className={`px-1.5 py-0.5 rounded text-[10px] ${getCapacityColor(80)} ${getTextColor(80)}`}>Good</div>
+              <div className={`px-1.5 py-0.5 rounded text-[10px] ${getCapacityColor(100)} ${getTextColor(100)}`}>Full</div>
+            </div>
           </div>
-        ))}
+          
+          <div className="w-px h-4 bg-gray-300 flex-shrink-0"></div>
+          
+          {/* Regional Distribution */}
+          <div className="flex items-center gap-3 overflow-x-auto">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <MapPin className="h-3 w-3" />
+              <span className="font-medium">Regions:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {['Brisbane', 'Logan', 'Ipswich', 'Gold Coast', 'Sunshine Coast', 'Toowoomba'].map(region => (
+                <div key={region} className={`px-1.5 py-0.5 rounded text-[10px] ${getRegionColor(region)} flex-shrink-0`}>
+                  {region.split(' ')[0]}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {/* Mobile/Tablet - Two Row Layout */}
+        <div className="lg:hidden space-y-2">
+          {/* Capacity Utilization Legend */}
+          <div className="flex items-center gap-3 text-xs text-gray-600 overflow-x-auto">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Users className="h-3 w-3" />
+              <span className="font-medium">Capacity:</span>
+            </div>
+            <div className={`px-2 py-1 rounded-md ${getCapacityColor(0)} ${getTextColor(0)} flex-shrink-0`}>0%</div>
+            <div className={`px-2 py-1 rounded-md ${getCapacityColor(20)} ${getTextColor(20)} flex-shrink-0`}>Low</div>
+            <div className={`px-2 py-1 rounded-md ${getCapacityColor(50)} ${getTextColor(50)} flex-shrink-0`}>Medium</div>
+            <div className={`px-2 py-1 rounded-md ${getCapacityColor(80)} ${getTextColor(80)} flex-shrink-0`}>Good</div>
+            <div className={`px-2 py-1 rounded-md ${getCapacityColor(100)} ${getTextColor(100)} flex-shrink-0`}>Full</div>
+          </div>
+          
+          {/* Regional Distribution Legend */}
+          <div className="flex items-center gap-3 text-xs text-gray-600 overflow-x-auto">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <MapPin className="h-3 w-3" />
+              <span className="font-medium">Regions:</span>
+            </div>
+            {['Brisbane', 'Logan', 'Ipswich', 'Gold Coast', 'Sunshine Coast', 'Toowoomba'].map(region => (
+              <div key={region} className={`px-2 py-1 rounded-md ${getRegionColor(region)} flex-shrink-0`}>
+                {region}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
       </div>
+
+      {/* Deals Console */}
+      {showDealsConsole && selectedRegionData && (
+        <DealsDebugConsole
+          isOpen={showDealsConsole}
+          onClose={handleCloseDealsConsole}
+          selectedInspector={selectedInspector === 'all' ? null : inspectors.find(i => i.id === Number(selectedInspector))}
+          inspectors={inspectors}
+          selectedDate={selectedRegionData.date}
+          inspectionActivities={selectedRegionData.inspectionActivities}
+          viewMode="grid"
+          context={{
+            regionKey: selectedRegionData.regionKey,
+            mappedRegion: selectedRegionData.mappedRegion,
+            regionType: selectedRegionData.regionType,
+            regionCenter: selectedRegionData.regionCenter,
+            source: 'availability-grid'
+          }}
+        />
+      )}
     </div>
   );
 };
