@@ -19,7 +19,7 @@ export const useRosterData = (startDate, endDate, inspectorId = null) => {
     return date.toISOString().split('T')[0];
   };
 
-  // Fetch roster data
+  // Fetch roster data with rate limiting
   const fetchRosterData = useCallback(async () => {
     if (!startDate || !endDate) return;
 
@@ -37,7 +37,10 @@ export const useRosterData = (startDate, endDate, inspectorId = null) => {
       setLastUpdated(new Date());
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching roster data:', err);
+      // Only log error if not a rate limiting issue
+      if (!err.message.includes('ERR_INSUFFICIENT_RESOURCES')) {
+        console.error('Error fetching roster data:', err);
+      }
     } finally {
       setLoading(false);
     }
@@ -149,24 +152,36 @@ export const useRosterData = (startDate, endDate, inspectorId = null) => {
     return rosterData.find(r => r.inspector_id === inspectorId && r.date === dateStr);
   }, [rosterData]);
 
-  // Initial data fetch
+  // Initial data fetch with debounce
   useEffect(() => {
-    fetchRosterData();
+    const debounceTimer = setTimeout(() => {
+      fetchRosterData();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(debounceTimer);
   }, [fetchRosterData]);
 
-  // Real-time subscription
+  // Real-time subscription (disabled temporarily to fix rate limiting)
   useEffect(() => {
+    // Temporarily disabled to prevent rate limiting issues
+    // TODO: Re-enable with proper throttling
+    /*
     const subscription = rosterApi.subscribeToRosterChanges((payload) => {
       console.log('📡 Roster change received:', payload);
       
-      // Refresh data when changes occur
-      fetchRosterData();
+      // Throttled refresh data when changes occur
+      const throttledRefresh = setTimeout(() => {
+        fetchRosterData();
+      }, 1000);
+      
+      return () => clearTimeout(throttledRefresh);
     });
 
     return () => {
       rosterApi.unsubscribeFromRosterChanges(subscription);
     };
-  }, [fetchRosterData]);
+    */
+  }, []);
 
   return {
     rosterData,

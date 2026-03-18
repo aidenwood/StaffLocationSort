@@ -111,6 +111,7 @@ const RosterCellEditor = ({
       ref={dropdownRef}
       className="absolute top-full left-0 z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 min-w-80"
       onKeyDown={handleKeyDown}
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -118,7 +119,11 @@ const RosterCellEditor = ({
             Edit Roster - {inspector.name}
           </h3>
           <button
-            onClick={onClose}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
             className="text-gray-400 hover:text-gray-600"
           >
             ✕
@@ -187,7 +192,11 @@ const RosterCellEditor = ({
 
         <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
           <button
-            onClick={onClose}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
             className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
           >
             Cancel

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roster Debug Test</title>
+    <script type="module">
+        // Quick test to see if roster functionality works
+        async function testRosterFunctionality() {
+            console.log('🧪 Testing Roster Functionality...');
+            
+            try {
+                // This will use the browser's ability to import ES modules
+                const { rosterApi } = await import('./src/lib/supabase.js');
+                
+                console.log('✅ Successfully imported rosterApi');
+                
+                // Test getting current roster data
+                const today = new Date();
+                const startDate = today.toISOString().split('T')[0];
+                const endDate = startDate;
+                
+                console.log('📅 Testing roster data retrieval...');
+                const rosterData = await rosterApi.getRosterData(startDate, endDate);
+                
+                console.log('📊 Roster data retrieved:', rosterData);
+                
+                if (rosterData.length > 0) {
+                    console.log('✅ Found existing roster entries');
+                    rosterData.forEach(entry => {
+                        console.log(`👤 ${entry.inspector_name} - ${entry.date} - ${entry.region_code} - ${entry.status}`);
+                    });
+                } else {
+                    console.log('ℹ️  No roster entries found for today');
+                }
+                
+                // Test creating a roster entry
+                console.log('📝 Testing roster creation...');
+                const testResult = await rosterApi.updateRosterAssignment(
+                    999, // Test inspector ID
+                    'Debug Test Inspector',
+                    startDate,
+                    'R01',
+                    'R01 - Brisbane/Logan/Ipswich',
+                    'working',
+                    'Debug test entry'
+                );
+                
+                if (testResult.success) {
+                    console.log('✅ Roster creation successful');
+                    
+                    // Clean up the test entry
+                    setTimeout(async () => {
+                        await rosterApi.deleteRosterAssignment(999, startDate);
+                        console.log('🧹 Test entry cleaned up');
+                    }, 2000);
+                } else {
+                    console.log('❌ Roster creation failed:', testResult.error);
+                }
+                
+            } catch (error) {
+                console.error('💥 Test failed:', error);
+            }
+        }
+        
+        // Auto-run test when page loads
+        window.addEventListener('load', testRosterFunctionality);
+        
+        // Make function globally available for manual testing
+        window.testRosterFunctionality = testRosterFunctionality;
+    </script>
+</head>
+<body>
+    <h1>Roster Debug Test</h1>
+    <p>Open browser console to see test results.</p>
+    <button onclick="testRosterFunctionality()">Run Test Again</button>
+    <p>This page tests the Supabase roster functionality.</p>
+</body>
+</html>

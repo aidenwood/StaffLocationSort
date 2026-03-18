@@ -6,6 +6,8 @@ import DatePickerDropdown from './DatePickerDropdown';
 import DealsDebugConsole from './DealsDebugConsole';
 import RosterCellEditor from './RosterCellEditor';
 import { useRosterData } from '../hooks/useRosterData';
+import { getRegionFromLabel } from '../data/regionMapping.js';
+import { fetchDealById } from '../api/pipedriveRead.js';
 
 const AvailabilityGrid = ({ pipedriveData }) => {
   const [startDate, setStartDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -19,7 +21,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
 
   // Get roster data for the current date range
   const endDate = addDays(startDate, 27); // 4 weeks
-  const { rosterData, loading: rosterLoading, updateRoster, getRosterForDate } = useRosterData(
+  const { getRosterForDate } = useRosterData(
     startDate,
     endDate
   );
@@ -59,7 +61,9 @@ const AvailabilityGrid = ({ pipedriveData }) => {
 
   // Process activities into grid data
   const gridData = useMemo(() => {
+    console.log('🔍 GRID LOADING - Activities:', allActivities?.length, 'Inspectors:', filteredInspectors?.length);
     if (!allActivities || !filteredInspectors) {
+      console.log('🔍 GRID EARLY EXIT - Missing data');
       return {};
     }
 
@@ -76,6 +80,11 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       inspectorSummary: []
     };
     
+    // DEBUG: Check if activities have labels
+    if (allActivities.length > 0) {
+      console.log('🔍 GRID LABEL CHECK:', allActivities.slice(0,3).map(a => ({id: a.id, label: a.label, subject: a.subject})));
+    }
+    
     filteredInspectors.forEach(inspector => {
       data[inspector.id] = {};
       let inspectorActivities = 0;
@@ -84,12 +93,26 @@ const AvailabilityGrid = ({ pipedriveData }) => {
         const dayString = format(day, 'yyyy-MM-dd');
         
         // Find activities for this inspector on this day
+        // Activities can have owner_id as either appId (small numbers) or Pipedrive ID (large numbers)
         const dayActivities = allActivities.filter(activity => 
-          Number(activity.owner_id) === Number(inspector.id) &&
+          (Number(activity.owner_id) === Number(inspector.id) || 
+           Number(activity.owner_id) === Number(inspector.pipedriveId)) &&
           activity.due_date === dayString &&
           !activity.done &&
           activity.due_time && activity.due_time !== '00:00:00'
         );
+        
+        // Debug activity structure to understand enrichment status
+        if (dayActivities.length > 0 && inspector.name === 'Richard Lugert' && dayString === '2026-03-26') {
+          console.log(`🔍 SAMPLE ACTIVITY DEBUG for ${inspector.name}:`, {
+            activity: dayActivities[0],
+            hasCoords: !!(dayActivities[0].coordinates?.lat || dayActivities[0].lat),
+            hasAddress: !!dayActivities[0].personAddress,
+            hasLabel: !!dayActivities[0].label,
+            label: dayActivities[0].label,
+            subject: dayActivities[0].subject
+          });
+        }
         
         if (dayActivities.length > 0) {
           inspectorActivities += dayActivities.length;
@@ -99,68 +122,34 @@ const AvailabilityGrid = ({ pipedriveData }) => {
         // Count inspections
         const count = dayActivities.length;
         
+        
         // Add to daily totals for capacity calculation
         if (!dailyTotals[dayString]) {
           dailyTotals[dayString] = 0;
         }
         dailyTotals[dayString] += count;
 
-        // Determine most common region
+        // Determine most common region based on actual inspection locations
         let dominantRegion = '';
         if (count > 0) {
           const regions = {};
           
           dayActivities.forEach(activity => {
             let region = 'Unknown';
-            let isFromLabel = false; // Track if region came from Label field
+            let confidence = 'low'; // Track confidence level: high, medium, low
             
-            // First: Use Label field if available (3-digit Pipedrive codes)
-            // TODO: Labels are returning as 3-digit codes that need translation to region names
-            // Current format: "XXX" where XXX is a 3-digit code for the region
-            if (activity.label && typeof activity.label === 'string') {
-              const label = activity.label.trim();
-              console.log(`🏷️ Found label for activity "${activity.subject}": "${label}" (3-digit code)`);
-              isFromLabel = true;
-              
-              // TODO: Replace this with proper 3-digit code to region mapping
-              if (label.includes('GOLD COAST')) region = 'Gold Coast';
-              else if (label.includes('LOGAN')) region = 'Logan';
-              else if (label.includes('IPSWICH')) region = 'Ipswich';
-              else if (label.includes('BRISBANE')) region = 'Brisbane';
-              else if (label.includes('SUNSHINE COAST')) region = 'Sunshine Coast';
-              else if (label.includes('TOOWOOMBA')) region = 'Toowoomba';
-              else {
-                // For now, display the 3-digit code as-is
-                region = `Code: ${label}`;
-              }
-              console.log(`🎯 Mapped label "${label}" to region: "${region}"`);
-            }
             
-            // Second: Use location object if available
-            if (region === 'Unknown' && activity.location) {
-              const loc = activity.location;
-              if (loc.locality) {
-                const locality = loc.locality.toLowerCase();
-                if (locality.includes('gold coast') || locality.includes('surfers paradise') || locality.includes('broadbeach')) {
-                  region = 'Gold Coast';
-                } else if (locality.includes('logan') || locality.includes('beenleigh') || locality.includes('eagleby')) {
-                  region = 'Logan';
-                } else if (locality.includes('ipswich') || locality.includes('springfield')) {
-                  region = 'Ipswich';
-                } else if (locality.includes('brisbane') || locality.includes('south bank') || locality.includes('fortitude valley')) {
-                  region = 'Brisbane';
-                } else if (locality.includes('sunshine coast') || locality.includes('caloundra') || locality.includes('maroochydore')) {
-                  region = 'Sunshine Coast';
-                } else if (locality.includes('toowoomba')) {
-                  region = 'Toowoomba';
-                }
-              }
-            }
+            // Debug logging (disabled to reduce spam)
+            // const hasCoords = !!(activity.coordinates?.lat || activity.lat);
+            // const hasAddress = !!activity.personAddress;
+            // if (hasCoords || hasAddress) {
+            //   console.log(`🔍 Activity "${activity.subject}": coords=${hasCoords}, address=${hasAddress}, label=${activity.label}`);
+            // }
             
-            // Third: Use coordinates if available
-            if (region === 'Unknown' && (activity.coordinates || (activity.lat && activity.lng) || (activity.location_lat && activity.location_lng))) {
-              const lat = activity.lat || activity.coordinates?.lat || activity.location_lat;
-              const lng = activity.lng || activity.coordinates?.lng || activity.location_lng;
+            // PRIORITY 1: Use coordinates for highest accuracy (from geocoded addresses)
+            if ((activity.coordinates?.lat && activity.coordinates?.lng) || (activity.lat && activity.lng)) {
+              const lat = activity.lat || activity.coordinates?.lat;
+              const lng = activity.lng || activity.coordinates?.lng;
               
               if (lat && lng) {
                 const regionResult = validateAddressInServiceArea(lat, lng);
@@ -170,47 +159,156 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                   if (match) {
                     const cities = match[1].split('/').map(s => s.trim());
                     region = cities[0];
+                    confidence = 'high';
                   } else {
                     region = regionResult.closestRegion.code || 'Unknown';
+                    confidence = 'high';
                   }
+                  console.log(`✅ COORDS: "${activity.subject}" -> ${region}`);
                 }
               }
             }
             
-            // Fourth: Use personAddress if available
+            // PRIORITY 2: Use person address for medium accuracy
             if (region === 'Unknown' && activity.personAddress) {
               const address = activity.personAddress.toLowerCase();
-              if (address.includes('gold coast')) region = 'Gold Coast';
-              else if (address.includes('logan')) region = 'Logan';
-              else if (address.includes('ipswich')) region = 'Ipswich';
-              else if (address.includes('brisbane')) region = 'Brisbane';
-              else if (address.includes('sunshine coast')) region = 'Sunshine Coast';
-              else if (address.includes('toowoomba')) region = 'Toowoomba';
-            }
-            
-            // Final fallback: Use inspector's home region as default
-            if (region === 'Unknown') {
-              const inspectorRegion = inspector.region || inspector.regionName || '';
-              if (inspectorRegion.includes('R01') || inspectorRegion.includes('Brisbane') || inspectorRegion.includes('Logan') || inspectorRegion.includes('Ipswich')) {
-                region = 'Brisbane/Logan'; // R01 covers multiple areas
-              } else if (inspectorRegion.includes('R03') || inspectorRegion.includes('Sunshine Coast')) {
+              if (address.includes('gold coast') || address.includes('surfers paradise') || address.includes('broadbeach')) {
+                region = 'Gold Coast';
+                confidence = 'medium';
+              } else if (address.includes('logan') || address.includes('beenleigh') || address.includes('eagleby') || address.includes('loganholme')) {
+                region = 'Logan';
+                confidence = 'medium';
+              } else if (address.includes('ipswich') || address.includes('springfield') || address.includes('redbank')) {
+                region = 'Ipswich';
+                confidence = 'medium';
+              } else if (address.includes('brisbane') || address.includes('south bank') || address.includes('fortitude valley') || address.includes('woolloongabba')) {
+                region = 'Brisbane';
+                confidence = 'medium';
+              } else if (address.includes('sunshine coast') || address.includes('caloundra') || address.includes('maroochydore') || address.includes('noosa')) {
                 region = 'Sunshine Coast';
-              } else if (inspectorRegion.includes('R04') || inspectorRegion.includes('Toowoomba')) {
+                confidence = 'medium';
+              } else if (address.includes('toowoomba') || address.includes('darling downs')) {
                 region = 'Toowoomba';
+                confidence = 'medium';
               } else {
-                region = inspectorRegion.split(' - ')[0] || 'Unknown';
+                // Extract suburb and try to map to region
+                const suburbMatch = address.match(/([a-zA-Z ]+),\s*qld|([a-zA-Z ]+)\s+qld/i);
+                if (suburbMatch) {
+                  const suburb = (suburbMatch[1] || suburbMatch[2]).trim().toLowerCase();
+                  region = `${suburb.charAt(0).toUpperCase() + suburb.slice(1)}`;
+                  confidence = 'medium';
+                }
               }
             }
             
-            // Store region with metadata about data source
-            const regionKey = isFromLabel ? region : `${region} (est)`;
+            // PRIORITY 3: Use Pipedrive label field if available  
+            if (region === 'Unknown' && activity.label) {
+              const label = String(activity.label).trim();
+              
+              // Use the proper CSV mapping
+              const mappedRegion = getRegionFromLabel(label);
+              
+              if (mappedRegion) {
+                region = mappedRegion;
+                confidence = 'high'; // CSV mapping is authoritative
+                console.log(`🏷️ ACTIVITY LABEL: Code ${label} -> ${region} for "${activity.subject}"`);
+              } else {
+                console.log(`❓ UNKNOWN ACTIVITY LABEL: Code "${label}" not found in mapping`);
+              }
+            }
+            
+            // PRIORITY 4: Use deal label from enriched data (labels are on deals, not activities)
+            if (region === 'Unknown' && activity.dealLabel) {
+              const dealLabel = String(activity.dealLabel).trim();
+              const dealMappedRegion = getRegionFromLabel(dealLabel);
+              
+              if (dealMappedRegion) {
+                region = dealMappedRegion;
+                confidence = 'high';
+                console.log(`🏢 DEAL LABEL: Code ${dealLabel} -> ${region} for deal ${activity.deal_id}`);
+              }
+            }
+            
+            // PRIORITY 5: Text matching fallback
+            if (region === 'Unknown' && activity.label) {
+              const label = String(activity.label);
+              if (label.includes('GOLD COAST')) {
+                region = 'Brisbane Metro';
+                confidence = 'low';
+              } else if (label.includes('LOGAN')) {
+                region = 'Brisbane Metro';
+                confidence = 'low';
+              } else if (label.includes('IPSWICH')) {
+                region = 'Brisbane Metro';
+                confidence = 'low';
+              } else if (label.includes('BRISBANE')) {
+                region = 'Brisbane Metro';
+                confidence = 'low';
+              } else if (label.includes('SUNSHINE COAST')) {
+                region = 'Sunshine Coast';
+                confidence = 'low';
+              } else if (label.includes('TOOWOOMBA')) {
+                region = 'Toowoomba';
+                confidence = 'low';
+              } else {
+                region = label; // Use label as-is for unmapped cases
+                confidence = 'low';
+              }
+              // console.log(`🏷️ Processed label "${label}" -> region: "${region}" (confidence: ${confidence})`);
+            }
+            
+            // PRIORITY 4: Use location object
+            if (region === 'Unknown' && activity.location?.locality) {
+              const locality = activity.location.locality.toLowerCase();
+              if (locality.includes('gold coast')) region = 'Gold Coast';
+              else if (locality.includes('logan')) region = 'Logan'; 
+              else if (locality.includes('ipswich')) region = 'Ipswich';
+              else if (locality.includes('brisbane')) region = 'Brisbane';
+              else if (locality.includes('sunshine coast')) region = 'Sunshine Coast';
+              else if (locality.includes('toowoomba')) region = 'Toowoomba';
+              else region = activity.location.locality;
+              confidence = 'low';
+            }
+            
+            // Create region key with confidence indicator
+            let regionKey;
+            if (confidence === 'high') {
+              regionKey = region; // No suffix for high confidence
+            } else if (confidence === 'medium') {
+              regionKey = region; // No suffix for medium confidence  
+            } else {
+              regionKey = `${region}`; // Keep low confidence regions as-is
+            }
+            
             regions[regionKey] = (regions[regionKey] || 0) + 1;
+            // Log final result for debugging (reduced)
+            // if (region !== 'Unknown') {
+            //   console.log(`✅ DETECTED: "${activity.subject}" -> ${region}`);
+            // } else {
+            //   // Debug why detection failed (sample only)
+            //   if (Math.random() < 0.02) { // Only 2% of failures
+            //     console.log(`❌ FAILED DETECTION SAMPLE: "${activity.subject}"`, {
+            //       label: activity.label,
+            //       labelType: typeof activity.label,
+            //       hasCoords: !!(activity.coordinates?.lat || activity.lat),
+            //       hasAddress: !!activity.personAddress
+            //     });
+            //   }
+            // }
           });
 
-          // Find most common region
-          dominantRegion = Object.keys(regions).reduce((a, b) => 
-            regions[a] > regions[b] ? a : b, Object.keys(regions)[0] || ''
-          );
+          // console.log(`📊 All regions found for ${dayString}:`, regions);
+
+          // Find most common region, prioritizing high-confidence regions
+          dominantRegion = Object.keys(regions).reduce((a, b) => {
+            // If counts are equal, prefer regions without '(est)' suffix
+            if (regions[a] === regions[b]) {
+              return !a.includes('(est)') && b.includes('(est)') ? a : b;
+            }
+            return regions[a] > regions[b] ? a : b;
+          }, Object.keys(regions)[0] || '');
+          
+          // console.log(`🎯 Selected dominant region: "${dominantRegion}" for ${dayString}`);
         }
 
         data[inspector.id][dayString] = {
@@ -562,15 +660,45 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       return regionCodeColors[region];
     }
     
-    // Only color actual Label field data
+    // Color mapping for CSV region names
     const colors = {
+      // Brisbane Metro Area
       'Brisbane': 'bg-blue-100 text-blue-800',
-      'Logan': 'bg-green-100 text-green-800',
+      'Brisbane Metro': 'bg-blue-100 text-blue-800',
+      'Logan': 'bg-green-100 text-green-800', 
       'Ipswich': 'bg-purple-100 text-purple-800',
       'Gold Coast': 'bg-yellow-100 text-yellow-800',
+      'Gold Coast/Logan': 'bg-yellow-100 text-yellow-800',
+      'Gatton': 'bg-blue-200 text-blue-900',
+      
+      // Regional QLD
       'Sunshine Coast': 'bg-orange-100 text-orange-800',
-      'Toowoomba': 'bg-red-100 text-red-800'
+      'Toowoomba': 'bg-red-100 text-red-800',
+      'Gympie': 'bg-emerald-100 text-emerald-800',
+      'Regional QLD': 'bg-emerald-100 text-emerald-800',
+      'Maryborough': 'bg-emerald-100 text-emerald-800',
+      'Warwick': 'bg-red-200 text-red-900',
+      'Stanthorpe': 'bg-red-200 text-red-900',
+      'Roma': 'bg-amber-100 text-amber-800',
+      'Kingaroy': 'bg-lime-100 text-lime-800',
+      'Emerald': 'bg-green-200 text-green-900',
+      'Rockhampton': 'bg-orange-200 text-orange-900',
+      'Gladstone': 'bg-orange-200 text-orange-900',
+      'Biloela': 'bg-orange-200 text-orange-900',
+      
+      // NSW Regions
+      'Regional East': 'bg-cyan-100 text-cyan-800',
+      'Newcastle Region': 'bg-indigo-100 text-indigo-800',
+      'Regional NSW': 'bg-slate-100 text-slate-800',
+      'Glen Innes': 'bg-cyan-100 text-cyan-800',
+      'Armidale': 'bg-cyan-100 text-cyan-800',
+      'Grafton': 'bg-cyan-100 text-cyan-800',
+      'Coffs Harbour': 'bg-cyan-100 text-cyan-800',
+      'Newcastle': 'bg-indigo-100 text-indigo-800',
+      'Port Macquarie': 'bg-cyan-200 text-cyan-900',
+      'Northern NSW': 'bg-cyan-200 text-cyan-900'
     };
+    
     return colors[region] || 'bg-gray-100 text-gray-600';
   };
 
@@ -957,7 +1085,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             <colgroup>
               <col className="w-48" />
               {weekdays.map((_, index) => (
-                <col key={index} className="w-20" />
+                <col key={index} className="w-32" />
               ))}
             </colgroup>
             {/* Header row with dates */}
@@ -969,7 +1097,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                 {weekdays.map((day, index) => (
                   <th 
                     key={index}
-                    className="w-20 h-16 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="w-32 h-24 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
                     <div>{format(day, 'EEE')}</div>
                     <div className="text-gray-400">{format(day, 'M/d')}</div>
@@ -981,7 +1109,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             {/* Total capacity row */}
             <tbody className="bg-white">
               <tr className="border-b-2 border-gray-300 bg-gray-50">
-                <td className="w-48 h-16 px-4 py-2 text-sm font-bold text-gray-900 border-r border-gray-200 sticky left-0 bg-gray-50 z-10">
+                <td className="w-48 h-24 px-4 py-2 text-sm font-bold text-gray-900 border-r border-gray-200 sticky left-0 bg-gray-50 z-10">
                   <div className="flex items-center gap-2 h-full">
                     <button
                       onClick={() => setShowRegionalBreakdown(!showRegionalBreakdown)}
@@ -1006,7 +1134,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                   return (
                     <td 
                       key={dayIndex}
-                      className="w-20 h-16 px-1 py-1 text-center border-r border-gray-100 relative cursor-pointer hover:opacity-80"
+                      className="w-32 h-24 px-1 py-1 text-center border-r border-gray-100 relative cursor-pointer hover:opacity-80"
                       title={`${format(day, 'MMM d')}: ${capacity.totalInspections}/${capacity.totalCapacity} inspections (${capacity.utilizationPercent}% utilization) - Click for deals`}
                       onClick={() => handleCapacityCellClick('Total', format(day, 'yyyy-MM-dd'), 'total')}
                     >
@@ -1036,7 +1164,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                     <React.Fragment key={regionKey}>
                       {/* Main regional row with nested dropdown */}
                       <tr className="bg-blue-50 border-b border-blue-100">
-                        <td className="w-48 h-16 px-6 py-2 text-sm font-medium text-blue-900 border-r border-blue-200 sticky left-0 bg-blue-50 z-10">
+                        <td className="w-48 h-24 px-6 py-2 text-sm font-medium text-blue-900 border-r border-blue-200 sticky left-0 bg-blue-50 z-10">
                           <div className="pl-6 flex items-center gap-2 h-full">
                             <button
                               onClick={() => setExpandedRegion(expandedRegion === regionKey ? null : regionKey)}
@@ -1063,7 +1191,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                         return (
                           <td 
                             key={dayIndex}
-                            className="w-20 h-16 px-1 py-1 text-center border-r border-blue-100 relative cursor-pointer hover:opacity-80"
+                            className="w-32 h-24 px-1 py-1 text-center border-r border-blue-100 relative cursor-pointer hover:opacity-80"
                             title={`${regionKey} - ${format(day, 'MMM d')}: ${regionalCapacity.inspections}/${regionalCapacity.capacity} inspections (${regionalCapacity.utilizationPercent}% utilization) - ${regionalCapacity.inspectors} inspectors - Click for deals`}
                             onClick={() => handleCapacityCellClick(regionKey, format(day, 'yyyy-MM-dd'), 'regional')}
                           >
@@ -1089,7 +1217,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                           .sort()
                           .map((locationKey) => (
                             <tr key={`${regionKey}-${locationKey}`} className="bg-green-50 border-b border-green-100">
-                              <td className="w-48 h-16 px-8 py-2 text-sm font-medium text-green-900 border-r border-green-200 sticky left-0 bg-green-50 z-10">
+                              <td className="w-48 h-24 px-8 py-2 text-sm font-medium text-green-900 border-r border-green-200 sticky left-0 bg-green-50 z-10">
                                 <div className="pl-8 flex items-center h-full">
                                   <div>{locationKey}</div>
                                 </div>
@@ -1101,7 +1229,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                                 return (
                                   <td 
                                     key={dayIndex}
-                                    className="w-20 h-16 px-1 py-1 text-center border-r border-green-100 relative cursor-pointer hover:opacity-80"
+                                    className="w-32 h-24 px-1 py-1 text-center border-r border-green-100 relative cursor-pointer hover:opacity-80"
                                     title={`${locationKey} on ${format(day, 'MMM d')}: ${locationCount} inspections - Click for deals`}
                                     onClick={() => handleCapacityCellClick(locationKey, format(day, 'yyyy-MM-dd'), 'location')}
                                   >
@@ -1126,7 +1254,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredInspectors.map((inspector) => (
                 <tr key={inspector.id} className="hover:bg-gray-50">
-                  <td className="w-48 h-16 px-4 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 sticky left-0 bg-white hover:bg-gray-50 z-10">
+                  <td className="w-48 h-24 px-4 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 sticky left-0 bg-white hover:bg-gray-50 z-10">
                     <div className="flex flex-col justify-center h-full">
                       <div>{inspector.name}</div>
                       <div className="text-xs text-gray-500">{inspector.region || inspector.regionName}</div>
@@ -1141,7 +1269,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                     return (
                       <td 
                         key={dayIndex}
-                        className="w-20 h-16 px-1 py-1 text-center border-r border-gray-100 relative"
+                        className="w-32 h-24 px-1 py-1 text-center border-r border-gray-100 relative"
                         title={`${inspector.name} - ${format(day, 'MMM d')}: ${dayData.count} inspections${dayData.dominantRegion ? ` in ${dayData.dominantRegion}` : ''}${isOutOfRegion(inspector, dayData.dominantRegion) ? ' - OUT OF REGION!' : ''}`}
                       >
                         <div 
@@ -1153,37 +1281,76 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                               <div className="text-lg font-bold text-gray-900">
                                 {dayData.count}
                               </div>
-                              {(existingRoster?.region_code || dayData.dominantRegion) && (
-                                <div className={`text-xs px-1 py-0.5 rounded-md flex items-center gap-1 ${
-                                  existingRoster?.status && existingRoster.status !== 'working' 
-                                    ? getStatusColor(existingRoster.status)
-                                    : isOutOfRegion(inspector, existingRoster?.region_code || dayData.dominantRegion) 
-                                      ? 'bg-red-500 text-white' 
-                                      : getRegionColor(existingRoster?.region_code || dayData.dominantRegion)
-                                }`}>
-                                  {isOutOfRegion(inspector, existingRoster?.region_code || dayData.dominantRegion) && (
-                                    <AlertTriangle className="w-2.5 h-2.5" />
-                                  )}
-                                  <span>{existingRoster?.region_code || dayData.dominantRegion}</span>
-                                </div>
-                              )}
+                              {/* Dual region pills layout */}
+                              <div className="space-y-1">
+                                {/* Supabase roster region pill */}
+                                {existingRoster?.region_code && (
+                                  <div className={`text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1 ${
+                                    existingRoster?.status && existingRoster.status !== 'working' 
+                                      ? getStatusColor(existingRoster.status)
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    <span className="font-medium">{existingRoster.region_code}</span>
+                                    <span className="text-[10px] opacity-75">ROSTERED</span>
+                                  </div>
+                                )}
+                                {/* Pipedrive detected region pill */}
+                                {(() => {
+                                  const shouldShow = dayData.dominantRegion && 
+                                    dayData.dominantRegion !== 'Unknown' &&
+                                    dayData.dominantRegion.trim() !== '';
+                                  
+                                  // Debug for missing pills (disabled to reduce spam)
+                                  // if (dayData.count > 0 && !shouldShow) {
+                                  //   console.log(`❌ MISSING PILL: ${inspector.name} on ${dayString} - count: ${dayData.count}, dominantRegion: "${dayData.dominantRegion}"`);
+                                  // }
+                                  
+                                  // Debug log for pills (minimal - we know detection works)
+                                  if (dayData.count > 0 && shouldShow && Math.random() < 0.01) {
+                                    console.log(`✅ ACTUAL pill: ${inspector.name} on ${dayString} -> ${dayData.dominantRegion}`);
+                                  }
+                                  return shouldShow;
+                                })() && (
+                                  <div 
+                                    className="text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1 bg-red-500 text-white border-4 border-black"
+                                    style={{
+                                      zIndex: 99999,
+                                      position: 'relative',
+                                      minWidth: '60px',
+                                      minHeight: '20px'
+                                    }}
+                                  >
+                                    {isOutOfRegion(inspector, dayData.dominantRegion) && (
+                                      <AlertTriangle className="w-2.5 h-2.5" />
+                                    )}
+                                    <span className="font-medium">{dayData.dominantRegion.replace(' (est)', '')}</span>
+                                    <span className="text-[10px] opacity-75">ACTUAL</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           ) : (
-                            <div className="h-full flex items-center justify-center">
+                            <div className="h-full flex flex-col items-center justify-center space-y-1">
                               {existingRoster ? (
-                                <div className={`text-xs px-2 py-1 rounded-md ${
-                                  existingRoster.status === 'working' && existingRoster.region_code
-                                    ? getRegionColor(existingRoster.region_code)
-                                    : getStatusColor(existingRoster.status)
-                                }`}>
-                                  {existingRoster.status === 'working' && existingRoster.region_code 
-                                    ? existingRoster.region_code 
-                                    : existingRoster.status === 'sick' ? 'Sick'
-                                    : existingRoster.status === 'rain' ? 'Rain'
-                                    : existingRoster.status === 'rdo' ? 'RDO'
-                                    : existingRoster.status === 'annual_leave' ? 'Leave'
-                                    : 'Available'
-                                  }
+                                <div className="space-y-1">
+                                  {/* Supabase roster region pill for non-working days */}
+                                  {existingRoster.status === 'working' && existingRoster.region_code ? (
+                                    <div className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1">
+                                      <span className="font-medium">{existingRoster.region_code}</span>
+                                      <span className="text-[10px] opacity-75">ROSTERED</span>
+                                    </div>
+                                  ) : (
+                                    <div className={`text-xs px-2 py-1 rounded-md ${
+                                      getStatusColor(existingRoster.status)
+                                    }`}>
+                                      {existingRoster.status === 'sick' ? 'Sick'
+                                      : existingRoster.status === 'rain' ? 'Rain'
+                                      : existingRoster.status === 'rdo' ? 'RDO'
+                                      : existingRoster.status === 'annual_leave' ? 'Leave'
+                                      : 'Available'
+                                      }
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="text-gray-300">-</div>
@@ -1198,7 +1365,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                               currentRegion={{ code: existingRoster?.region_code, name: existingRoster?.region_name }}
                               onClose={() => setEditingCell(null)}
                               onSave={(rosterData) => {
-                                // The hook will handle the update
+                                console.log('✅ Roster updated:', rosterData);
                                 setEditingCell(null);
                               }}
                             />

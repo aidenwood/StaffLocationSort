@@ -208,7 +208,7 @@ export const fetchActivitiesWithFilter = async (filterId, startDate = null, endD
 // Capped at 1 page (500 activities) for fast load; filters by startDate/endDate client-side
 export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, endDate = null) => {
   try {
-    const client = createPipedriveClient(true); // V2 client
+    const client = createPipedriveClient(true); // Back to V2 client
     const maxPages = 5; // Increased to get more activities
 
     console.log('🔍 Fetching activities...');
@@ -226,10 +226,10 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
         filter_id: filterId,
         limit: 500, // Max limit to get more per page
         sort_by: 'due_date',
-        sort_direction: 'desc' // ✅ FIX: Get newest first instead of 2020 activities
+        sort_direction: 'desc' // Back to v2 format
       };
 
-      if (cursor) params.cursor = cursor;
+      if (cursor) params.cursor = cursor; // v2 uses cursor
 
 
       const response = await client.get('/activities', { params });
@@ -242,6 +242,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
       allActivities.push(...activities);
       pageCount++;
 
+      // v2 pagination uses cursor
       cursor = response.data.additional_data?.next_cursor || null;
 
       console.log(`   ✅ Page ${pageCount}: ${activities.length} activities (total: ${allActivities.length})`);
@@ -286,34 +287,53 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
       });
       console.log('   📊 Activity breakdown:', typeBreakdown);
       
-      // 🏷️ DEAL LABELS: Fetch deal labels for a LIMITED set of activities to avoid rate limits
-      let labelsProcessed = 0;
+      // 🏷️ DEAL LABELS: Fetch deal labels for ALL activities with deal_id to achieve 80%+ success rate
+      console.log(`🏷️ Enriching ${filtered.length} activities with deal labels for 80%+ success rate...`);
       const labelResults = [];
-      for (let i = 0; i < Math.min(filtered.length, 20) && labelsProcessed < 5; i++) {
-        const activity = filtered[i];
-        if (activity.deal_id && labelsProcessed < 5) {
-          try {
-            // Use V1 client for deals endpoint
-            const v1Client = createPipedriveClient(false); // Force V1
-            const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
-            if (dealResponse.data.success && dealResponse.data.data && dealResponse.data.data.label) {
-              activity.label = dealResponse.data.data.label;
-              labelResults.push(`Deal ${activity.deal_id}: "${activity.label}"`);
-            }
-            labelsProcessed++;
-            
-            // Add small delay between requests to avoid hammering the API
-            if (labelsProcessed < 5) {
-              await new Promise(resolve => setTimeout(resolve, 200));
-            }
-          } catch (error) {
-            console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
+      const batchSize = 10; // Process in batches to manage rate limits
+      let totalLabelsProcessed = 0;
+      
+      for (let i = 0; i < filtered.length; i += batchSize) {
+        const batch = filtered.slice(i, i + batchSize);
+        const batchPromises = [];
+        
+        for (const activity of batch) {
+          if (activity.deal_id) {
+            const promise = (async () => {
+              try {
+                // Use V1 client for deals endpoint
+                const v1Client = createPipedriveClient(false); // Force V1
+                const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
+                if (dealResponse.data.success && dealResponse.data.data && dealResponse.data.data.label) {
+                  activity.label = dealResponse.data.data.label;
+                  activity.dealLabel = dealResponse.data.data.label; // Also add dealLabel for compatibility
+                  totalLabelsProcessed++;
+                  return `Deal ${activity.deal_id}: "${activity.label}"`;
+                }
+              } catch (error) {
+                console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
+              }
+              return null;
+            })();
+            batchPromises.push(promise);
           }
         }
+        
+        // Execute batch in parallel
+        const batchResults = await Promise.all(batchPromises);
+        labelResults.push(...batchResults.filter(Boolean));
+        
+        // Add delay between batches to respect rate limits
+        if (i + batchSize < filtered.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second between batches
+        }
+        
+        console.log(`🏷️ Batch ${Math.floor(i/batchSize) + 1}: Processed ${Math.min(batchSize, filtered.length - i)} activities, ${totalLabelsProcessed} labels found`);
       }
       
+      console.log(`🏷️ ENRICHMENT COMPLETE: ${totalLabelsProcessed}/${filtered.length} activities now have deal labels (${Math.round(totalLabelsProcessed/filtered.length*100)}%)`);
       if (labelResults.length > 0) {
-        console.log(`🏷️ Fetched ${labelResults.length} deal labels: ${labelResults.join(', ')}`);
+        console.log(`🏷️ Sample labels: ${labelResults.slice(0, 5).join(', ')}`);
       }
       
       // 🔍 DEBUG: Sample activity address analysis
@@ -325,6 +345,23 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
     return filtered;
   } catch (error) {
     handleApiError(error, 'fetchActivitiesWithFilterV2');
+    throw error;
+  }
+};
+
+// Fetch single deal by ID to get label data
+export const fetchDealById = async (dealId) => {
+  try {
+    const client = createPipedriveClient(false); // V1 client for deals
+    const response = await client.get(`/deals/${dealId}?fields=label`);
+    
+    if (!response.data.success) {
+      throw new Error(response.data.error || `Failed to fetch deal ${dealId}`);
+    }
+    
+    return response.data.data;
+  } catch (error) {
+    handleApiError(error, 'fetchDealById');
     throw error;
   }
 };
@@ -716,6 +753,9 @@ export const transformPipedriveActivity = (pipedriveActivity) => {
     deal_id: pipedriveActivity.deal_id,
     lead_id: pipedriveActivity.lead_id,
     project_id: pipedriveActivity.project_id,
+    
+    // Custom fields
+    label: pipedriveActivity.label || null,
     
     // Enriched address (from enrichActivitiesWithAddresses)
     personAddress: pipedriveActivity.personAddress || null,

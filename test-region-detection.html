@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Region Detection Debug</title>
+</head>
+<body>
+    <h1>Region Detection Debug</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        import { usePipedriveData } from './src/hooks/usePipedriveData.js';
+        import { getRegionFromLabel } from './src/data/regionMapping.js';
+        
+        const resultsDiv = document.getElementById('results');
+        
+        // Mock the hook to get data
+        async function testRegionDetection() {
+            try {
+                resultsDiv.innerHTML = '<p>Loading activities...</p>';
+                
+                // Get activities from the hook's fetch function
+                const { fetchActivitiesWithFilterV2 } = await import('./src/api/pipedriveRead.js');
+                const { PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID } = await import('./src/config/pipedriveFilters.js');
+                
+                const activities = await fetchActivitiesWithFilterV2(PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID);
+                
+                console.log('Total activities:', activities.length);
+                
+                // Check what owner_ids we have vs what inspector IDs exist
+                const { getAllInspectors } = await import('./src/config/pipedriveUsers.js');
+                const allInspectors = getAllInspectors();
+                
+                console.log('🔍 Available inspector IDs:');
+                allInspectors.forEach(inspector => {
+                    console.log(`  ID: ${inspector.id}, AppID: ${inspector.appId}, Name: ${inspector.name}`);
+                });
+                
+                const ownerIds = [...new Set(activities.map(a => a.owner_id))].filter(Boolean);
+                console.log('🔍 Activity owner_ids found:', ownerIds);
+                
+                // Debug: Show all fields in first activity
+                if (activities.length > 0) {
+                    console.log('🔍 FIRST ACTIVITY FIELDS:', Object.keys(activities[0]));
+                    console.log('🔍 FIRST ACTIVITY SAMPLE:', {
+                        id: activities[0].id,
+                        subject: activities[0].subject,
+                        label: activities[0].label,
+                        location: activities[0].location,
+                        location_lat: activities[0].location_lat,
+                        location_lng: activities[0].location_lng,
+                        org_id: activities[0].org_id,
+                        person_id: activities[0].person_id,
+                        deal_id: activities[0].deal_id
+                    });
+                }
+                
+                // Check data availability
+                let totalActivities = activities.length;
+                let withLabels = activities.filter(a => a.label && a.label !== null && a.label !== '').length;
+                let withCoords = activities.filter(a => a.location_lat && a.location_lng).length;
+                let withLocation = activities.filter(a => a.location && a.location !== null).length;
+                
+                console.log(`📊 DATA STATS:`);
+                console.log(`  Labels: ${withLabels}/${totalActivities} (${Math.round(withLabels/totalActivities*100)}%)`);
+                console.log(`  Coordinates: ${withCoords}/${totalActivities} (${Math.round(withCoords/totalActivities*100)}%)`);
+                console.log(`  Location text: ${withLocation}/${totalActivities} (${Math.round(withLocation/totalActivities*100)}%)`);
+                
+                // Show sample data
+                const sampleLabels = activities.filter(a => a.label && a.label !== null && a.label !== '').slice(0, 5).map(a => a.label);
+                const sampleLocations = activities.filter(a => a.location).slice(0, 3).map(a => a.location);
+                console.log('📋 Sample labels:', sampleLabels);
+                console.log('📍 Sample locations:', sampleLocations);
+                
+                // Group activities by inspector and date
+                const inspectorDayData = {};
+                
+                activities.forEach(activity => {
+                    if (!activity.owner_id || !activity.due_date) return;
+                    
+                    const key = `${activity.owner_id}_${activity.due_date}`;
+                    if (!inspectorDayData[key]) {
+                        inspectorDayData[key] = {
+                            owner_id: activity.owner_id,
+                            due_date: activity.due_date,
+                            activities: [],
+                            regions: {}
+                        };
+                    }
+                    
+                    inspectorDayData[key].activities.push(activity);
+                    
+                    // Detect region from multiple sources
+                    let region = 'Unknown';
+                    
+                    // Priority 1: Label field (most accurate)
+                    if (activity.label && activity.label !== null && activity.label !== '') {
+                        region = getRegionFromLabel(activity.label);
+                    }
+                    
+                    // Priority 1b: Fetch label from associated deal (labels are on deals, not activities)
+                    if (region === 'Unknown' && activity.deal_id) {
+                        // Note: This would require another API call to get deal data
+                        // For now, we'll skip this to avoid rate limiting in the test
+                    }
+                    
+                    // Priority 2: Location coordinates (if no label)
+                    if (region === 'Unknown' && activity.location_lat && activity.location_lng) {
+                        const lat = parseFloat(activity.location_lat);
+                        const lng = parseFloat(activity.location_lng);
+                        
+                        // Simple coordinate-based region detection for QLD/NSW
+                        if (lat < -28) {
+                            region = 'Brisbane Metro';
+                        } else if (lat >= -28 && lat < -25) {
+                            region = 'Regional QLD';
+                        } else if (lat >= -25) {
+                            region = 'Regional NSW';
+                        }
+                    }
+                    
+                    // Priority 3: Location text (lowest priority)
+                    if (region === 'Unknown' && activity.location) {
+                        const location = String(activity.location).toLowerCase();
+                        if (location.includes('brisbane') || location.includes('logan') || location.includes('gold coast')) {
+                            region = 'Brisbane Metro';
+                        } else if (location.includes('sunshine coast')) {
+                            region = 'Sunshine Coast';
+                        } else if (location.includes('toowoomba')) {
+                            region = 'Toowoomba';
+                        } else if (location.includes('qld')) {
+                            region = 'Regional QLD';
+                        } else if (location.includes('nsw')) {
+                            region = 'Regional NSW';
+                        }
+                    }
+                    
+                    if (region === 'Unknown') region = 'Unknown';
+                    inspectorDayData[key].regions[region] = (inspectorDayData[key].regions[region] || 0) + 1;
+                });
+                
+                // Find days with activities and calculate dominant region
+                let html = '<h2>Days with Activities and Dominant Regions</h2>';
+                let daysWithRegions = 0;
+                let daysWithUnknown = 0;
+                
+                Object.values(inspectorDayData).forEach(dayData => {
+                    if (dayData.activities.length === 0) return;
+                    
+                    // Calculate dominant region
+                    const dominantRegion = Object.keys(dayData.regions).reduce((a, b) => {
+                        return dayData.regions[a] > dayData.regions[b] ? a : b;
+                    }, Object.keys(dayData.regions)[0] || 'Unknown');
+                    
+                    if (dominantRegion !== 'Unknown') {
+                        daysWithRegions++;
+                        if (daysWithRegions <= 5) { // Show first 5
+                            html += `
+                                <div style="border: 1px solid green; margin: 5px; padding: 5px;">
+                                    <strong>✅ Inspector ${dayData.owner_id} on ${dayData.due_date}</strong><br>
+                                    Activities: ${dayData.activities.length}<br>
+                                    Dominant Region: <strong>${dominantRegion}</strong><br>
+                                    All regions: ${JSON.stringify(dayData.regions)}
+                                </div>
+                            `;
+                        }
+                    } else {
+                        daysWithUnknown++;
+                        if (daysWithUnknown <= 3) { // Show first 3 unknowns
+                            html += `
+                                <div style="border: 1px solid red; margin: 5px; padding: 5px;">
+                                    <strong>❌ Inspector ${dayData.owner_id} on ${dayData.due_date}</strong><br>
+                                    Activities: ${dayData.activities.length}<br>
+                                    Dominant Region: Unknown<br>
+                                    Sample labels: ${dayData.activities.slice(0, 3).map(a => a.label).join(', ')}
+                                </div>
+                            `;
+                        }
+                    }
+                });
+                
+                html += `
+                    <h2>Summary</h2>
+                    <div style="background: #f0f0f0; padding: 10px;">
+                        <p><strong>Total inspector-days:</strong> ${Object.keys(inspectorDayData).length}</p>
+                        <p><strong>Days with detected regions:</strong> ${daysWithRegions}</p>
+                        <p><strong>Days with unknown regions:</strong> ${daysWithUnknown}</p>
+                        <p><strong>Success rate:</strong> ${Math.round(daysWithRegions / (daysWithRegions + daysWithUnknown) * 100)}%</p>
+                    </div>
+                `;
+                
+                resultsDiv.innerHTML = html;
+                
+                console.log('Days with regions:', daysWithRegions);
+                console.log('Days with unknown:', daysWithUnknown);
+                
+            } catch (error) {
+                console.error('Test failed:', error);
+                resultsDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            }
+        }
+        
+        testRegionDetection();
+    </script>
+</body>
+</html>

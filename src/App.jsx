@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import InspectionDashboard from './components/InspectionDashboard'
 import SimpleActivityList from './components/SimpleActivityList'
 import ClientBooking from './components/ClientBooking'
 import AvailabilityGrid from './components/AvailabilityGrid'
 import { usePipedriveData } from './hooks/usePipedriveData.js'
+import { enrichActivitiesWithAddresses } from './api/pipedriveRead.js'
 
 function App() {
   const [view, setView] = useState('staff') // 'staff', 'activities', 'client', or 'grid'
@@ -13,6 +14,7 @@ function App() {
 
   // Enriched address cache - populated by SimpleActivityList, read by InspectionDashboard
   const [addressCache, setAddressCache] = useState({});
+  const [autoEnriching, setAutoEnriching] = useState(false);
 
   // Callback for SimpleActivityList to push enriched addresses up
   const onActivitiesEnriched = useCallback((enrichedActivities) => {
@@ -38,26 +40,77 @@ function App() {
     console.log(`📍 App.jsx: Cached ${withCoordinates}/${enrichedActivities.length} activities with coordinates`);
   }, []);
 
+  // Auto-enrich activities if addressCache is empty and we have activities
+  useEffect(() => {
+    const autoEnrich = async () => {
+      // Only auto-enrich if:
+      // 1. We have activities 
+      // 2. addressCache is empty
+      // 3. Not currently enriching
+      // 4. Not loading data
+      console.log('🔍 App.jsx: Auto-enrichment check:', {
+        hasActivities: pipedriveData.activities?.length > 0,
+        activitiesCount: pipedriveData.activities?.length || 0,
+        addressCacheEmpty: Object.keys(addressCache).length === 0,
+        notEnriching: !autoEnriching,
+        notLoading: !pipedriveData.loading,
+        loading: pipedriveData.loading
+      });
+
+      if (pipedriveData.activities?.length > 0 && 
+          Object.keys(addressCache).length === 0 && 
+          !autoEnriching && 
+          !pipedriveData.loading) {
+        
+        console.log('🚀 App.jsx: Auto-enriching activities for grid view...');
+        setAutoEnriching(true);
+        
+        try {
+          // Take first 50 activities for enrichment to avoid overwhelming the API
+          const activitiesToEnrich = pipedriveData.activities.slice(0, 50);
+          const enriched = await enrichActivitiesWithAddresses(activitiesToEnrich);
+          onActivitiesEnriched(enriched);
+          console.log('✅ App.jsx: Auto-enrichment completed');
+        } catch (error) {
+          console.error('❌ App.jsx: Auto-enrichment failed:', error);
+        } finally {
+          setAutoEnriching(false);
+        }
+      }
+    };
+
+    autoEnrich();
+  }, [pipedriveData.activities, pipedriveData.loading, addressCache, autoEnriching, onActivitiesEnriched]);
+
   // Merge address cache into activities for the dashboard
   const enrichedPipedriveData = useMemo(() => {
-    if (Object.keys(addressCache).length === 0) return pipedriveData;
+    console.log(`📦 App.jsx: addressCache has ${Object.keys(addressCache).length} entries`);
+    if (Object.keys(addressCache).length === 0) {
+      console.log('⚠️ App.jsx: No addressCache data, returning raw pipedriveData');
+      return pipedriveData;
+    }
+
+    const enrichedActivities = pipedriveData.activities.map(a => {
+      if (addressCache[a.id]) {
+        const enrichedData = addressCache[a.id];
+        return {
+          ...a,
+          personAddress: enrichedData.personAddress,
+          coordinates: enrichedData.coordinates,
+          lat: enrichedData.lat,
+          lng: enrichedData.lng,
+          addressSource: enrichedData.addressSource
+        };
+      }
+      return a;
+    });
+
+    const enrichedCount = enrichedActivities.filter(a => a.coordinates || a.lat).length;
+    console.log(`✅ App.jsx: Enriched ${enrichedCount}/${enrichedActivities.length} activities with coordinates`);
 
     return {
       ...pipedriveData,
-      activities: pipedriveData.activities.map(a => {
-        if (addressCache[a.id]) {
-          const enrichedData = addressCache[a.id];
-          return {
-            ...a,
-            personAddress: enrichedData.personAddress,
-            coordinates: enrichedData.coordinates,
-            lat: enrichedData.lat,
-            lng: enrichedData.lng,
-            addressSource: enrichedData.addressSource
-          };
-        }
-        return a;
-      })
+      activities: enrichedActivities
     };
   }, [pipedriveData, addressCache]);
 
