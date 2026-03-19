@@ -5,6 +5,19 @@
 [build.environment]
   NODE_VERSION = "18"
 
+[functions]
+  directory = "netlify/functions"
+
+[dev]
+  command = "npm run dev"
+  functionsPort = 8888
+
+# API proxy redirect
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
 # Redirect rules for SPA routing
 [[redirects]]
   from = "/*"

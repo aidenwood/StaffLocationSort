@@ -108,29 +108,48 @@ const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
   throw lastError;
 };
 
-// Create axios instance for Pipedrive API
+// Create axios instance for Pipedrive API via Netlify proxy
 const createPipedriveClient = (useV2 = false) => {
-  const apiKey = import.meta.env.VITE_PIPEDRIVE_API_KEY;
-  
-  if (!apiKey || apiKey === 'your_pipedrive_api_key_here') {
-    throw new Error('Pipedrive API key not configured');
-  }
+  // Check if we're in development or production
+  const isDev = import.meta.env.DEV;
+  const baseURL = isDev 
+    ? 'http://localhost:8888/.netlify/functions' 
+    : '/.netlify/functions';
 
   const client = axios.create({
-    baseURL: useV2 ? PIPEDRIVE_V2_BASE_URL : PIPEDRIVE_BASE_URL,
+    baseURL,
     timeout: 30000,
-    params: {
-      api_token: apiKey
-    },
     headers: {
       'Content-Type': 'application/json',
     }
   });
 
-  // Add retry interceptor for rate limits
+  // Override get method to use proxy
   const originalGet = client.get;
-  client.get = async (...args) => {
-    return retryWithBackoff(() => originalGet.apply(client, args));
+  client.get = async (url, config = {}) => {
+    // Convert Pipedrive API path to proxy parameters
+    const apiVersion = useV2 ? '/api/v2' : '/v1';
+    const fullPath = `${apiVersion}${url}`;
+    
+    // Build query parameters for proxy
+    const proxyParams = new URLSearchParams();
+    proxyParams.append('path', fullPath);
+    
+    // Add original query parameters
+    if (config.params) {
+      Object.entries(config.params).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          proxyParams.append(key, value);
+        }
+      });
+    }
+
+    const proxyUrl = `/pipedrive-proxy?${proxyParams.toString()}`;
+    
+    return retryWithBackoff(() => originalGet.call(client, proxyUrl, {
+      ...config,
+      params: undefined // Clear params since they're in the URL now
+    }));
   };
 
   return client;
