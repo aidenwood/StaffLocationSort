@@ -17,6 +17,59 @@
     @apply bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium py-2 px-4 rounded-lg transition-colors;
   }
   
+  /* Google Places Styling - Multiple selectors to ensure override */
+  .google-places-container gmp-place-autocomplete {
+    width: 100% !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  /* Target the outer container/wrapper */
+  .google-places-container gmp-place-autocomplete,
+  gmp-place-autocomplete {
+    background-color: transparent !important;
+    background: transparent !important;
+  }
+  
+  /* Target the input element within the shadow DOM */
+  .google-places-container gmp-place-autocomplete input,
+  .google-places-container gmp-place-autocomplete::part(input),
+  gmp-place-autocomplete input,
+  gmp-place-autocomplete::part(input) {
+    width: 100% !important;
+    padding: 12px 16px 12px 40px !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 0.5rem !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #374151 !important;
+    font-size: 14px !important;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+    outline: none !important;
+    box-sizing: border-box !important;
+  }
+  
+  .google-places-container gmp-place-autocomplete input:focus,
+  .google-places-container gmp-place-autocomplete::part(input):focus,
+  gmp-place-autocomplete input:focus,
+  gmp-place-autocomplete::part(input):focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+  }
+  
+  /* Additional fallback selectors */
+  gmp-place-autocomplete {
+    --gmp-color-primary: #3b82f6 !important;
+    --gmp-color-text: #374151 !important;
+    --gmp-color-background: #ffffff !important;
+    --gmp-color-surface: #ffffff !important;
+    --gmp-color-outline: #d1d5db !important;
+  }
+  
   .card {
     @apply bg-white rounded-lg shadow border border-gray-200 p-6;
   }

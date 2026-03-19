@@ -14,7 +14,7 @@ export default function useGooglePlaces(inputRef, options = {}) {
     ...options
   }
 
-  // Load Google Maps API script
+  // Load Google Maps API script with new Places API
   useEffect(() => {
     if (window.google && window.google.maps) {
       setIsLoaded(true)
@@ -34,18 +34,24 @@ export default function useGooglePlaces(inputRef, options = {}) {
       return
     }
 
-    // Load the script
+    // Load the script with new Places API (beta channel for PlaceAutocompleteElement)
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+    console.log('Loading Google Maps with API key:', apiKey ? 'Key present' : 'NO API KEY')
+    
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}&libraries=places`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=beta`
     script.async = true
     script.defer = true
     
     script.onload = () => {
+      console.log('Google Maps script loaded successfully')
+      console.log('Available Google Maps objects:', Object.keys(window.google.maps))
       setIsLoaded(true)
     }
     
-    script.onerror = () => {
-      console.error('Failed to load Google Maps API')
+    script.onerror = (error) => {
+      console.error('Failed to load Google Maps API:', error)
+      console.error('Script src was:', script.src)
     }
     
     document.head.appendChild(script)
@@ -61,11 +67,16 @@ export default function useGooglePlaces(inputRef, options = {}) {
 
   // Initialize services when Google Maps is loaded
   useEffect(() => {
-    if (isLoaded && window.google) {
-      autocompleteService.current = new window.google.maps.places.AutocompleteService()
-      placesService.current = new window.google.maps.places.PlacesService(
-        document.createElement('div')
-      )
+    if (isLoaded && window.google && window.google.maps && window.google.maps.places) {
+      try {
+        autocompleteService.current = new window.google.maps.places.AutocompleteService()
+        placesService.current = new window.google.maps.places.PlacesService(
+          document.createElement('div')
+        )
+      } catch (error) {
+        console.error('Failed to initialize Google Places services:', error)
+        setIsLoaded(false)
+      }
     }
   }, [isLoaded])
 

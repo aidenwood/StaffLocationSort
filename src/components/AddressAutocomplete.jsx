@@ -10,6 +10,7 @@ export default function AddressAutocomplete({
   disabled = false,
   error = null
 }) {
+  console.log('🎯 AddressAutocomplete component loaded');
   const [inputValue, setInputValue] = useState(value || '')
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)

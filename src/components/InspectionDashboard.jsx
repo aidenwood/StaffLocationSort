@@ -1117,6 +1117,13 @@ const InspectionDashboard = ({ pipedriveData }) => {
                 <Calendar className="w-3 h-3" />
                 Book
               </a>
+              <a
+                href="/#estimator"
+                className="flex items-center gap-1 px-2 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700 transition-colors"
+              >
+                <Target className="w-3 h-3" />
+                Risk Estimator
+              </a>
             </div>
             <div className="w-px h-4 bg-gray-300"></div>
             <div className="flex items-center gap-2">

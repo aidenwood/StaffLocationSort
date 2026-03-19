@@ -3,11 +3,13 @@ import InspectionDashboard from './components/InspectionDashboard'
 import SimpleActivityList from './components/SimpleActivityList'
 import ClientBooking from './components/ClientBooking'
 import AvailabilityGrid from './components/AvailabilityGrid'
+import AreaDamageEstimator from './components/AreaDamageEstimator'
 import { usePipedriveData } from './hooks/usePipedriveData.js'
 import { enrichActivitiesWithAddresses } from './api/pipedriveRead.js'
 
 function App() {
-  const [view, setView] = useState('staff') // 'staff', 'activities', 'client', or 'grid'
+  const [view, setView] = useState('staff') // 'staff', 'activities', 'client', 'grid', or 'estimator'
+  console.log('🚀 App current view:', view, 'hash:', window.location.hash);
 
   // Shared Pipedrive data - fetched once, consumed by all views
   const pipedriveData = usePipedriveData();
@@ -134,6 +136,11 @@ function App() {
     window.location.hash = '#grid'
   }
 
+  const switchToEstimator = () => {
+    setView('estimator')
+    window.location.hash = '#estimator'
+  }
+
   // Simple routing based on URL hash or view state
   React.useEffect(() => {
     const updateViewFromHash = () => {
@@ -144,6 +151,8 @@ function App() {
         setView('activities')
       } else if (hash === '#grid') {
         setView('grid')
+      } else if (hash === '#estimator') {
+        setView('estimator')
       } else {
         setView('staff') // Default to staff dashboard
       }
@@ -171,6 +180,10 @@ function App() {
 
   if (view === 'grid') {
     return <AvailabilityGrid pipedriveData={enrichedPipedriveData} />
+  }
+
+  if (view === 'estimator') {
+    return <AreaDamageEstimator />
   }
 
   // Default: Staff Dashboard view
