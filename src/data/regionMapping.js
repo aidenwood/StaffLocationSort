@@ -10,10 +10,12 @@ export const PIPEDRIVE_LABEL_TO_REGION = {
   // Queensland Regions
   '54': 'Brisbane/Logan/Ipswich/Gold Coast',  // Brisbane / Logan / Ipswich / Gold Coast - QLD
   '68': 'Sunshine Coast',                      // SUNSHINE COAST - QLD  
+  '87': 'Mackay',                             // Mackay / Andergrove / Rural View
   '89': 'Rockhampton',                         // Rockhampton, Yeppoon - QLD
   '99': 'Biloela',                             // Biloela - QLD
   '103': 'Gladstone',                          // GLADSTONE REGION - QLD
   '171': 'Maryborough',                        // Maryborough - QLD
+  '202': 'Brisbane Metro',                     // Brisbane Metro - QLD (from activity logs - not in CSV)
   '218': 'Warwick',                            // WARWICK - QLD
   '224': 'Oakey',                              // Oakey / Crowsnest / Kilcoy - QLD
   '225': 'Toowoomba',                          // Toowoomba - QLD
@@ -28,6 +30,7 @@ export const PIPEDRIVE_LABEL_TO_REGION = {
   '475': 'Goondiwindi',                        // Goondiwindi - QLD
   '485': 'Bell',                               // Bell - QLD
   '513': 'Toobeah',                           // Toobeah - QLD
+  '521': 'Regional QLD',                       // Regional QLD (from activity logs - not in CSV)
   '562': 'Emerald',                            // Emerald - QLD
   '568': 'Kingaroy',                           // KINGAROY - QLD
   '790': 'Texas',                              // TEXAS - QLD
@@ -40,15 +43,32 @@ export const PIPEDRIVE_LABEL_TO_REGION = {
   '94': 'Coffs Harbour',                       // Coffs Harbour - NSW
   '165': 'NSW Other',                          // NSW Other
   '172': 'Port Macquarie',                     // Port Macquarie - NSW
+  '177': 'Sydney Regions',                     // Sydney Regions
   '229': 'Newcastle',                          // Newcastle / Mereweather / Gwandalan - NSW
   '342': 'Aberglasslyn/Maitland',             // Aberglasslyn / Rutherford/ Maitland - NSW
   '390': 'Grenfell',                           // Grenfell - NSW
   '416': 'Cowra',                              // COWRA - NSW
   '486': 'Dubbo',                              // Dubbo - NSW
-  '570': 'Glen Innes',                         // GLEN INNES - NSW ⭐ This is the one we've been seeing!
+  '570': 'Glen Innes',                         // GLEN INNES - NSW
   '573': 'Grafton',                            // Grafton - NSW
   '578': 'Armidale',                           // ARMIDALE - NSW
-  '636': 'Harden'                              // Harden - NSW
+  '636': 'Harden',                             // Harden - NSW
+  '875': 'Tamworth',                           // Tamworth
+
+  // Other Regions
+  '287': 'Out Of Area',                        // Out Of Area/Other
+  '323': 'Victoria',                           // Victoria
+  '484': 'Bendigo',                            // Bendigo
+  '857': 'Australia Wide',                     // Australia Wide
+
+  // Special/System Labels (usually filtered out)
+  '305': 'Real Estate Deal',                   // Real Estate Deal
+  '430': 'Harry BDM',                          // Harry BDM
+  '560': 'Test/Fake',                          // Test/Fake
+  '603': 'No Address',                         // No Address
+  '924': 'VIP Partnership Lead',               // VIP - PARTNERSHIP LEAD
+  '948': 'Urgent Make Safe',                   // URGENT - MAKE SAFE REQ
+  '971': 'Gym'                                // gym
 };
 
 /**
@@ -59,6 +79,7 @@ export const REGION_GROUPINGS = {
   // Brisbane Metro
   'Brisbane/Logan/Ipswich/Gold Coast': 'Brisbane Metro',
   'Brisbane': 'Brisbane Metro',
+  'Brisbane Metro': 'Brisbane Metro', // Keep Brisbane Metro as-is
   'Ipswich': 'Brisbane Metro', 
   'Gold Coast/Logan': 'Brisbane Metro',
   'Logan': 'Brisbane Metro',
@@ -66,35 +87,59 @@ export const REGION_GROUPINGS = {
   'Gatton': 'Brisbane Metro',
   'Moreton Region': 'Brisbane Metro',
   'Burpengary/Caboolture': 'Brisbane Metro',
+  'Oakey': 'Brisbane Metro',
 
   // Regional QLD
   'Sunshine Coast': 'Sunshine Coast',
   'Toowoomba': 'Toowoomba',
-  'Gympie': 'Regional QLD',
-  'Maryborough': 'Regional QLD',
   'Warwick': 'Toowoomba',
   'Stanthorpe': 'Toowoomba',
+  'Gympie': 'Regional QLD',
+  'Maryborough': 'Regional QLD',
   'Roma': 'Regional QLD',
   'Kingaroy': 'Regional QLD',
   'Emerald': 'Regional QLD',
   'Rockhampton': 'Regional QLD',
   'Gladstone': 'Regional QLD',
   'Biloela': 'Regional QLD',
+  'Mackay': 'Regional QLD',
+  'Tara': 'Regional QLD',
+  'Goondiwindi': 'Regional QLD',
+  'Bell': 'Regional QLD',
+  'Toobeah': 'Regional QLD',
+  'Texas': 'Regional QLD',
+  'Regional QLD': 'Regional QLD', // Keep Regional QLD as-is
 
-  // NSW
+  // NSW East Coast
   'Glen Innes': 'Regional East',
   'Armidale': 'Regional East', 
   'Grafton': 'Regional East',
   'Coffs Harbour': 'Regional East',
-  'Newcastle': 'Newcastle Region',
-  'Aberglasslyn/Maitland': 'Newcastle Region',
   'Port Macquarie': 'Regional East',
   'Northern NSW': 'Regional East',
-  'NSW Other': 'Regional East',
+
+  // Newcastle Region
+  'Newcastle': 'Newcastle Region',
+  'Aberglasslyn/Maitland': 'Newcastle Region',
+
+  // Sydney and Metro NSW
+  'Sydney Regions': 'Sydney Metro',
+
+  // Regional NSW Inland
   'Dubbo': 'Regional NSW',
   'Cowra': 'Regional NSW',
   'Grenfell': 'Regional NSW',
-  'Harden': 'Regional NSW'
+  'Harden': 'Regional NSW',
+  'Tamworth': 'Regional NSW',
+  'NSW Other': 'Regional NSW',
+
+  // Other States
+  'Victoria': 'Victoria',
+  'Bendigo': 'Victoria',
+
+  // Special Categories
+  'Out Of Area': 'Out Of Area',
+  'Australia Wide': 'Australia Wide'
 };
 
 /**

@@ -171,30 +171,47 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             // PRIORITY 2: Use person address for medium accuracy
             if (region === 'Unknown' && activity.personAddress) {
               const address = activity.personAddress.toLowerCase();
-              if (address.includes('gold coast') || address.includes('surfers paradise') || address.includes('broadbeach')) {
+              if (address.includes('gold coast') || address.includes('surfers paradise') || address.includes('broadbeach') || address.includes('southport') || address.includes('burleigh')) {
                 region = 'Gold Coast';
                 confidence = 'medium';
-              } else if (address.includes('logan') || address.includes('beenleigh') || address.includes('eagleby') || address.includes('loganholme')) {
+              } else if (address.includes('logan') || address.includes('beenleigh') || address.includes('eagleby') || address.includes('loganholme') || address.includes('marsden') || address.includes('woodridge')) {
                 region = 'Logan';
                 confidence = 'medium';
-              } else if (address.includes('ipswich') || address.includes('springfield') || address.includes('redbank')) {
+              } else if (address.includes('ipswich') || address.includes('springfield') || address.includes('redbank') || address.includes('goodna') || address.includes('booval')) {
                 region = 'Ipswich';
                 confidence = 'medium';
-              } else if (address.includes('brisbane') || address.includes('south bank') || address.includes('fortitude valley') || address.includes('woolloongabba')) {
-                region = 'Brisbane';
+              } else if (address.includes('brisbane') || address.includes('south bank') || address.includes('fortitude valley') || address.includes('woolloongabba') || address.includes('milton') || address.includes('paddington') || address.includes('toowong') || address.includes('newstead')) {
+                region = 'Brisbane Metro';
                 confidence = 'medium';
-              } else if (address.includes('sunshine coast') || address.includes('caloundra') || address.includes('maroochydore') || address.includes('noosa')) {
+              } else if (address.includes('sunshine coast') || address.includes('caloundra') || address.includes('maroochydore') || address.includes('noosa') || address.includes('nambour') || address.includes('buderim') || address.includes('mooloolaba')) {
                 region = 'Sunshine Coast';
                 confidence = 'medium';
-              } else if (address.includes('toowoomba') || address.includes('darling downs')) {
+              } else if (address.includes('toowoomba') || address.includes('darling downs') || address.includes('highfields') || address.includes('rangeville')) {
                 region = 'Toowoomba';
+                confidence = 'medium';
+              } else if (address.includes('gympie') || address.includes('cooroy') || address.includes('pomona')) {
+                region = 'Regional QLD';
+                confidence = 'medium';
+              } else if (address.includes('maryborough') || address.includes('hervey bay') || address.includes('urangan')) {
+                region = 'Regional QLD';
                 confidence = 'medium';
               } else {
                 // Extract suburb and try to map to region
                 const suburbMatch = address.match(/([a-zA-Z ]+),\s*qld|([a-zA-Z ]+)\s+qld/i);
                 if (suburbMatch) {
                   const suburb = (suburbMatch[1] || suburbMatch[2]).trim().toLowerCase();
-                  region = `${suburb.charAt(0).toUpperCase() + suburb.slice(1)}`;
+                  
+                  // Try to map common suburbs to regions
+                  if (suburb.includes('gympie') || suburb.includes('cooroy')) {
+                    region = 'Regional QLD';
+                  } else if (suburb.includes('maryborough') || suburb.includes('hervey')) {
+                    region = 'Regional QLD';
+                  } else if (suburb.includes('warwick') || suburb.includes('stanthorpe')) {
+                    region = 'Toowoomba';
+                  } else {
+                    // Default to suburb name if we can't map it
+                    region = `${suburb.charAt(0).toUpperCase() + suburb.slice(1)}`;
+                  }
                   confidence = 'medium';
                 }
               }
@@ -204,15 +221,26 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             if (region === 'Unknown' && activity.label) {
               const label = String(activity.label).trim();
               
-              // Use the proper CSV mapping
-              const mappedRegion = getRegionFromLabel(label);
+              // Skip internal notes format (e.g., "Property Inspection ACTUAL - Scott")
+              const isInternalNote = label.includes('ACTUAL') || 
+                                   label.includes('Property Inspection') ||
+                                   label.includes(' - ') || // Contains person names
+                                   label.length > 10 || // Label codes should be short
+                                   /[a-zA-Z]{3,}/.test(label); // Contains words (not just numbers)
               
-              if (mappedRegion) {
-                region = mappedRegion;
-                confidence = 'high'; // CSV mapping is authoritative
-                console.log(`🏷️ ACTIVITY LABEL: Code ${label} -> ${region} for "${activity.subject}"`);
+              if (!isInternalNote) {
+                // Use the proper CSV mapping for numeric codes only
+                const mappedRegion = getRegionFromLabel(label);
+                
+                if (mappedRegion) {
+                  region = mappedRegion;
+                  confidence = 'high'; // CSV mapping is authoritative
+                  console.log(`🏷️ ACTIVITY LABEL: Code ${label} -> ${region} for "${activity.subject}"`);
+                } else {
+                  console.log(`❓ UNKNOWN ACTIVITY LABEL: Code "${label}" not found in mapping`);
+                }
               } else {
-                console.log(`❓ UNKNOWN ACTIVITY LABEL: Code "${label}" not found in mapping`);
+                console.log(`🚫 SKIPPED INTERNAL NOTE: "${label}" for "${activity.subject}"`);
               }
             }
             
@@ -435,7 +463,14 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             console.log('🏷️ Label is object:', activity.label);
           }
           
-          if (labelValue) {
+          // Skip internal notes format (e.g., "Property Inspection ACTUAL - Scott")
+          const isInternalNote = labelValue.includes('ACTUAL') || 
+                               labelValue.includes('Property Inspection') ||
+                               labelValue.includes(' - ') || // Contains person names
+                               labelValue.length > 10 || // Label codes should be short
+                               /[a-zA-Z]{3,}/.test(labelValue); // Contains words (not just numbers)
+          
+          if (labelValue && !isInternalNote) {
             isFromLabel = true;
             console.log('🔍 Processing label value:', labelValue);
             

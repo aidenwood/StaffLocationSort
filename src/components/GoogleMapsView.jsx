@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { format, addDays, subDays } from 'date-fns';
-import { Clock, MapPin, Navigation, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Clock, MapPin, Navigation, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { 
   getActivitiesByInspector, 
   getInspectorById, 
@@ -725,6 +725,37 @@ const GoogleMapsView = ({
     return filtered;
   }, [selectedInspector, selectedDate, activities, enrichedDayActivities]);
 
+  // Function to generate Google Maps URL with route
+  const generateMapsURL = useCallback(() => {
+    if (!todaysAppointments || todaysAppointments.length === 0) return null;
+    
+    // Filter appointments with valid addresses
+    const appointmentsWithAddresses = todaysAppointments.filter(apt => 
+      apt.personAddress || apt.location
+    );
+    
+    if (appointmentsWithAddresses.length === 0) return null;
+    
+    const origin = encodeURIComponent(appointmentsWithAddresses[0].personAddress || appointmentsWithAddresses[0].location);
+    const destination = encodeURIComponent(
+      appointmentsWithAddresses[appointmentsWithAddresses.length - 1].personAddress || 
+      appointmentsWithAddresses[appointmentsWithAddresses.length - 1].location
+    );
+    
+    // Create waypoints for intermediate addresses - each as separate URL segment
+    const waypoints = appointmentsWithAddresses.slice(1, -1)
+      .map(apt => encodeURIComponent(apt.personAddress || apt.location));
+    
+    // Build URL with each address as a separate segment
+    let url = `https://www.google.com/maps/dir/${origin}`;
+    waypoints.forEach(waypoint => {
+      url += `/${waypoint}`;
+    });
+    url += `/${destination}`;
+    
+    return url;
+  }, [todaysAppointments]);
+
   const inspector = selectedInspector ? getInspectorById(selectedInspector) : null;
 
   const handleRouteCalculated = useCallback((driveTimeMinutes) => {
@@ -778,14 +809,13 @@ const GoogleMapsView = ({
           )}
         </div>
         
-        {inspector && (
-          <div className="flex items-center gap-4 text-sm text-gray-600">
-            <div className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-              <span>{inspector.name}</span>
-            </div>
-            <span>•</span>
-            <span>{todaysAppointments.length} appointments</span>
+        <div className="flex items-center gap-4 text-sm text-gray-600">
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+            <span>{inspector ? inspector.name : 'All Inspectors'}</span>
+          </div>
+          <span>•</span>
+          <span>{todaysAppointments.length} appointments</span>
             {isGeocoding && (
               <>
                 <span>•</span>
@@ -802,10 +832,23 @@ const GoogleMapsView = ({
                   <Navigation className="w-3 h-3" />
                   <span>{Math.floor(totalDriveTime / 60)}h {totalDriveTime % 60}m drive time</span>
                 </div>
+                <span>•</span>
+                <button
+                  onClick={() => {
+                    const mapsURL = generateMapsURL();
+                    if (mapsURL) {
+                      window.open(mapsURL, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  title="Open route in Google Maps app"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open in Maps
+                </button>
               </>
             )}
-          </div>
-        )}
+        </div>
       </div>
 
       <div className="flex-1">

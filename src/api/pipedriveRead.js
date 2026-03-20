@@ -323,13 +323,35 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
           activity.dealLabel = activity.deal.title;
           totalLabelsProcessed++;
         } else if (activity.subject) {
-          // Use activity subject as fallback
-          activity.label = activity.subject;
-          activity.dealLabel = activity.subject;
-        } else if (activity.deal_id) {
-          // Last resort: use deal ID
-          activity.label = `Deal #${activity.deal_id}`;
-          activity.dealLabel = `Deal #${activity.deal_id}`;
+          // Smart extraction: Try to extract region code from subject line
+          // Look for patterns like "ACTUAL - LocationCode" or "locationCode - inspector"
+          const subject = activity.subject;
+          
+          // Try to extract a 3-digit code from the subject
+          const codeMatch = subject.match(/(\d{3})/);
+          if (codeMatch) {
+            activity.label = codeMatch[1];
+            activity.dealLabel = codeMatch[1];
+            totalLabelsProcessed++;
+          } else {
+            // Try to extract location keywords from subject
+            const locationKeywords = [
+              'Sunshine Coast', 'Gold Coast', 'Brisbane', 'Logan', 'Ipswich',
+              'Toowoomba', 'Gympie', 'Maryborough', 'Newcastle', 'Grafton',
+              'Armidale', 'Glen Innes', 'Coffs', 'Warwick', 'Stanthorpe'
+            ];
+            
+            for (const keyword of locationKeywords) {
+              if (subject.toLowerCase().includes(keyword.toLowerCase())) {
+                activity.label = keyword;
+                activity.dealLabel = keyword;
+                totalLabelsProcessed++;
+                break;
+              }
+            }
+          }
+          
+          // Don't use the full subject as fallback - only extracted region info
         }
       });
       
