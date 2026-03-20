@@ -246,6 +246,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
         limit: 500, // Max limit to get more per page
         sort_by: 'due_date',
         sort_direction: 'desc' // Back to v2 format
+        // Note: v2 API doesn't support 'fields' parameter, deal data is included by default
       };
 
       if (cursor) params.cursor = cursor; // v2 uses cursor
@@ -306,53 +307,38 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
       });
       console.log('   📊 Activity breakdown:', typeBreakdown);
       
-      // 🏷️ DEAL LABELS: Fetch deal labels for ALL activities with deal_id to achieve 80%+ success rate
-      console.log(`🏷️ Enriching ${filtered.length} activities with deal labels for 80%+ success rate...`);
-      const labelResults = [];
-      const batchSize = 10; // Process in batches to manage rate limits
+      // 🏷️ DEAL LABELS: Extract deal labels from included deal data
+      console.log(`🏷️ Processing deal labels from activity data...`);
       let totalLabelsProcessed = 0;
       
-      for (let i = 0; i < filtered.length; i += batchSize) {
-        const batch = filtered.slice(i, i + batchSize);
-        const batchPromises = [];
-        
-        for (const activity of batch) {
-          if (activity.deal_id) {
-            const promise = (async () => {
-              try {
-                // Use V1 client for deals endpoint
-                const v1Client = createPipedriveClient(false); // Force V1
-                const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
-                if (dealResponse.data.success && dealResponse.data.data && dealResponse.data.data.label) {
-                  activity.label = dealResponse.data.data.label;
-                  activity.dealLabel = dealResponse.data.data.label; // Also add dealLabel for compatibility
-                  totalLabelsProcessed++;
-                  return `Deal ${activity.deal_id}: "${activity.label}"`;
-                }
-              } catch (error) {
-                console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
-              }
-              return null;
-            })();
-            batchPromises.push(promise);
-          }
+      filtered.forEach(activity => {
+        // Check if deal data was included in the response
+        if (activity.deal && activity.deal.label) {
+          activity.label = activity.deal.label;
+          activity.dealLabel = activity.deal.label;
+          totalLabelsProcessed++;
+        } else if (activity.deal && activity.deal.title) {
+          // Fallback to deal title if label not available
+          activity.label = activity.deal.title;
+          activity.dealLabel = activity.deal.title;
+          totalLabelsProcessed++;
+        } else if (activity.subject) {
+          // Use activity subject as fallback
+          activity.label = activity.subject;
+          activity.dealLabel = activity.subject;
+        } else if (activity.deal_id) {
+          // Last resort: use deal ID
+          activity.label = `Deal #${activity.deal_id}`;
+          activity.dealLabel = `Deal #${activity.deal_id}`;
         }
-        
-        // Execute batch in parallel
-        const batchResults = await Promise.all(batchPromises);
-        labelResults.push(...batchResults.filter(Boolean));
-        
-        // Add delay between batches to respect rate limits
-        if (i + batchSize < filtered.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second between batches
-        }
-        
-        console.log(`🏷️ Batch ${Math.floor(i/batchSize) + 1}: Processed ${Math.min(batchSize, filtered.length - i)} activities, ${totalLabelsProcessed} labels found`);
-      }
+      });
       
       console.log(`🏷️ ENRICHMENT COMPLETE: ${totalLabelsProcessed}/${filtered.length} activities now have deal labels (${Math.round(totalLabelsProcessed/filtered.length*100)}%)`);
-      if (labelResults.length > 0) {
-        console.log(`🏷️ Sample labels: ${labelResults.slice(0, 5).join(', ')}`);
+      
+      // Show sample labels
+      const sampleLabels = filtered.filter(a => a.label).slice(0, 5).map(a => a.label);
+      if (sampleLabels.length > 0) {
+        console.log(`🏷️ Sample labels: ${sampleLabels.join(', ')}`);
       }
       
       // 🔍 DEBUG: Sample activity address analysis
@@ -368,22 +354,6 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
   }
 };
 
-// Fetch single deal by ID to get label data
-export const fetchDealById = async (dealId) => {
-  try {
-    const client = createPipedriveClient(false); // V1 client for deals
-    const response = await client.get(`/deals/${dealId}?fields=label`);
-    
-    if (!response.data.success) {
-      throw new Error(response.data.error || `Failed to fetch deal ${dealId}`);
-    }
-    
-    return response.data.data;
-  } catch (error) {
-    handleApiError(error, 'fetchDealById');
-    throw error;
-  }
-};
 
 // Error handling wrapper
 const handleApiError = (error, operation) => {
@@ -539,29 +509,17 @@ export const fetchPersonAddressForActivity = async (activity) => {
     // First try to get person directly from activity
     let personId = activity.person_id;
     
-    // If no person_id but has deal_id, get person from deal and also get label
+    // Use deal data already included in activity response (no API calls needed)
     let dealLabel = null;
-    if (!personId && activity.deal_id) {
-      const v1Client = createPipedriveClient(false); // Force V1 for deals
-      const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
-      if (dealResponse.data.success && dealResponse.data.data) {
-        const dealData = dealResponse.data.data;
-        if (dealData.person_id) {
-          personId = dealData.person_id;
-        }
-        dealLabel = dealData.label;
-      }
-    } else if (activity.deal_id) {
-      // Even if we have person_id, still fetch deal label
-      try {
-        const v1Client = createPipedriveClient(false); // Force V1 for deals
-        const dealResponse = await v1Client.get(`/deals/${activity.deal_id}?fields=label`);
-        if (dealResponse.data.success && dealResponse.data.data.label) {
-          dealLabel = dealResponse.data.data.label;
-        }
-      } catch (error) {
-        console.warn(`Could not fetch deal label for deal ${activity.deal_id}:`, error.message);
-      }
+    if (activity.deal && activity.deal.label) {
+      dealLabel = activity.deal.label;
+    } else if (activity.deal && activity.deal.title) {
+      dealLabel = activity.deal.title;
+    }
+    
+    // Try to get person_id from deal data if not directly available
+    if (!personId && activity.deal && activity.deal.person_id) {
+      personId = activity.deal.person_id;
     }
     
     // If we have a person_id, fetch their address

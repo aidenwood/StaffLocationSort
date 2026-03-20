@@ -488,14 +488,24 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         }
 
         // Create waypoints from appointments (excluding first and last)
-        const intermediates = geocodedAppointments.slice(1, -1).map(appointment => ({
-          location: {
-            latLng: appointment.coordinates
-          }
-        }));
+        const intermediates = geocodedAppointments.slice(1, -1)
+          .filter(appointment => appointment?.coordinates?.lat && appointment?.coordinates?.lng)
+          .map(appointment => ({
+            location: {
+              latLng: appointment.coordinates
+            }
+          }));
 
-        const origin = geocodedAppointments[0].coordinates;
-        const destination = geocodedAppointments[geocodedAppointments.length - 1].coordinates;
+        const origin = geocodedAppointments[0]?.coordinates;
+        const destination = geocodedAppointments[geocodedAppointments.length - 1]?.coordinates;
+        
+        // Validate coordinates before proceeding
+        if (!origin || !destination || 
+            typeof origin.lat !== 'number' || typeof origin.lng !== 'number' ||
+            typeof destination.lat !== 'number' || typeof destination.lng !== 'number') {
+          console.warn('⚠️ Invalid coordinates for route calculation:', { origin, destination });
+          return;
+        }
 
         const request = {
           origin: {
@@ -577,13 +587,23 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
         const directionsService = new window.google.maps.DirectionsService();
         
         // Create waypoints from appointments (excluding first and last)
-        const waypoints = geocodedAppointments.slice(1, -1).map(appointment => ({
-          location: appointment.coordinates,
-          stopover: true
-        }));
+        const waypoints = geocodedAppointments.slice(1, -1)
+          .filter(appointment => appointment?.coordinates?.lat && appointment?.coordinates?.lng)
+          .map(appointment => ({
+            location: appointment.coordinates,
+            stopover: true
+          }));
 
-        const origin = geocodedAppointments[0].coordinates;
-        const destination = geocodedAppointments[geocodedAppointments.length - 1].coordinates;
+        const origin = geocodedAppointments[0]?.coordinates;
+        const destination = geocodedAppointments[geocodedAppointments.length - 1]?.coordinates;
+        
+        // Validate coordinates before proceeding
+        if (!origin || !destination || 
+            typeof origin.lat !== 'number' || typeof origin.lng !== 'number' ||
+            typeof destination.lat !== 'number' || typeof destination.lng !== 'number') {
+          console.warn('⚠️ Invalid coordinates for route calculation in fallback:', { origin, destination });
+          return;
+        }
 
         directionsService.route({
           origin,

@@ -7,7 +7,6 @@ import DealsDebugConsole from './DealsDebugConsole';
 import RosterCellEditor from './RosterCellEditor';
 import { useRosterData } from '../hooks/useRosterData';
 import { getRegionFromLabel } from '../data/regionMapping.js';
-import { fetchDealById } from '../api/pipedriveRead.js';
 
 const AvailabilityGrid = ({ pipedriveData }) => {
   const [startDate, setStartDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
