@@ -21,6 +21,30 @@ const DealsDebugConsole = ({
   onDealsUpdate = () => {}, // Callback to update deals shown on map
   context = null // Context from time slot button (timeSlot, date, radius, etc.)
 }) => {
+  
+  // Get distance-based color scheme - bright purple for close, fading for distant
+  const getDistanceColor = (distance) => {
+    if (!distance) return 'bg-gray-100 text-gray-600';
+    
+    if (distance <= 1) return 'bg-purple-600 text-white'; // Bright purple for 1km
+    if (distance <= 2.5) return 'bg-purple-500 text-white opacity-90'; // Slightly less intense
+    if (distance <= 5) return 'bg-purple-400 text-white opacity-80'; // Medium purple
+    if (distance <= 10) return 'bg-purple-300 text-purple-900 opacity-70'; // Light purple with dark text
+    if (distance <= 15) return 'bg-purple-200 text-purple-800 opacity-60'; // Very light purple
+    if (distance <= 30) return 'bg-purple-100 text-purple-700 opacity-50'; // Barely purple
+    return 'bg-gray-100 text-gray-600 opacity-40'; // Very muted for far distances
+  };
+
+  // Get card border/background for distance-based highlighting
+  const getCardDistanceStyle = (deal) => {
+    const distance = deal.distanceInfo?.minDistance;
+    if (!distance) return 'border border-gray-200 bg-white';
+    
+    if (distance <= 1) return 'border-2 border-purple-600 bg-purple-50 shadow-md'; // Strong highlight for closest
+    if (distance <= 2.5) return 'border-2 border-purple-500 bg-purple-50'; // Medium highlight  
+    if (distance <= 5) return 'border border-purple-400 bg-purple-50/50'; // Light highlight
+    return 'border border-gray-200 bg-white'; // Default for distant deals
+  };
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -426,7 +450,7 @@ const DealsDebugConsole = ({
                 <button
                   onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 1 ? null : 1)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
-                    selectedDistanceFilter === 1 ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                    selectedDistanceFilter === 1 ? 'bg-purple-600 text-white shadow-md' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'
                   }`}
                 >
                   1km ({distanceStats?.within_1km || 0})
@@ -434,7 +458,7 @@ const DealsDebugConsole = ({
                 <button
                   onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 2.5 ? null : 2.5)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
-                    selectedDistanceFilter === 2.5 ? 'bg-sky-500 text-white' : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
+                    selectedDistanceFilter === 2.5 ? 'bg-purple-500 text-white shadow-md' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                   }`}
                 >
                   2.5km ({distanceStats?.within_2_5km || 0})
@@ -442,7 +466,7 @@ const DealsDebugConsole = ({
                 <button
                   onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 5 ? null : 5)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
-                    selectedDistanceFilter === 5 ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'
+                    selectedDistanceFilter === 5 ? 'bg-purple-400 text-white shadow-md' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                   }`}
                 >
                   5km ({distanceStats?.within_5km || 0})
@@ -450,7 +474,7 @@ const DealsDebugConsole = ({
                 <button
                   onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 10 ? null : 10)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
-                    selectedDistanceFilter === 10 ? 'bg-yellow-600 text-white' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                    selectedDistanceFilter === 10 ? 'bg-purple-300 text-purple-900 shadow-md' : 'bg-purple-100 text-purple-600 hover:bg-purple-200'
                   }`}
                 >
                   10km ({distanceStats?.within_10km || 0})
@@ -458,7 +482,7 @@ const DealsDebugConsole = ({
                 <button
                   onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 15 ? null : 15)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
-                    selectedDistanceFilter === 15 ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                    selectedDistanceFilter === 15 ? 'bg-purple-200 text-purple-800 shadow-md' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
                   }`}
                 >
                   15km ({distanceStats?.within_15km || 0})
@@ -466,7 +490,7 @@ const DealsDebugConsole = ({
                 <button
                   onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 30 ? null : 30)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
-                    selectedDistanceFilter === 30 ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                    selectedDistanceFilter === 30 ? 'bg-purple-100 text-purple-700 shadow-md' : 'bg-gray-100 text-purple-500 hover:bg-purple-50'
                   }`}
                 >
                   30km ({distanceStats?.within_30km || 0})
@@ -616,7 +640,7 @@ const DealsDebugConsole = ({
           ) : (
             <div className="grid gap-4">
               {filteredDeals.map((deal, index) => (
-                <div key={deal.id || index} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                <div key={deal.id || index} className={`${getCardDistanceStyle(deal)} rounded-lg p-3 hover:shadow-md transition-all duration-200`}>
                   {/* Title Row */}
                   <div className="mb-2">
                     <h3 className="font-medium text-gray-900 text-sm leading-tight">{deal.title}</h3>
@@ -663,7 +687,7 @@ const DealsDebugConsole = ({
                       )}
                       
                       {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
-                        <span className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded flex items-center gap-1">
+                        <span className={`px-1.5 py-0.5 text-xs rounded flex items-center gap-1 font-medium ${getDistanceColor(deal.distanceInfo.minDistance)}`}>
                           <Navigation className="w-2.5 h-2.5" />
                           {deal.distanceInfo.minDistance.toFixed(1)}km
                         </span>

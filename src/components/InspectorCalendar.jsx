@@ -672,34 +672,34 @@ const InspectorCalendar = ({
                                             const within30km = counts?.within30km || 0;
                                             const radiusText = counts?.radiusText || '';
                                             
-                                            // Determine display count, color, and radius (vibrant purple for 1km, then existing colors)
+                                            // Determine display count, color, and radius (purple gradient system)
                                             let displayCount = 0;
-                                            let colorClass = "bg-purple-600 hover:bg-purple-700"; // Vibrant purple for 1km
+                                            let colorClass = "bg-purple-600 hover:bg-purple-700"; // Bright purple for 1km
                                             let selectedRadius = null;
                                             
                                             if (within1km > 0) {
                                               displayCount = within1km;
-                                              colorClass = "bg-purple-600 hover:bg-purple-700"; // Vibrant purple for 1km
+                                              colorClass = "bg-purple-600 hover:bg-purple-700 text-white shadow-md"; // Bright purple for 1km
                                               selectedRadius = 1;
                                             } else if (within2_5km > 0) {
                                               displayCount = within2_5km;
-                                              colorClass = "bg-sky-500 hover:bg-sky-600"; // Light blue for 2.5km
+                                              colorClass = "bg-purple-500 hover:bg-purple-600 text-white"; // Medium purple for 2.5km
                                               selectedRadius = 2.5;
                                             } else if (within5km > 0) {
                                               displayCount = within5km;
-                                              colorClass = "bg-green-600 hover:bg-green-700"; // Green for 5km
+                                              colorClass = "bg-purple-400 hover:bg-purple-500 text-white"; // Light purple for 5km
                                               selectedRadius = 5;
                                             } else if (within10km > 0) {
                                               displayCount = within10km;
-                                              colorClass = "bg-yellow-600 hover:bg-yellow-700"; // Yellow for 10km
+                                              colorClass = "bg-purple-300 hover:bg-purple-400 text-purple-900"; // Very light purple for 10km
                                               selectedRadius = 10;
                                             } else if (within15km > 0) {
                                               displayCount = within15km;
-                                              colorClass = "bg-orange-600 hover:bg-orange-700"; // Orange for 15km
+                                              colorClass = "bg-purple-200 hover:bg-purple-300 text-purple-800"; // Subtle purple for 15km
                                               selectedRadius = 15;
                                             } else if (within30km > 0) {
                                               displayCount = within30km;
-                                              colorClass = "bg-red-600 hover:bg-red-700"; // Red for 30km
+                                              colorClass = "bg-purple-100 hover:bg-purple-200 text-purple-700"; // Barely purple for 30km
                                               selectedRadius = 30;
                                             }
                                             
@@ -714,7 +714,7 @@ const InspectorCalendar = ({
                                                     e.stopPropagation();
                                                     onShowDealsDebugConsole(day, timeSlot, selectedRadius);
                                                   }}
-                                                  className={`${colorClass} text-white text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm`}
+                                                  className={`${colorClass} text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm`}
                                                 >
                                                   <Target className="w-3 h-3" />
                                                   {displayCount > 0 ? `${displayCount} Deal${displayCount === 1 ? '' : 's'}${radiusText ? ` (${radiusText})` : ''}` : 'Deals'}
