@@ -259,8 +259,9 @@ const InspectionDashboard = ({ pipedriveData }) => {
         const day = addDays(startOfCurrentWeek, dayOffset);
         const dayString = format(day, 'yyyy-MM-dd');
         
-        // Get activities for this specific day across all inspectors
+        // Get activities for this specific day for the selected inspector only
         const dayActivities = enrichedActivities.filter(a =>
+          Number(a.owner_id) === Number(selectedInspector) &&
           a.due_date === dayString &&
           !a.done &&
           a.due_time && a.due_time !== '00:00:00' &&
