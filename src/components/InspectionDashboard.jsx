@@ -100,8 +100,39 @@ const InspectionDashboard = ({ pipedriveData }) => {
     refresh: refetch
   } = pipedriveData;
 
-  // Address cache keyed by activity id
-  const [addressMap, setAddressMap] = useState({});
+  // Use shared address cache from App.jsx and merge with local cache
+  const [localAddressMap, setLocalAddressMap] = useState({});
+  
+  // Get shared address cache from localStorage
+  const getSharedAddressCache = () => {
+    try {
+      const cached = localStorage.getItem('staffLocationSort.addressCache');
+      return cached ? JSON.parse(cached) : {};
+    } catch (error) {
+      console.warn('Error loading shared address cache:', error);
+      return {};
+    }
+  };
+  
+  // State to trigger shared cache refresh
+  const [sharedCacheRefresh, setSharedCacheRefresh] = useState(0);
+  
+  // Combined address map (shared + local)
+  const addressMap = useMemo(() => {
+    const sharedCache = getSharedAddressCache();
+    const combined = { ...sharedCache, ...localAddressMap };
+    console.log(`📦 InspectionDashboard: Using ${Object.keys(sharedCache).length} shared + ${Object.keys(localAddressMap).length} local = ${Object.keys(combined).length} total cached addresses`);
+    return combined;
+  }, [localAddressMap, sharedCacheRefresh]);
+  
+  // Refresh shared cache every 30 seconds to pick up changes from other components
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSharedCacheRefresh(prev => prev + 1);
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Save selectedInspector to localStorage when it changes
   useEffect(() => {
@@ -148,7 +179,9 @@ const InspectionDashboard = ({ pipedriveData }) => {
       try {
         setOpportunitiesLoading(true);
         const enriched = await enrichActivitiesWithAddresses(unenriched);
-        setAddressMap(prev => {
+        
+        // Update local state
+        setLocalAddressMap(prev => {
           const updated = { ...prev };
           enriched.forEach(a => {
             if (a.personAddress) {
@@ -161,12 +194,32 @@ const InspectionDashboard = ({ pipedriveData }) => {
                 addressSource: a.addressSource,
                 label: a.label
               };
-              // Reduced logging: only count successful additions
             }
           });
-          console.log(`🗺️ AddressMap now contains ${Object.keys(updated).length} activities`);
+          console.log(`🗺️ LocalAddressMap now contains ${Object.keys(updated).length} activities`);
           return updated;
         });
+        
+        // Also update shared address cache in localStorage
+        try {
+          const sharedCache = getSharedAddressCache();
+          enriched.forEach(a => {
+            if (a.personAddress) {
+              sharedCache[a.id] = {
+                personAddress: a.personAddress,
+                coordinates: a.coordinates,
+                lat: a.lat,
+                lng: a.lng,
+                addressSource: a.addressSource,
+                label: a.label
+              };
+            }
+          });
+          localStorage.setItem('staffLocationSort.addressCache', JSON.stringify(sharedCache));
+          console.log(`💾 InspectionDashboard: Saved ${enriched.filter(a => a.personAddress).length} enriched activities to shared cache`);
+        } catch (error) {
+          console.warn('Error saving to shared address cache:', error);
+        }
         
         // Auto-enable opportunities after successful enrichment
         setTimeout(() => {

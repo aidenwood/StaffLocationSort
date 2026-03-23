@@ -377,6 +377,48 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
 };
 
 
+// Person cache utilities - 24 hour cache for person data
+const PERSON_CACHE_KEY = 'staffLocationSort.personCache';
+const PERSON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+const getPersonFromCache = (personId) => {
+  try {
+    const cache = JSON.parse(localStorage.getItem(PERSON_CACHE_KEY) || '{}');
+    const cachedPerson = cache[personId];
+    
+    if (cachedPerson && (Date.now() - cachedPerson.timestamp) < PERSON_CACHE_TTL) {
+      return cachedPerson.data;
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn('Error reading person cache:', error);
+    return null;
+  }
+};
+
+const setPersonInCache = (personId, personData) => {
+  try {
+    const cache = JSON.parse(localStorage.getItem(PERSON_CACHE_KEY) || '{}');
+    cache[personId] = {
+      data: personData,
+      timestamp: Date.now()
+    };
+    
+    // Clean old entries (older than TTL)
+    const now = Date.now();
+    Object.keys(cache).forEach(id => {
+      if ((now - cache[id].timestamp) > PERSON_CACHE_TTL) {
+        delete cache[id];
+      }
+    });
+    
+    localStorage.setItem(PERSON_CACHE_KEY, JSON.stringify(cache));
+  } catch (error) {
+    console.warn('Error writing to person cache:', error);
+  }
+};
+
 // Error handling wrapper
 const handleApiError = (error, operation) => {
   console.error(`Pipedrive API Error (${operation}):`, error);
@@ -544,12 +586,23 @@ export const fetchPersonAddressForActivity = async (activity) => {
       personId = activity.deal.person_id;
     }
     
-    // If we have a person_id, fetch their address
+    // If we have a person_id, check cache first, then fetch if needed
     if (personId) {
-      const personResponse = await client.get(`/persons/${personId}`);
+      let person = getPersonFromCache(personId);
       
-      if (personResponse.data.success && personResponse.data.data) {
-        const person = personResponse.data.data;
+      if (!person) {
+        console.log(`📞 Fetching person ${personId} from API (not cached)`);
+        const personResponse = await client.get(`/persons/${personId}`);
+        
+        if (personResponse.data.success && personResponse.data.data) {
+          person = personResponse.data.data;
+          setPersonInCache(personId, person);
+        }
+      } else {
+        console.log(`📋 Using cached person ${personId}`);
+      }
+      
+      if (person) {
         
         // First check the specific hash key for Person address
         if (person[PERSON_ADDRESS_HASH] && typeof person[PERSON_ADDRESS_HASH] === 'string') {
@@ -638,57 +691,101 @@ export const enrichActivitiesWithAddresses = async (activities) => {
   try {
     console.log(`🏠 Enriching ${activities.length} activities with addresses...`);
     
+    // Get existing address cache to avoid re-processing
+    let addressCache = {};
+    try {
+      const cached = localStorage.getItem('staffLocationSort.addressCache');
+      addressCache = cached ? JSON.parse(cached) : {};
+    } catch (error) {
+      console.warn('Error loading address cache:', error);
+    }
+    
+    // Filter out activities that are already cached
+    const activitiesToEnrich = activities.filter(activity => !addressCache[activity.id]);
+    const alreadyCached = activities.filter(activity => addressCache[activity.id]);
+    
+    console.log(`📦 Using cached data for ${alreadyCached.length} activities, enriching ${activitiesToEnrich.length} new activities`);
+    
     const enrichedActivities = [];
-    const batchSize = 5; // Increased batch size for better performance
+    const batchSize = 3; // Reduced batch size for better rate limiting
     let geocodedCount = 0;
     
-    for (let i = 0; i < activities.length; i += batchSize) {
-      const batch = activities.slice(i, i + batchSize);
+    // Add cached activities first
+    alreadyCached.forEach(activity => {
+      const cachedData = addressCache[activity.id];
+      enrichedActivities.push({
+        ...activity,
+        personAddress: cachedData.personAddress,
+        coordinates: cachedData.coordinates,
+        lat: cachedData.lat,
+        lng: cachedData.lng,
+        addressSource: cachedData.addressSource
+      });
+      if (cachedData.coordinates) geocodedCount++;
+    });
+    
+    // Process only new activities
+    for (let i = 0; i < activitiesToEnrich.length; i += batchSize) {
+      const batch = activitiesToEnrich.slice(i, i + batchSize);
+      
+      console.log(`📍 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(activitiesToEnrich.length/batchSize)} (${batch.length} activities)`);
       
       const batchResults = await Promise.all(
         batch.map(async (activity) => {
-          const address = await fetchPersonAddressForActivity(activity);
-          
-          // Skip deal label fetching for better performance
-          let dealLabel = null;
-          
-          // If we found an address, geocode it
-          if (address) {
-            try {
-              const { geocodeAddress } = await import('../services/geocoding.js');
-              const coordinates = await geocodeAddress(address);
-              
-              if (coordinates) {
-                geocodedCount++;
-                return {
-                  ...activity,
-                  personAddress: address,
-                  coordinates, // Add coordinates for distance calculations
-                  lat: coordinates.lat, // Also add individual lat/lng for compatibility
-                  lng: coordinates.lng,
-                  addressSource: 'person_address_geocoded',
-                  label: dealLabel || null
-                };
-              }
-            } catch (geocodeError) {
-              // Skip geocoding errors for performance
-            }
+          // Skip if no person_id
+          if (!activity.person_id && !(activity.deal && activity.deal.person_id)) {
+            return {
+              ...activity,
+              addressSource: 'no_person_id'
+            };
           }
           
-          return {
-            ...activity,
-            personAddress: address,
-            addressSource: address ? 'person_address' : null,
-            label: dealLabel || null
-          };
+          try {
+            const address = await fetchPersonAddressForActivity(activity);
+            
+            // If we found an address, geocode it
+            if (address) {
+              try {
+                const { geocodeAddress } = await import('../services/geocoding.js');
+                const coordinates = await geocodeAddress(address);
+                
+                if (coordinates) {
+                  geocodedCount++;
+                  return {
+                    ...activity,
+                    personAddress: address,
+                    coordinates, // Add coordinates for distance calculations
+                    lat: coordinates.lat, // Also add individual lat/lng for compatibility
+                    lng: coordinates.lng,
+                    addressSource: 'person_address_geocoded'
+                  };
+                }
+              } catch (geocodeError) {
+                console.warn(`Geocoding failed for ${address}:`, geocodeError.message);
+              }
+            }
+            
+            return {
+              ...activity,
+              personAddress: address,
+              addressSource: address ? 'person_address' : 'no_address'
+            };
+          } catch (apiError) {
+            console.warn(`Could not fetch address for activity ${activity.id}:`, apiError.message);
+            return {
+              ...activity,
+              addressSource: 'api_error'
+            };
+          }
         })
       );
       
       enrichedActivities.push(...batchResults);
       
-      // Add delay between batches to avoid rate limits
-      if (i + batchSize < activities.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      // Longer delay between batches to avoid rate limits
+      if (i + batchSize < activitiesToEnrich.length) {
+        console.log('⏳ Waiting 1 second between batches...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
     

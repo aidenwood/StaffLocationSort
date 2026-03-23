@@ -26,6 +26,9 @@ function App() {
   });
   const [autoEnriching, setAutoEnriching] = useState(false);
 
+  // Removed shared state management to fix infinite loading issues
+  // Each component will manage its own state with localStorage persistence
+
   // Callback for SimpleActivityList to push enriched addresses up
   const onActivitiesEnriched = useCallback((enrichedActivities) => {
     setAddressCache(prev => {
@@ -57,47 +60,8 @@ function App() {
     console.log(`📍 App.jsx: Cached ${withCoordinates}/${enrichedActivities.length} activities with coordinates`);
   }, []);
 
-  // Auto-enrich activities if addressCache is empty and we have activities
-  useEffect(() => {
-    const autoEnrich = async () => {
-      // Only auto-enrich if:
-      // 1. We have activities 
-      // 2. addressCache is empty
-      // 3. Not currently enriching
-      // 4. Not loading data
-      console.log('🔍 App.jsx: Auto-enrichment check:', {
-        hasActivities: pipedriveData.activities?.length > 0,
-        activitiesCount: pipedriveData.activities?.length || 0,
-        addressCacheEmpty: Object.keys(addressCache).length === 0,
-        notEnriching: !autoEnriching,
-        notLoading: !pipedriveData.loading,
-        loading: pipedriveData.loading
-      });
-
-      if (pipedriveData.activities?.length > 0 && 
-          Object.keys(addressCache).length === 0 && 
-          !autoEnriching && 
-          !pipedriveData.loading) {
-        
-        console.log('🚀 App.jsx: Auto-enriching activities for grid view...');
-        setAutoEnriching(true);
-        
-        try {
-          // Take first 50 activities for enrichment to avoid overwhelming the API
-          const activitiesToEnrich = pipedriveData.activities.slice(0, 50);
-          const enriched = await enrichActivitiesWithAddresses(activitiesToEnrich);
-          onActivitiesEnriched(enriched);
-          console.log('✅ App.jsx: Auto-enrichment completed');
-        } catch (error) {
-          console.error('❌ App.jsx: Auto-enrichment failed:', error);
-        } finally {
-          setAutoEnriching(false);
-        }
-      }
-    };
-
-    autoEnrich();
-  }, [pipedriveData.activities, pipedriveData.loading, addressCache, autoEnriching, onActivitiesEnriched]);
+  // Removed auto-enrichment to prevent infinite loading loops
+  // Components will handle their own enrichment as needed
 
   // Merge address cache into activities for the dashboard
   const enrichedPipedriveData = useMemo(() => {

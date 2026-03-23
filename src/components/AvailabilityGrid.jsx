@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks, subDays } from 'date-fns';
 import { Calendar, Grid3x3, ChevronLeft, ChevronRight, MapPin, Users, ArrowLeft, Columns2, Map, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { validateAddressInServiceArea, regionCenters } from '../utils/regionValidation.js';
@@ -12,6 +12,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
   const [startDate, setStartDate] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedInspector, setSelectedInspector] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  
   const [showRegionalBreakdown, setShowRegionalBreakdown] = useState(false);
   const [expandedRegion, setExpandedRegion] = useState(null); // Track which region is expanded
   const [showDealsConsole, setShowDealsConsole] = useState(false);
