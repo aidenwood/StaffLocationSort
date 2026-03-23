@@ -23,7 +23,8 @@ const InspectorCalendar = ({
   hideNavigation = false,
   enableOpportunities = false,
   onShowDealsDebugConsole = null,
-  timeSlotDealCounts = {}
+  timeSlotDealCounts = {},
+  rosterData = []
 }) => {
   const [currentWeek, setCurrentWeek] = useState(selectedDate || new Date());
   const [selectedActivity, setSelectedActivity] = useState(null);
@@ -109,6 +110,13 @@ const InspectorCalendar = ({
     const newDate = direction === 'prev' ? subDays(currentWeek, 7) : addDays(currentWeek, 7);
     setCurrentWeek(newDate);
     onDateChange?.(newDate);
+  };
+
+  // Get roster information for a specific inspector and date
+  const getRosterForDate = (inspectorId, date) => {
+    if (!rosterData || !inspectorId || !date) return null;
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return rosterData.find(r => r.inspector_id === inspectorId && r.date === dateStr);
   };
 
   const timeSlots = useMemo(() => {
@@ -320,7 +328,7 @@ const InspectorCalendar = ({
 
     return (
       <div 
-        className={`absolute inset-0 p-1 text-xs overflow-hidden z-0 transition-colors cursor-pointer ${
+        className={`absolute inset-0 p-1 text-xs overflow-hidden z-10 transition-colors cursor-pointer ${
           isHovered 
             ? 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100' 
             : 'bg-blue-50 border-l-4 border-blue-500 hover:bg-blue-100'
@@ -582,6 +590,20 @@ const InspectorCalendar = ({
                     }`}>
                       {format(day, 'MMM d')}
                     </div>
+                    {/* Roster Region Display */}
+                    {(() => {
+                      const roster = getRosterForDate(selectedInspector, day);
+                      if (roster && roster.region_code) {
+                        return (
+                          <div className={`text-xs font-medium ${
+                            isSelected ? 'text-blue-200' : 'text-gray-500'
+                          }`} title={`Rostered: ${roster.region_name || roster.region_code}`}>
+                            {roster.region_code}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 );
               })}
@@ -660,7 +682,7 @@ const InspectorCalendar = ({
                                   {!activity && !isPast && !isLunch && (
                                     <>
                                       {enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
-                                        <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="absolute inset-0 flex items-center justify-center" style={{ height: '64px', zIndex: 1 }}>
                                           {(() => {
                                             const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
                                             const counts = timeSlotDealCounts[dayKey];
@@ -714,7 +736,7 @@ const InspectorCalendar = ({
                                                     e.stopPropagation();
                                                     onShowDealsDebugConsole(day, timeSlot, selectedRadius);
                                                   }}
-                                                  className={`${colorClass} text-xs px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 shadow-sm`}
+                                                  className={`${colorClass} text-xs px-2 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1 shadow-sm min-h-[48px]`}
                                                 >
                                                   <Target className="w-3 h-3" />
                                                   {displayCount > 0 ? `${displayCount} Deal${displayCount === 1 ? '' : 's'}${radiusText ? ` (${radiusText})` : ''}` : 'Deals'}

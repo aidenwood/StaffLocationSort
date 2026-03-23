@@ -24,6 +24,61 @@ import {
   hasValidPipedriveIds
 } from '../config/pipedriveUsers.js';
 
+// Activities cache configuration
+const ACTIVITIES_CACHE_PREFIX = 'staffLocationSort.activitiesCache';
+
+// Cache utilities for activities
+const getCachedActivities = (cacheKey) => {
+  try {
+    const cached = localStorage.getItem(`${ACTIVITIES_CACHE_PREFIX}.${cacheKey}`);
+    if (!cached) return null;
+    
+    const parsedData = JSON.parse(cached);
+    console.log(`📦 Using cached activities for ${cacheKey} (${parsedData.data?.length || 0} activities, ${Math.round((Date.now() - parsedData.timestamp) / 1000)}s old)`);
+    return parsedData;
+  } catch (error) {
+    console.warn('Error reading activities cache:', error);
+    return null;
+  }
+};
+
+const setCachedActivities = (cacheKey, data, isLiveData) => {
+  try {
+    const cacheData = {
+      data,
+      timestamp: Date.now(),
+      isLiveData
+    };
+    localStorage.setItem(`${ACTIVITIES_CACHE_PREFIX}.${cacheKey}`, JSON.stringify(cacheData));
+    console.log(`💾 Cached ${data.length} activities for ${cacheKey}`);
+  } catch (error) {
+    console.warn('Error writing activities cache:', error);
+  }
+};
+
+const clearExpiredActivitiesCache = (cacheTimeout) => {
+  try {
+    const keys = Object.keys(localStorage).filter(key => key.startsWith(ACTIVITIES_CACHE_PREFIX));
+    const now = Date.now();
+    
+    keys.forEach(key => {
+      try {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          const { timestamp } = JSON.parse(cached);
+          if (now - timestamp > cacheTimeout) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch (error) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch (error) {
+    console.warn('Error cleaning expired activities cache:', error);
+  }
+};
+
 // Hook for managing Pipedrive data with fallback to mock data
 export const usePipedriveData = (options = {}) => {
   const {
@@ -46,7 +101,10 @@ export const usePipedriveData = (options = {}) => {
     isCircuitBreakerOpen: false
   });
 
-  const [cache, setCache] = useState(new Map());
+  // Clean expired cache on hook initialization
+  useEffect(() => {
+    clearExpiredActivitiesCache(cacheTimeout);
+  }, [cacheTimeout]);
 
   // Check if we should use live data
   const shouldUseLiveData = useMemo(() => {
@@ -105,11 +163,19 @@ export const usePipedriveData = (options = {}) => {
   const fetchActivities = useCallback(async (userId = null, startDate = null, endDate = null) => {
     const now = Date.now();
     const cacheKey = `activities_${userId}_${startDate}_${endDate}`;
-    const cachedData = cache.get(cacheKey);
+    const cachedData = getCachedActivities(cacheKey);
     
     // Return cached data if it's still valid
     if (cachedData && (Date.now() - cachedData.timestamp) < cacheTimeout) {
-      console.log('📋 Using cached activities data');
+      // Update state with cached data
+      setState(prev => ({
+        ...prev,
+        activities: cachedData.data,
+        loading: false,
+        isLiveData: cachedData.isLiveData,
+        error: null,
+        lastFetch: new Date(cachedData.timestamp)
+      }));
       return cachedData.data;
     }
 
@@ -205,16 +271,8 @@ export const usePipedriveData = (options = {}) => {
         activities = userId ? getActivitiesByInspector(userId) : mockActivities;
       }
 
-      // Cache the results
-      const cacheData = {
-        data: activities,
-        timestamp: Date.now(),
-        isLiveData
-      };
-      
-      const newCache = new Map(cache);
-      newCache.set(cacheKey, cacheData);
-      setCache(newCache);
+      // Cache the results in localStorage
+      setCachedActivities(cacheKey, activities, isLiveData);
 
       // Clear timeout and update success state
       clearTimeout(timeoutId);
@@ -300,7 +358,7 @@ export const usePipedriveData = (options = {}) => {
 
       return cachedData?.data || [];
     }
-  }, [shouldUseLiveData, cache, cacheTimeout]);
+  }, [shouldUseLiveData, cacheTimeout]);
 
   // Get activities for specific inspector and date
   const getInspectorActivities = useCallback(async (inspectorId, date = null) => {
@@ -344,8 +402,15 @@ export const usePipedriveData = (options = {}) => {
 
   // Clear cache
   const clearCache = useCallback(() => {
-    setCache(new Map());
-    console.log('🧹 Pipedrive data cache cleared');
+    try {
+      const keys = Object.keys(localStorage).filter(key => 
+        key.startsWith(ACTIVITIES_CACHE_PREFIX)
+      );
+      keys.forEach(key => localStorage.removeItem(key));
+      console.log(`🧹 Pipedrive data cache cleared (${keys.length} entries removed)`);
+    } catch (error) {
+      console.warn('Error clearing cache:', error);
+    }
   }, []);
 
   // Reset circuit breaker and retry
@@ -440,7 +505,7 @@ export const usePipedriveData = (options = {}) => {
     resetCircuitBreaker,
     
     // Cache info
-    cacheSize: cache.size,
+    cacheSize: Object.keys(localStorage).filter(key => key.startsWith(ACTIVITIES_CACHE_PREFIX)).length,
     cacheTimeout
   };
 };

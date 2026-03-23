@@ -27,6 +27,7 @@ import AppUnavailableModal from './AppUnavailableModal';
 import DatePickerDropdown from './DatePickerDropdown';
 import { inspectors } from '../data/mockActivities';
 import { useApiDebug } from '../hooks/useApiDebug.js';
+import useRosterData from '../hooks/useRosterData.js';
 import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
 import { getDealsForRegion, sortDealsByDistance } from '../api/pipedriveDeals.js';
 
@@ -48,7 +49,11 @@ const getPreviousBusinessDay = (date) => {
 };
 
 const InspectionDashboard = ({ pipedriveData }) => {
-  const [selectedInspector, setSelectedInspector] = useState(2); // Ben Thompson (ID 2) for consistency with working Activities page
+  // Load selectedInspector from localStorage or default to Ben Thompson (ID 2)
+  const [selectedInspector, setSelectedInspector] = useState(() => {
+    const saved = localStorage.getItem('staffLocationSort.selectedInspector');
+    return saved ? parseInt(saved, 10) : 2; // Ben Thompson (ID 2) for consistency with working Activities page
+  });
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -97,6 +102,16 @@ const InspectionDashboard = ({ pipedriveData }) => {
 
   // Address cache keyed by activity id
   const [addressMap, setAddressMap] = useState({});
+
+  // Save selectedInspector to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('staffLocationSort.selectedInspector', selectedInspector.toString());
+  }, [selectedInspector]);
+
+  // Get roster data for the current week
+  const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
+  const endOfCurrentWeek = addDays(startOfCurrentWeek, 6);
+  const { rosterData, loading: rosterLoading } = useRosterData(startOfCurrentWeek, endOfCurrentWeek);
 
   // Get all inspector activities (for enrichment)
   const inspectorActivities = useMemo(() => {
@@ -289,6 +304,11 @@ const InspectionDashboard = ({ pipedriveData }) => {
               .filter(a => a.due_time < timeSlot)
               .sort((a, b) => b.due_time.localeCompare(a.due_time)); // Latest first
             referenceInspection = activitiesBeforeSlot[0];
+            
+            // If no previous appointment, fallback to any activity on this day
+            if (!referenceInspection && dayActivities.length > 0) {
+              referenceInspection = dayActivities[0]; // Use first available activity
+            }
           }
           
           if (referenceInspection) {
@@ -920,6 +940,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
             enableOpportunities={showOpportunities}
             onShowDealsDebugConsole={handleShowDealsDebugConsole}
             timeSlotDealCounts={timeSlotDealCounts}
+            rosterData={rosterData}
           />
         </div>
 

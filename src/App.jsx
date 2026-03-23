@@ -15,7 +15,15 @@ function App() {
   const pipedriveData = usePipedriveData();
 
   // Enriched address cache - populated by SimpleActivityList, read by InspectionDashboard
-  const [addressCache, setAddressCache] = useState({});
+  const [addressCache, setAddressCache] = useState(() => {
+    try {
+      const cached = localStorage.getItem('staffLocationSort.addressCache');
+      return cached ? JSON.parse(cached) : {};
+    } catch (error) {
+      console.warn('Error loading address cache:', error);
+      return {};
+    }
+  });
   const [autoEnriching, setAutoEnriching] = useState(false);
 
   // Callback for SimpleActivityList to push enriched addresses up
@@ -34,6 +42,13 @@ function App() {
           };
         }
       });
+      // Save to localStorage
+      try {
+        localStorage.setItem('staffLocationSort.addressCache', JSON.stringify(updated));
+      } catch (error) {
+        console.warn('Error saving address cache:', error);
+      }
+      
       return updated;
     });
     

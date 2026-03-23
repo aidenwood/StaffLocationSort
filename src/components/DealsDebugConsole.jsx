@@ -61,6 +61,26 @@ const DealsDebugConsole = ({
   const [showAll, setShowAll] = useState(false); // Show all deals in current radius on map
   const [lastFetchTime, setLastFetchTime] = useState(null); // Track when deals were last fetched
 
+  // Helper function to handle radius changes and update map markers if toggle is on
+  const handleRadiusChange = (newRadius) => {
+    const wasToggleOn = showAll;
+    setSelectedDistanceFilter(newRadius);
+    
+    // If the toggle is on, automatically update map markers to show new radius deals
+    if (wasToggleOn) {
+      setTimeout(() => {
+        const newFilteredDeals = newRadius === null 
+          ? processedDeals.filter(deal => deal.coordinates)
+          : processedDeals.filter(deal => 
+              deal.coordinates && 
+              deal.distanceInfo?.minDistance !== null && 
+              deal.distanceInfo.minDistance <= newRadius
+            );
+        setSelectedDeals(newFilteredDeals.map(deal => ({...deal, isSelected: true})));
+      }, 0); // Use timeout to ensure state update happens after filteredDeals updates
+    }
+  };
+
   // Toggle deal selection for map display
   const toggleDealSelection = (deal) => {
     setSelectedDeals(prev => {
@@ -444,11 +464,9 @@ const DealsDebugConsole = ({
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 px-3 py-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Target className="w-3 h-3 text-blue-600" />
-              <span className="text-xs font-medium text-blue-900">Radius:</span>
               <div className="flex gap-1">
                 <button
-                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 1 ? null : 1)}
+                  onClick={() => handleRadiusChange(1)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     selectedDistanceFilter === 1 ? 'bg-purple-600 text-white shadow-md' : 'bg-purple-100 text-purple-800 hover:bg-purple-200'
                   }`}
@@ -456,7 +474,7 @@ const DealsDebugConsole = ({
                   1km ({distanceStats?.within_1km || 0})
                 </button>
                 <button
-                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 2.5 ? null : 2.5)}
+                  onClick={() => handleRadiusChange(2.5)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     selectedDistanceFilter === 2.5 ? 'bg-purple-500 text-white shadow-md' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                   }`}
@@ -464,7 +482,7 @@ const DealsDebugConsole = ({
                   2.5km ({distanceStats?.within_2_5km || 0})
                 </button>
                 <button
-                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 5 ? null : 5)}
+                  onClick={() => handleRadiusChange(5)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     selectedDistanceFilter === 5 ? 'bg-purple-400 text-white shadow-md' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                   }`}
@@ -472,7 +490,7 @@ const DealsDebugConsole = ({
                   5km ({distanceStats?.within_5km || 0})
                 </button>
                 <button
-                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 10 ? null : 10)}
+                  onClick={() => handleRadiusChange(10)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     selectedDistanceFilter === 10 ? 'bg-purple-300 text-purple-900 shadow-md' : 'bg-purple-100 text-purple-600 hover:bg-purple-200'
                   }`}
@@ -480,7 +498,7 @@ const DealsDebugConsole = ({
                   10km ({distanceStats?.within_10km || 0})
                 </button>
                 <button
-                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 15 ? null : 15)}
+                  onClick={() => handleRadiusChange(15)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     selectedDistanceFilter === 15 ? 'bg-purple-200 text-purple-800 shadow-md' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
                   }`}
@@ -488,7 +506,7 @@ const DealsDebugConsole = ({
                   15km ({distanceStats?.within_15km || 0})
                 </button>
                 <button
-                  onClick={() => setSelectedDistanceFilter(selectedDistanceFilter === 30 ? null : 30)}
+                  onClick={() => handleRadiusChange(30)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     selectedDistanceFilter === 30 ? 'bg-purple-100 text-purple-700 shadow-md' : 'bg-gray-100 text-purple-500 hover:bg-purple-50'
                   }`}
@@ -496,7 +514,7 @@ const DealsDebugConsole = ({
                   30km ({distanceStats?.within_30km || 0})
                 </button>
                 <button
-                  onClick={() => setSelectedDistanceFilter(null)}
+                  onClick={() => handleRadiusChange(null)}
                   className={`px-2 py-1 text-xs rounded transition-colors ${
                     selectedDistanceFilter === null ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
@@ -506,33 +524,36 @@ const DealsDebugConsole = ({
               </div>
             </div>
             
-            {/* Show All Toggle */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  // ⚠️ URGENT: Show All logic moved here from useEffect to prevent infinite loops
-                  if (!showAll) {
-                    // Show All - select all deals in current radius
-                    const dealsToSelect = filteredDeals.filter(deal => deal.coordinates);
-                    setSelectedDeals(dealsToSelect.map(deal => ({...deal, isSelected: true})));
-                    setShowAll(true);
-                  } else {
-                    // Hide All - clear selections
-                    setSelectedDeals([]);
-                    setShowAll(false);
-                  }
-                }}
-                className={`px-3 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
-                  showAll ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-                }`}
-                title={showAll ? 'Hide all deals from map' : `Show all ${filteredDeals.filter(d => d.coordinates).length} deals on map`}
-              >
-                <Eye className="w-3 h-3" />
-                {showAll ? 'Hide All' : `Show All (${filteredDeals.filter(d => d.coordinates).length})`}
-              </button>
-              <span className="text-xs text-gray-500">
-                {selectedDate ? format(selectedDate, 'MMM d') : 'Today'} • {inspectionActivities.length} inspection{inspectionActivities.length !== 1 ? 's' : ''}
-              </span>
+            {/* Show All Toggle - Improved Toggle Button */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {/* Toggle Switch */}
+                <button
+                  onClick={() => {
+                    // ⚠️ URGENT: Show All logic moved here from useEffect to prevent infinite loops
+                    if (!showAll) {
+                      // Show All - select all deals in current radius
+                      const dealsToSelect = filteredDeals.filter(deal => deal.coordinates);
+                      setSelectedDeals(dealsToSelect.map(deal => ({...deal, isSelected: true})));
+                      setShowAll(true);
+                    } else {
+                      // Hide All - clear selections
+                      setSelectedDeals([]);
+                      setShowAll(false);
+                    }
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                    showAll ? 'bg-indigo-600' : 'bg-gray-200'
+                  }`}
+                  title={showAll ? 'Hide all deals from map' : `Show all ${filteredDeals.filter(d => d.coordinates).length} deals on map`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out shadow-lg ${
+                      showAll ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -647,15 +668,17 @@ const DealsDebugConsole = ({
                   </div>
 
                   {/* Details Row */}
-                  <div className="flex items-center gap-3 mb-2 text-xs text-gray-600">
-                    {deal.value && (
-                      <div className="flex items-center gap-1">
-                        <DollarSign className="w-3 h-3" />
-                        ${deal.value}
-                      </div>
-                    )}
+                  <div className="flex items-center gap-2 mb-2 text-xs text-gray-600">
+                   
+                    <span className={`px-1.5 py-0.5 text-xs rounded ${
+                        deal.priority === 'high' ? 'bg-red-100 text-red-700' :
+                        deal.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {deal.priority}
+                      </span>
                     {deal.person?.name && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
                         <User className="w-3 h-3" />
                         {deal.person.name}
                       </div>
@@ -666,31 +689,34 @@ const DealsDebugConsole = ({
                         {deal.person.phone}
                       </div>
                     )}
+
+                    {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
+                        <span className={`px-1.5 py-0.5 text-xs rounded flex items-center gap-1 font-medium ${getDistanceColor(deal.distanceInfo.minDistance)}`}>
+                          <Navigation className="w-2.5 h-2.5" />
+                          {deal.distanceInfo.minDistance.toFixed(1)}km
+                        </span>
+                      )}
                   </div>
 
                   {/* Pills and Actions Row */}
                   <div className="flex items-center justify-between gap-2">
                     {/* Left side pills */}
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className={`px-1.5 py-0.5 text-xs rounded ${
-                        deal.priority === 'high' ? 'bg-red-100 text-red-700' :
-                        deal.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {deal.priority}
-                      </span>
+                      
                       
                       {deal.coordinates && (
-                        <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded" title={`${deal.coordinates.lat?.toFixed(4)}, ${deal.coordinates.lng?.toFixed(4)}`}>
+                        <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 rounded" title={`${deal.coordinates.lat?.toFixed(4)}, ${deal.coordinates.lng?.toFixed(4)}`}>
                           📍 {deal.coordinates.lat?.toFixed(2)}, {deal.coordinates.lng?.toFixed(2)}
                         </span>
                       )}
                       
-                      {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
-                        <span className={`px-1.5 py-0.5 text-xs rounded flex items-center gap-1 font-medium ${getDistanceColor(deal.distanceInfo.minDistance)}`}>
-                          <Navigation className="w-2.5 h-2.5" />
-                          {deal.distanceInfo.minDistance.toFixed(1)}km
-                        </span>
+
+                      {/* Address Row */}
+                      {deal.address && (
+                          <div className="text-xs text-gray-500 flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {deal.address}
+                          </div>
                       )}
                     </div>
 
@@ -726,15 +752,7 @@ const DealsDebugConsole = ({
                     </div>
                   </div>
                   
-                  {/* Address Row */}
-                  {deal.address && (
-                    <div className="mt-2 pt-2 border-t border-gray-100">
-                      <div className="text-xs text-gray-500 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {deal.address}
-                      </div>
-                    </div>
-                  )}
+                  
                 </div>
               ))}
             </div>

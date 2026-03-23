@@ -7,6 +7,69 @@ import { geocodeAddress } from '../services/geocoding.js';
 import { parseDealAddress } from '../utils/dealAddressParser.js';
 import { calculateDistance } from '../utils/regionValidation.js';
 
+// Deals cache configuration
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_KEY_PREFIX = 'staffLocationSort.dealsCache';
+
+// Cache utilities
+const getCachedDeals = (region) => {
+  try {
+    const cached = localStorage.getItem(`${CACHE_KEY_PREFIX}.${region}`);
+    if (!cached) return null;
+    
+    const { data, timestamp } = JSON.parse(cached);
+    const now = Date.now();
+    
+    // Check if cache is expired
+    if (now - timestamp > CACHE_EXPIRY_MS) {
+      localStorage.removeItem(`${CACHE_KEY_PREFIX}.${region}`);
+      return null;
+    }
+    
+    console.log(`📦 Using cached deals for region ${region} (${data.length} deals, ${Math.round((now - timestamp) / 1000)}s old)`);
+    return data;
+  } catch (error) {
+    console.warn('Error reading deals cache:', error);
+    return null;
+  }
+};
+
+const setCachedDeals = (region, deals) => {
+  try {
+    const cacheData = {
+      data: deals,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(`${CACHE_KEY_PREFIX}.${region}`, JSON.stringify(cacheData));
+    console.log(`💾 Cached ${deals.length} deals for region ${region}`);
+  } catch (error) {
+    console.warn('Error writing deals cache:', error);
+  }
+};
+
+const clearExpiredCache = () => {
+  try {
+    const keys = Object.keys(localStorage).filter(key => key.startsWith(CACHE_KEY_PREFIX));
+    const now = Date.now();
+    
+    keys.forEach(key => {
+      try {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          const { timestamp } = JSON.parse(cached);
+          if (now - timestamp > CACHE_EXPIRY_MS) {
+            localStorage.removeItem(key);
+          }
+        }
+      } catch (error) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch (error) {
+    console.warn('Error cleaning expired cache:', error);
+  }
+};
+
 // Base Pipedrive API configuration
 const PIPEDRIVE_BASE_URL = 'https://api.pipedrive.com/v1';
 
@@ -100,9 +163,7 @@ export const REGIONAL_DEAL_FILTERS = {
   }
 };
 
-// Cache for deals to minimize API calls
-const dealsCache = new Map();
-const CACHE_DURATION = 60 * 60 * 1000; // 1 hour (improved for rate limiting)
+// Legacy cache removed - using localStorage cache instead
 
 /**
  * Transform Pipedrive deal data to standardized format
@@ -299,13 +360,18 @@ export const getFilterForRegion = (region) => {
  * @returns {Promise<Array>} Array of deals for the region
  */
 export const getDealsForRegion = async (region, options = {}) => {
-  const cacheKey = `deals_${region}_${JSON.stringify(options)}`;
+  // Clean expired cache entries first
+  clearExpiredCache();
   
-  // Check cache first
-  const cached = dealsCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
-    console.log(`📋 Using cached deals for region: ${region}`);
-    return cached.data;
+  // Create cache key that includes options for unique caching
+  const cacheKey = options && Object.keys(options).length > 0 
+    ? `${region}_${JSON.stringify(options)}`
+    : region;
+  
+  // Check localStorage cache first
+  const cachedDeals = getCachedDeals(cacheKey);
+  if (cachedDeals) {
+    return cachedDeals;
   }
 
   try {
@@ -321,13 +387,10 @@ export const getDealsForRegion = async (region, options = {}) => {
       // Enrich deals with geocoded addresses
       const enrichedDeals = await enrichDealsWithAddresses(result.deals);
       
-      // Cache the enriched result
-      dealsCache.set(cacheKey, {
-        data: enrichedDeals,
-        timestamp: Date.now()
-      });
+      // Cache the enriched result in localStorage
+      setCachedDeals(cacheKey, enrichedDeals);
       
-      console.log(`✅ Cached ${enrichedDeals.length} enriched deals for region: ${region}`);
+      console.log(`✅ Fetched and cached ${enrichedDeals.length} enriched deals for region: ${region}`);
       return enrichedDeals;
     }
     
@@ -381,13 +444,24 @@ export const enrichDealsWithAddresses = async (deals) => {
  * @param {string} region - Specific region to clear, or null for all
  */
 export const clearDealsCache = (region = null) => {
-  if (region) {
-    const keys = Array.from(dealsCache.keys()).filter(key => key.includes(`deals_${region}_`));
-    keys.forEach(key => dealsCache.delete(key));
-    console.log(`🗑️ Cleared deals cache for region: ${region}`);
-  } else {
-    dealsCache.clear();
-    console.log('🗑️ Cleared all deals cache');
+  try {
+    if (region) {
+      // Clear specific region cache
+      const keys = Object.keys(localStorage).filter(key => 
+        key.startsWith(CACHE_KEY_PREFIX) && key.includes(region)
+      );
+      keys.forEach(key => localStorage.removeItem(key));
+      console.log(`🗑️ Cleared deals cache for region: ${region} (${keys.length} entries)`);
+    } else {
+      // Clear all deals cache
+      const keys = Object.keys(localStorage).filter(key => 
+        key.startsWith(CACHE_KEY_PREFIX)
+      );
+      keys.forEach(key => localStorage.removeItem(key));
+      console.log(`🗑️ Cleared all deals cache (${keys.length} entries)`);
+    }
+  } catch (error) {
+    console.warn('Error clearing deals cache:', error);
   }
 };
 
