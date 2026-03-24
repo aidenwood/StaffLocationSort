@@ -48,7 +48,7 @@ const getInspectorColor = (inspectorId) => {
   return INSPECTOR_COLORS[Math.max(0, colorIndex)];
 };
 
-const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding, dealsToShow = [], inspectors = [] }) => {
+const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding, dealsToShow = [], inspectors = [], selectedInspector = null }) => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const markersRef = useRef([]); // Use ref instead of state to prevent loops
@@ -530,6 +530,16 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
   useEffect(() => {
     console.log(`🗺️ Route calculation triggered: ${geocodedAppointments.length} geocoded appointments`);
     
+    // Skip routing for "All Inspectors" view - just show markers
+    if (selectedInspector === null || selectedInspector === 'all') {
+      console.log('🚫 Skipping route calculation for All Inspectors view');
+      if (directionsRenderer) {
+        directionsRenderer.setDirections({ routes: [] });
+      }
+      onRouteCalculatedRef.current?.(0);
+      return;
+    }
+    
     if (geocodedAppointments.length > 0) {
       console.log('📍 Appointments for route:', geocodedAppointments.map(a => ({
         subject: a.subject,
@@ -705,7 +715,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
     };
 
     calculateRoute();
-  }, [map, directionsRenderer, geocodedAppointments]);
+  }, [map, directionsRenderer, geocodedAppointments, selectedInspector]);
 
   // Create legend with inspectors who have appointments
   const activeInspectors = inspectors.filter(inspector => 
@@ -928,6 +938,7 @@ const GoogleMapsView = ({
         setIsGeocoding={setIsGeocoding}
         dealsToShow={dealsToShow}
         inspectors={inspectors}
+        selectedInspector={selectedInspector}
       />
     );
   };
