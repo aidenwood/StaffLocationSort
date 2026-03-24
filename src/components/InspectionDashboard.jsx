@@ -315,7 +315,14 @@ const InspectionDashboard = ({ pipedriveData }) => {
       
       // Fetch deals for the region
       const deals = await getDealsForRegion(region, { limit: 200 });
-      if (!deals || deals.length === 0) return;
+      if (!deals || deals.length === 0) {
+        console.log(`⚠️ No deals returned for region ${region}`);
+        return;
+      }
+      
+      // Debug: Check how many deals have coordinates
+      const dealsWithCoords = deals.filter(d => d.coordinates && d.coordinates.lat && d.coordinates.lng);
+      console.log(`📍 Deals analysis: ${dealsWithCoords.length}/${deals.length} deals have coordinates for region ${region}`);
       
       const timeSlots = ['09:00', '11:00', '13:00', '15:00'];
       const counts = {};
@@ -367,8 +374,16 @@ const InspectionDashboard = ({ pipedriveData }) => {
           if (referenceInspection) {
             try {
               // Sort deals by distance to this specific inspection
-              const sortedDeals = await sortDealsByDistance(deals, [referenceInspection]);
+              console.log(`🔍 ${dayString} ${timeSlot}: Processing ${deals.length} deals with reference:`, {
+                address: referenceInspection.personAddress?.substring(0, 50),
+                coordinates: referenceInspection.coordinates
+              });
+              
+              const sortedDeals = sortDealsByDistance(deals, [referenceInspection]);
+              console.log(`📊 ${dayString} ${timeSlot}: sortDealsByDistance returned ${sortedDeals.length} deals`);
+              
               const dealsWithDistance = sortedDeals.filter(d => d.distanceInfo?.minDistance !== null);
+              console.log(`📏 ${dayString} ${timeSlot}: ${dealsWithDistance.length}/${sortedDeals.length} deals have valid distances`);
               
               if (dealsWithDistance.length > 0) {
                 const within1km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 1).length;
