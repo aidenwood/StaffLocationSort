@@ -125,8 +125,46 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
       
       const geocoded = [];
 
+      // Debug: Check what properties the appointments actually have
+      if (appointments.length > 0) {
+        console.log(`🐛 Debugging first appointment structure:`, {
+          id: appointments[0].id,
+          subject: appointments[0].subject,
+          hasCoordinates: !!appointments[0].coordinates,
+          hasLat: !!appointments[0].lat,
+          hasLng: !!appointments[0].lng,
+          hasLocationLat: !!appointments[0].location_lat,
+          hasLocationLng: !!appointments[0].location_lng,
+          hasPersonAddress: !!appointments[0].personAddress,
+          personAddress: appointments[0].personAddress,
+          coordinates: appointments[0].coordinates,
+          lat: appointments[0].lat,
+          lng: appointments[0].lng
+        });
+      }
+
       for (const appointment of appointments) {
-        // Check if already has coordinates
+        // Check if already has coordinates (from cache) - coordinates object format
+        if (appointment.coordinates && appointment.coordinates.lat && appointment.coordinates.lng) {
+          geocoded.push({
+            ...appointment,
+            coordinates: appointment.coordinates,
+            locationString: appointment.personAddress || appointment.location?.value || ''
+          });
+          continue;
+        }
+
+        // Check if already has coordinates (from cache) - individual lat/lng format
+        if (appointment.lat && appointment.lng) {
+          geocoded.push({
+            ...appointment,
+            coordinates: { lat: appointment.lat, lng: appointment.lng },
+            locationString: appointment.personAddress || appointment.location?.value || ''
+          });
+          continue;
+        }
+
+        // Legacy check for location_lat/location_lng (backward compatibility)
         if (appointment.location_lat && appointment.location_lng) {
           geocoded.push({
             ...appointment,
@@ -699,6 +737,23 @@ const GoogleMapsView = ({
     if (enrichedDayActivities && enrichedDayActivities.length > 0) {
       const sorted = enrichedDayActivities.sort((a, b) => (a.due_time || '').localeCompare(b.due_time || ''));
       console.log(`📅 Using ${sorted.length} enriched day activities`);
+      
+      // Debug: Check what properties the enriched activities have
+      if (sorted.length > 0) {
+        console.log(`🐛 First enriched activity structure:`, {
+          id: sorted[0].id,
+          subject: sorted[0].subject,
+          hasCoordinates: !!sorted[0].coordinates,
+          hasLat: !!sorted[0].lat,
+          hasLng: !!sorted[0].lng,
+          hasPersonAddress: !!sorted[0].personAddress,
+          personAddress: sorted[0].personAddress,
+          coordinates: sorted[0].coordinates,
+          lat: sorted[0].lat,
+          lng: sorted[0].lng
+        });
+      }
+      
       return sorted;
     }
 

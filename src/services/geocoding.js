@@ -3,8 +3,75 @@
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyCMzl7FEizPoEordMy_wHwbnBVeh2XcPfk';
 
-// Cache for geocoded addresses to avoid redundant API calls
+// Persistent cache for geocoded addresses to avoid redundant API calls
+const GEOCODE_CACHE_KEY = 'staffLocationSort.geocodeCache';
+const CIRCUIT_BREAKER_KEY = 'staffLocationSort.circuitBreaker';
 const geocodeCache = new Map();
+
+// Circuit breaker to prevent repeated API failures
+let consecutiveFailures = 0;
+const MAX_FAILURES = 3;
+let circuitBreakerTripped = false;
+let lastFailureTime = null;
+
+// Load cache and circuit breaker state from localStorage
+function loadCache() {
+  try {
+    const cached = localStorage.getItem(GEOCODE_CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      Object.entries(data).forEach(([address, coordinates]) => {
+        geocodeCache.set(address, coordinates);
+      });
+      console.log(`📦 Loaded ${geocodeCache.size} geocoded addresses from cache`);
+    }
+  } catch (error) {
+    console.warn('Error loading geocode cache:', error);
+  }
+
+  try {
+    const breakerData = localStorage.getItem(CIRCUIT_BREAKER_KEY);
+    if (breakerData) {
+      const { failures, tripped, lastFailure } = JSON.parse(breakerData);
+      consecutiveFailures = failures || 0;
+      circuitBreakerTripped = tripped || false;
+      lastFailureTime = lastFailure;
+      
+      if (circuitBreakerTripped) {
+        console.warn(`⚠️ Circuit breaker was tripped. ${consecutiveFailures} consecutive failures.`);
+      }
+    }
+  } catch (error) {
+    console.warn('Error loading circuit breaker state:', error);
+  }
+}
+
+// Save cache to localStorage
+function saveCache() {
+  try {
+    const data = Object.fromEntries(geocodeCache);
+    localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.warn('Error saving geocode cache:', error);
+  }
+}
+
+// Save circuit breaker state
+function saveBreakerState() {
+  try {
+    const data = {
+      failures: consecutiveFailures,
+      tripped: circuitBreakerTripped,
+      lastFailure: lastFailureTime
+    };
+    localStorage.setItem(CIRCUIT_BREAKER_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.warn('Error saving circuit breaker state:', error);
+  }
+}
+
+// Initialize cache on module load
+loadCache();
 
 /**
  * Geocode an address string to lat/lng coordinates
@@ -26,14 +93,75 @@ export const geocodeAddress = async (address) => {
 
   // Check cache first
   if (geocodeCache.has(cleanAddress)) {
-    // Removed cache log to reduce console spam
     return geocodeCache.get(cleanAddress);
   }
 
+  // Circuit breaker: Stop making requests if we've had too many failures
+  if (circuitBreakerTripped) {
+    const timeSinceFailure = Date.now() - lastFailureTime;
+    if (timeSinceFailure < 300000) { // Wait 5 minutes before trying again
+      console.warn(`🚫 Circuit breaker: Skipping geocoding due to recent API failures. Wait ${Math.ceil((300000 - timeSinceFailure) / 60000)} minutes.`);
+      return null;
+    } else {
+      // Reset circuit breaker after 5 minutes
+      circuitBreakerTripped = false;
+      consecutiveFailures = 0;
+    }
+  }
+
   try {
-    // Removed individual geocoding logs to reduce console spam
+    console.log(`🌍 Geocoding address: "${cleanAddress}"`);
     
-    // Use Google Geocoding API
+    // Try Google Maps JavaScript API first (bypasses URL restrictions)
+    if (window.google && window.google.maps && window.google.maps.Geocoder) {
+      return new Promise((resolve) => {
+        const geocoder = new window.google.maps.Geocoder();
+        
+        geocoder.geocode({ address: cleanAddress }, (results, status) => {
+          if (status === 'OK' && results && results.length > 0) {
+            const location = results[0].geometry.location;
+            const coordinates = { 
+              lat: location.lat(), 
+              lng: location.lng() 
+            };
+            
+            // Cache the result both in memory and localStorage
+            geocodeCache.set(cleanAddress, coordinates);
+            saveCache();
+            
+            // Reset circuit breaker on success
+            consecutiveFailures = 0;
+            if (circuitBreakerTripped) {
+              circuitBreakerTripped = false;
+              saveBreakerState();
+              console.log(`✅ Circuit breaker reset after successful geocoding`);
+            }
+            
+            console.log(`✅ Geocoded "${cleanAddress}" to: ${coordinates.lat}, ${coordinates.lng} (via JS API)`);
+            resolve(coordinates);
+          } else {
+            console.warn(`❌ JS API Geocoding failed for "${cleanAddress}": ${status}`);
+            
+            // Track failures for circuit breaker
+            consecutiveFailures++;
+            lastFailureTime = Date.now();
+            if (consecutiveFailures >= MAX_FAILURES) {
+              circuitBreakerTripped = true;
+              console.error(`🚫 CIRCUIT BREAKER TRIPPED: Too many JS API failures (${consecutiveFailures}). Stopping requests for 5 minutes.`);
+            }
+            saveBreakerState();
+            
+            // Cache null result to avoid retrying
+            geocodeCache.set(cleanAddress, null);
+            saveCache();
+            resolve(null);
+          }
+        });
+      });
+    }
+
+    // Fallback to REST API (will likely fail with URL restrictions but try anyway)
+    console.log(`🔄 Google Maps JS API not available, trying REST API for "${cleanAddress}"`);
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(cleanAddress)}&key=${GOOGLE_MAPS_API_KEY}`;
     const response = await fetch(url);
 
@@ -47,20 +175,49 @@ export const geocodeAddress = async (address) => {
       const location = data.results[0].geometry.location;
       const coordinates = { lat: location.lat, lng: location.lng };
       
-      // Cache the result
+      // Cache the result both in memory and localStorage
       geocodeCache.set(cleanAddress, coordinates);
+      saveCache();
       
-      // Reduced logging: Individual geocoding results removed for performance
+      // Reset circuit breaker on success
+      consecutiveFailures = 0;
+      if (circuitBreakerTripped) {
+        circuitBreakerTripped = false;
+        saveBreakerState();
+        console.log(`✅ Circuit breaker reset after successful geocoding`);
+      }
+      
+      console.log(`✅ Geocoded "${cleanAddress}" to: ${coordinates.lat}, ${coordinates.lng}`);
       return coordinates;
     } else {
-      // Geocoding failed - cached as null to avoid retrying
+      console.warn(`❌ Geocoding failed for "${cleanAddress}": ${data.status}`, data);
+      
+      // Track failures for circuit breaker
+      consecutiveFailures++;
+      lastFailureTime = Date.now();
+      if (consecutiveFailures >= MAX_FAILURES) {
+        circuitBreakerTripped = true;
+        console.error(`🚫 CIRCUIT BREAKER TRIPPED: Too many geocoding failures (${consecutiveFailures}). Stopping requests for 5 minutes to prevent API abuse.`);
+      }
+      saveBreakerState();
       
       // Cache null result to avoid retrying
       geocodeCache.set(cleanAddress, null);
+      saveCache();
       return null;
     }
   } catch (error) {
     console.error(`❌ Geocoding error for "${cleanAddress}":`, error);
+    
+    // Track failures for circuit breaker
+    consecutiveFailures++;
+    lastFailureTime = Date.now();
+    if (consecutiveFailures >= MAX_FAILURES) {
+      circuitBreakerTripped = true;
+      console.error(`🚫 CIRCUIT BREAKER TRIPPED: Too many geocoding errors (${consecutiveFailures}). Stopping requests for 5 minutes to prevent API abuse.`);
+    }
+    saveBreakerState();
+    
     return null;
   }
 };
@@ -137,7 +294,25 @@ export const getZoomLevel = (coordinates) => {
  */
 export const clearGeocodeCache = () => {
   geocodeCache.clear();
+  localStorage.removeItem(GEOCODE_CACHE_KEY);
   console.log('🧹 Geocoding cache cleared');
+};
+
+export const resetCircuitBreaker = () => {
+  consecutiveFailures = 0;
+  circuitBreakerTripped = false;
+  lastFailureTime = null;
+  localStorage.removeItem(CIRCUIT_BREAKER_KEY);
+  console.log('🔄 Circuit breaker reset');
+};
+
+export const getGeocodeStats = () => {
+  return {
+    cacheSize: geocodeCache.size,
+    consecutiveFailures,
+    circuitBreakerTripped,
+    lastFailureTime: lastFailureTime ? new Date(lastFailureTime).toISOString() : null
+  };
 };
 
 export default { 

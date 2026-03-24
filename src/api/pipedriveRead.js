@@ -747,10 +747,35 @@ export const enrichActivitiesWithAddresses = async (activities) => {
             if (address) {
               try {
                 const { geocodeAddress } = await import('../services/geocoding.js');
-                const coordinates = await geocodeAddress(address);
+                let coordinates = await geocodeAddress(address);
+                
+                // If geocoding service fails, try direct Maps JS API as fallback
+                if (!coordinates && window.google && window.google.maps && window.google.maps.Geocoder) {
+                  try {
+                    console.log(`🔄 Trying Maps JS API fallback for: ${address}`);
+                    const geocoder = new window.google.maps.Geocoder();
+                    coordinates = await new Promise((resolve) => {
+                      geocoder.geocode({ address }, (results, status) => {
+                        if (status === 'OK' && results && results[0]) {
+                          const location = results[0].geometry.location;
+                          resolve({
+                            lat: location.lat(),
+                            lng: location.lng()
+                          });
+                        } else {
+                          console.warn(`Maps JS API fallback failed for ${address}: ${status}`);
+                          resolve(null);
+                        }
+                      });
+                    });
+                  } catch (fallbackError) {
+                    console.warn(`Maps JS API fallback error for ${address}:`, fallbackError.message);
+                  }
+                }
                 
                 if (coordinates) {
                   geocodedCount++;
+                  console.log(`✅ Enrichment geocoded: ${address} to ${coordinates.lat}, ${coordinates.lng}`);
                   return {
                     ...activity,
                     personAddress: address,
@@ -759,6 +784,8 @@ export const enrichActivitiesWithAddresses = async (activities) => {
                     lng: coordinates.lng,
                     addressSource: 'person_address_geocoded'
                   };
+                } else {
+                  console.warn(`❌ All geocoding methods failed for: ${address}`);
                 }
               } catch (geocodeError) {
                 console.warn(`Geocoding failed for ${address}:`, geocodeError.message);
