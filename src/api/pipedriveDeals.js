@@ -8,7 +8,7 @@ import { parseDealAddress } from '../utils/dealAddressParser.js';
 import { calculateDistance } from '../utils/regionValidation.js';
 
 // Deals cache configuration
-const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_EXPIRY_MS = 4 * 60 * 60 * 1000; // 4 hours (deals addresses change infrequently)
 const CACHE_KEY_PREFIX = 'staffLocationSort.dealsCache';
 
 // Cache utilities
@@ -411,32 +411,106 @@ export const enrichDealsWithAddresses = async (deals) => {
   console.log(`📍 Enriching ${deals.length} deals with geocoding...`);
   
   let noAddressCount = 0;
+  let alreadyGeocodedCount = 0;
+  let needGeocodingCount = 0;
   
-  const enriched = await Promise.all(deals.map(async (deal) => {
-    if (!deal.address) {
-      noAddressCount++;
-      return deal;
-    }
+  // Process deals with rate limiting (avoid overwhelming Google's API)
+  const enriched = [];
+  const BATCH_SIZE = 10; // Process 10 at a time to avoid rate limits
+  const BATCH_DELAY = 100; // 100ms between batches
+  
+  for (let i = 0; i < deals.length; i += BATCH_SIZE) {
+    const batch = deals.slice(i, i + BATCH_SIZE);
+    
+    const batchResults = await Promise.all(batch.map(async (deal) => {
+      if (!deal.address) {
+        noAddressCount++;
+        return deal;
+      }
 
-    try {
-      const coordinates = await geocodeAddress(deal.address);
-      return {
-        ...deal,
-        coordinates: coordinates
-      };
-    } catch (error) {
-      console.warn(`⚠️ Geocoding failed for deal ${deal.id}:`, error);
-      return deal;
+      // Skip geocoding if deal already has coordinates
+      if (deal.coordinates && deal.coordinates.lat && deal.coordinates.lng) {
+        alreadyGeocodedCount++;
+        return deal;
+      }
+
+      needGeocodingCount++;
+      try {
+        const coordinates = await geocodeAddress(deal.address);
+        return {
+          ...deal,
+          coordinates: coordinates
+        };
+      } catch (error) {
+        console.warn(`⚠️ Geocoding failed for deal ${deal.id}:`, error);
+        return deal;
+      }
+    }));
+    
+    enriched.push(...batchResults);
+    
+    // Add small delay between batches to respect rate limits
+    if (i + BATCH_SIZE < deals.length) {
+      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
     }
-  }));
+  }
 
   const successCount = enriched.filter(deal => deal.coordinates).length;
-  console.log(`✅ Geocoded ${successCount}/${deals.length} deals successfully`);
-  if (noAddressCount > 0) {
-    console.log(`⚠️ ${noAddressCount} deals have no address`);
+  console.log(`✅ Geocoding results: ${successCount}/${deals.length} deals have coordinates`);
+  console.log(`📊 Breakdown: ${alreadyGeocodedCount} already cached, ${needGeocodingCount} newly geocoded, ${noAddressCount} no address`);
+  
+  if (alreadyGeocodedCount > 0) {
+    console.log(`⚡ Cache hit: Skipped geocoding ${alreadyGeocodedCount} deals (${Math.round(alreadyGeocodedCount/deals.length*100)}% cached)`);
   }
   
   return enriched;
+};
+
+/**
+ * Get cache status and statistics
+ * @returns {Object} Cache status information
+ */
+export const getCacheStatus = () => {
+  try {
+    const keys = Object.keys(localStorage).filter(key => key.startsWith(CACHE_KEY_PREFIX));
+    let totalDeals = 0;
+    let cachedRegions = [];
+    let oldestTimestamp = Date.now();
+    let newestTimestamp = 0;
+    
+    keys.forEach(key => {
+      try {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          const region = key.replace(`${CACHE_KEY_PREFIX}.`, '').split('_')[0];
+          cachedRegions.push({ 
+            region, 
+            dealCount: data.length, 
+            age: Math.round((Date.now() - timestamp) / 1000),
+            expires: Math.round((CACHE_EXPIRY_MS - (Date.now() - timestamp)) / 1000)
+          });
+          totalDeals += data.length;
+          oldestTimestamp = Math.min(oldestTimestamp, timestamp);
+          newestTimestamp = Math.max(newestTimestamp, timestamp);
+        }
+      } catch (error) {
+        // Skip invalid cache entries
+      }
+    });
+    
+    return {
+      totalCacheEntries: keys.length,
+      totalCachedDeals: totalDeals,
+      regions: cachedRegions,
+      oldestCacheAge: cachedRegions.length > 0 ? Math.round((Date.now() - oldestTimestamp) / 1000) : 0,
+      newestCacheAge: cachedRegions.length > 0 ? Math.round((Date.now() - newestTimestamp) / 1000) : 0,
+      cacheExpiryMs: CACHE_EXPIRY_MS
+    };
+  } catch (error) {
+    console.warn('Error getting cache status:', error);
+    return { error: error.message };
+  }
 };
 
 /**
@@ -838,6 +912,7 @@ export default {
   getDealsForRegion,
   getRecommendationDeals,
   enrichDealsWithAddresses,
+  getCacheStatus,
   clearDealsCache,
   healthCheckDeals,
   transformPipedriveDeal,

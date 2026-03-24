@@ -64,7 +64,12 @@ const InspectionDashboard = ({ pipedriveData }) => {
   const [hoveredAppointment, setHoveredAppointment] = useState(null);
   const [showDebugConsole, setShowDebugConsole] = useState(false);
   const [showDealsDebugConsole, setShowDealsDebugConsole] = useState(false);
-  const [showOpportunities, setShowOpportunities] = useState(false);
+  // Load showOpportunities from localStorage with default true (since this is a key feature)
+  const [showOpportunities, setShowOpportunities] = useState(() => {
+    const saved = localStorage.getItem('staffLocationSort.showOpportunities');
+    // Default to true if not set (better UX for new users)
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   const [timeSlotDealCounts, setTimeSlotDealCounts] = useState({});
   const [mobileViewMode, setMobileViewMode] = useState('split'); // 'split', 'calendar', 'map'
@@ -136,8 +141,17 @@ const InspectionDashboard = ({ pipedriveData }) => {
 
   // Save selectedInspector to localStorage when it changes
   useEffect(() => {
-    localStorage.setItem('staffLocationSort.selectedInspector', selectedInspector.toString());
+    if (selectedInspector !== null) {
+      localStorage.setItem('staffLocationSort.selectedInspector', selectedInspector.toString());
+    } else {
+      localStorage.removeItem('staffLocationSort.selectedInspector');
+    }
   }, [selectedInspector]);
+
+  // Save showOpportunities to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('staffLocationSort.showOpportunities', JSON.stringify(showOpportunities));
+  }, [showOpportunities]);
 
   // Get roster data for the current week
   const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
@@ -147,11 +161,14 @@ const InspectionDashboard = ({ pipedriveData }) => {
   // Get all inspector activities (for enrichment)
   const inspectorActivities = useMemo(() => {
     if (!activities) return [];
-    return activities.filter(a =>
-      Number(a.owner_id) === Number(selectedInspector) && !a.done &&
-      a.due_time && a.due_time !== '00:00:00' &&
-      !(a.subject && a.subject.includes('Inspector ENG Follow up'))
-    );
+    return activities.filter(a => {
+      // For "All Inspectors" view (selectedInspector is null), show all activities
+      const matchesInspector = selectedInspector === null || Number(a.owner_id) === Number(selectedInspector);
+      
+      return matchesInspector && !a.done &&
+        a.due_time && a.due_time !== '00:00:00' &&
+        !(a.subject && a.subject.includes('Inspector ENG Follow up'));
+    });
   }, [activities, selectedInspector]);
 
   // Auto-select first date with activities for this inspector
@@ -276,13 +293,16 @@ const InspectionDashboard = ({ pipedriveData }) => {
   // Get enriched day activities for the map (inspector-specific)
   const dateString = format(selectedDate, 'yyyy-MM-dd');
   const enrichedMapActivities = useMemo(() => {
-    const filtered = enrichedActivities.filter(a =>
-      Number(a.owner_id) === Number(selectedInspector) &&
-      a.due_date === dateString &&
-      !a.done &&
-      a.due_time && a.due_time !== '00:00:00' &&
-      !(a.subject && a.subject.includes('Inspector ENG Follow up'))
-    );
+    const filtered = enrichedActivities.filter(a => {
+      // For "All Inspectors" view (selectedInspector is null), show all activities
+      const matchesInspector = selectedInspector === null || Number(a.owner_id) === Number(selectedInspector);
+      
+      return matchesInspector &&
+        a.due_date === dateString &&
+        !a.done &&
+        a.due_time && a.due_time !== '00:00:00' &&
+        !(a.subject && a.subject.includes('Inspector ENG Follow up'));
+    });
     
     // Activities filtered for current day/inspector
     
@@ -1086,6 +1106,7 @@ const InspectionDashboard = ({ pipedriveData }) => {
               isTimeout={isTimeout}
               error={error}
               dealsToShow={dealsToShowOnMap}
+              inspectors={pipedriveInspectors}
             />
           </div>
 

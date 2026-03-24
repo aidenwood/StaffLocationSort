@@ -29,16 +29,18 @@ const InspectorCalendar = ({
   const [currentWeek, setCurrentWeek] = useState(selectedDate || new Date());
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [showActivityModal, setShowActivityModal] = useState(false);
+  const [activityGroup, setActivityGroup] = useState([]); // All activities in the same timeslot
+  const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [viewMode, setViewMode] = useState(5); // 1, 3, or 5 days
-  const [showOpportunities, setShowOpportunities] = useState(false);
+  // Removed local showOpportunities state - use enableOpportunities prop instead
 
   // Only use real Pipedrive data - no mock fallbacks
   const effectiveActivities = activities || [];
   const effectiveInspectors = inspectors || [];
   
   // Get current inspector or handle "all inspectors" view
-  const isAllInspectors = selectedInspector === 'all';
+  const isAllInspectors = selectedInspector === null || selectedInspector === 'all';
   const displayInspector = isAllInspectors 
     ? null // No single inspector for "all" view
     : selectedInspector 
@@ -211,15 +213,46 @@ const InspectorCalendar = ({
     }
   };
 
-  const handleActivityClick = (activity, event) => {
+  const handleActivityClick = (activity, event, allActivitiesInSlot = []) => {
     event.stopPropagation();
-    setSelectedActivity(activity);
+    
+    // If there are multiple activities in the same slot, set up group navigation
+    if (allActivitiesInSlot.length > 1) {
+      setActivityGroup(allActivitiesInSlot);
+      const clickedIndex = allActivitiesInSlot.findIndex(act => act.id === activity.id);
+      setCurrentActivityIndex(clickedIndex);
+      setSelectedActivity(allActivitiesInSlot[clickedIndex]);
+    } else {
+      setActivityGroup([activity]);
+      setCurrentActivityIndex(0);
+      setSelectedActivity(activity);
+    }
+    
     setShowActivityModal(true);
   };
 
   const closeActivityModal = () => {
     setShowActivityModal(false);
     setSelectedActivity(null);
+    setActivityGroup([]);
+    setCurrentActivityIndex(0);
+  };
+
+  // Navigation functions for grouped activities
+  const navigateToNextActivity = () => {
+    if (activityGroup.length > 1) {
+      const nextIndex = (currentActivityIndex + 1) % activityGroup.length;
+      setCurrentActivityIndex(nextIndex);
+      setSelectedActivity(activityGroup[nextIndex]);
+    }
+  };
+
+  const navigateToPreviousActivity = () => {
+    if (activityGroup.length > 1) {
+      const prevIndex = currentActivityIndex === 0 ? activityGroup.length - 1 : currentActivityIndex - 1;
+      setCurrentActivityIndex(prevIndex);
+      setSelectedActivity(activityGroup[prevIndex]);
+    }
   };
 
   // Get Pipedrive datetime with corrected Australian timezone
@@ -296,7 +329,7 @@ const InspectorCalendar = ({
     return { fullAddress: null, suburb: 'Loading address...' };
   };
 
-  const ActivityBlock = ({ activity, timeSlot }) => {
+  const ActivityBlock = ({ activity, timeSlot, isStacked = false, stackIndex = 0, totalStacked = 1, allActivitiesInSlot = [] }) => {
     const activityType = getActivityTypeByKey(activity.type);
     
     // Get inspector info for "All Inspectors" view
@@ -325,37 +358,61 @@ const InspectorCalendar = ({
     // Get address info (works for both mock and Pipedrive)
     const addressInfo = getAddressInfo(activity);
     const isHovered = hoveredAppointment && hoveredAppointment.id === activity.id;
+    
+    // Calculate depth-based stacking (behind each other)
+    const stackOffset = isStacked ? stackIndex * 3 : 0; // 3px offset for each stacked item
+    const stackZIndex = 10 + stackIndex; // Higher z-index for items on top
+    const stackOpacity = isStacked ? Math.max(0.7, 1 - (stackIndex * 0.15)) : 1; // Slight opacity reduction for depth effect
+    const stackedBorderWidth = isStacked && totalStacked > 2 ? 'border-l-2' : 'border-l-4';
 
     return (
       <div 
-        className={`absolute inset-0 p-1 text-xs overflow-hidden z-10 transition-colors cursor-pointer ${
+        className={`absolute p-1 text-xs overflow-hidden transition-colors cursor-pointer ${
           isHovered 
-            ? 'bg-red-50 border-l-4 border-red-500 hover:bg-red-100' 
-            : 'bg-blue-50 border-l-4 border-blue-500 hover:bg-blue-100'
+            ? `bg-red-50 ${stackedBorderWidth} border-red-500 hover:bg-red-100` 
+            : `bg-blue-50 ${stackedBorderWidth} border-blue-500 hover:bg-blue-100`
         }`}
-        style={{ height: `${durationSlots * 100}%` }}
-        onClick={(e) => handleActivityClick(activity, e)}
+        style={{ 
+          height: `${durationSlots * 100}%`,
+          width: '100%',
+          left: `${stackOffset}px`,
+          top: `${stackOffset}px`,
+          zIndex: stackZIndex,
+          opacity: stackOpacity,
+          boxShadow: isStacked ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+        }}
+        onClick={(e) => handleActivityClick(activity, e, allActivitiesInSlot)}
         onMouseEnter={() => onAppointmentHover?.(activity)}
         onMouseLeave={() => onAppointmentLeave?.()}
-        title="Click to view appointment details"
+        title={`${isStacked ? `${stackIndex + 1}/${totalStacked}: ` : ''}${addressInfo.fullAddress || addressInfo.suburb || activity.subject} - Click to view appointment details`}
       >
-        <div className={`font-medium leading-tight ${isHovered ? 'text-red-900' : 'text-blue-900'}`} style={{ fontSize: '9px' }}>
-          {addressInfo.fullAddress || addressInfo.suburb}
-        </div>
-        {isAllInspectors && activityInspector && (
-          <div className={`leading-none font-medium ${isHovered ? 'text-red-800' : 'text-blue-800'}`} style={{ fontSize: '8px' }}>
-            {activityInspector.name.split(' ')[0]}
+        {isStacked && totalStacked > 2 ? (
+          // Compact view for 3+ stacked activities - show layer number prominently
+          <div className={`font-medium leading-tight truncate ${isHovered ? 'text-red-900' : 'text-blue-900'}`} style={{ fontSize: '8px' }}>
+            {stackIndex + 1}/{totalStacked}: {addressInfo.suburb || activity.subject?.substring(0, 12) || 'Inspection'}
           </div>
+        ) : (
+          // Normal view for 1-2 stacked activities
+          <>
+            <div className={`font-medium leading-tight ${isStacked ? 'truncate' : ''} ${isHovered ? 'text-red-900' : 'text-blue-900'}`} style={{ fontSize: isStacked ? '8px' : '9px' }}>
+              {isStacked && `${stackIndex + 1}. `}{addressInfo.fullAddress || addressInfo.suburb}
+            </div>
+            {isAllInspectors && activityInspector && (
+              <div className={`leading-none font-medium ${isHovered ? 'text-red-800' : 'text-blue-800'}`} style={{ fontSize: isStacked ? '7px' : '8px' }}>
+                {activityInspector.name.split(' ')[0]}
+              </div>
+            )}
+            <div className={`leading-none flex items-center gap-0.5 ${isHovered ? 'text-red-600' : 'text-blue-600'}`} style={{ fontSize: isStacked ? '8px' : '10px' }}>
+              <Clock className={`${isStacked ? 'w-2 h-2' : 'w-2.5 h-2.5'} flex-shrink-0`} />
+              <span>{startTime}</span>
+            </div>
+          </>
         )}
-        <div className={`leading-none flex items-center gap-0.5 ${isHovered ? 'text-red-600' : 'text-blue-600'}`} style={{ fontSize: '10px' }}>
-          <Clock className="w-2.5 h-2.5 flex-shrink-0" />
-          <span>{startTime}</span>
-        </div>
       </div>
     );
   };
 
-  const ActivityModal = ({ activity, isOpen, onClose }) => {
+  const ActivityModal = ({ activity, isOpen, onClose, showNavigation = false, currentIndex = 0, totalCount = 1, onNext, onPrevious }) => {
     if (!activity || !isOpen) return null;
 
     const activityType = getActivityTypeByKey(activity.type);
@@ -371,7 +428,30 @@ const InspectorCalendar = ({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Appointment Details</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-semibold text-gray-900">Appointment Details</h3>
+              {showNavigation && totalCount > 1 && (
+                <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-2 py-1">
+                  <button
+                    onClick={onPrevious}
+                    className="p-1 hover:bg-white rounded transition-colors"
+                    title="Previous inspection"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <span className="text-sm font-medium text-gray-700 px-2">
+                    {currentIndex + 1} / {totalCount}
+                  </span>
+                  <button
+                    onClick={onNext}
+                    className="p-1 hover:bg-white rounded transition-colors"
+                    title="Next inspection"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={onClose}
               className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
@@ -539,25 +619,18 @@ const InspectorCalendar = ({
               </button>
             </div>
 
-            {/* Time Slot Opportunities Toggle */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowOpportunities(!showOpportunities)}
-                className={`px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 ${
-                  showOpportunities 
-                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Target className="w-3 h-3" />
-                Opportunities
-              </button>
-              {showOpportunities && (
+            {/* Opportunities status indicator (toggle is in main header) */}
+            {enableOpportunities && (
+              <div className="flex items-center gap-2">
+                <div className="px-2 py-1 text-xs rounded bg-green-100 text-green-700 flex items-center gap-1">
+                  <Target className="w-3 h-3" />
+                  Opportunities Active
+                </div>
                 <span className="text-xs text-green-600 font-medium">
                   Deals Debug Console for full view
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -637,15 +710,13 @@ const InspectorCalendar = ({
                           )}
                           <div className="min-h-96">
                             {timeSlots.map((timeSlot, slotIndex) => {
-                              // Get activity for this slot - handle both single and all inspector views
-                              const activity = isAllInspectors 
-                                ? getAllActivitiesForSlot(day, timeSlot)[0] // Get first activity if multiple
-                                : getActivityForSlot(displayInspector, day, timeSlot);
+                              // Get ALL activities for this slot - handle both single and all inspector views
+                              const allActivities = isAllInspectors 
+                                ? getAllActivitiesForSlot(day, timeSlot)
+                                : getAllActivitiesForSlot(day, timeSlot).filter(a => displayInspector && Number(a.owner_id) === Number(displayInspector.id));
                               
-                              const allActivities = isAllInspectors ? getAllActivitiesForSlot(day, timeSlot) : [];
-                              const isAvailable = isAllInspectors 
-                                ? allActivities.length === 0 && !isLunchBreak(timeSlot)
-                                : isSlotAvailable(displayInspector, day, timeSlot) && !activity;
+                              const activity = allActivities[0]; // For backward compatibility
+                              const isAvailable = allActivities.length === 0 && !isLunchBreak(timeSlot);
                               const isPast = day < new Date() && !isSameDay(day, new Date());
                               const isLunch = isLunchBreak(timeSlot);
 
@@ -678,7 +749,25 @@ const InspectorCalendar = ({
                                           : activity?.subject
                                   }
                                 >
-                                  {activity && <ActivityBlock activity={activity} timeSlot={timeSlot} />}
+                                  {/* Render all activities in this time slot */}
+                                  {allActivities.map((act, actIndex) => (
+                                    <ActivityBlock 
+                                      key={`${act.id}-${actIndex}`}
+                                      activity={act} 
+                                      timeSlot={timeSlot}
+                                      isStacked={allActivities.length > 1}
+                                      stackIndex={actIndex}
+                                      totalStacked={allActivities.length}
+                                      allActivitiesInSlot={allActivities}
+                                    />
+                                  ))}
+                                  
+                                  {/* Show count badge for multiple inspections */}
+                                  {allActivities.length > 1 && (
+                                    <div className="absolute top-0 right-0 bg-orange-500 text-white text-xs rounded-full min-w-5 h-5 flex items-center justify-center font-bold shadow-md z-50">
+                                      {allActivities.length}
+                                    </div>
+                                  )}
                                   {!activity && !isPast && !isLunch && (
                                     <>
                                       {enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
@@ -810,7 +899,12 @@ const InspectorCalendar = ({
       <ActivityModal 
         activity={selectedActivity} 
         isOpen={showActivityModal} 
-        onClose={closeActivityModal} 
+        onClose={closeActivityModal}
+        showNavigation={activityGroup.length > 1}
+        currentIndex={currentActivityIndex}
+        totalCount={activityGroup.length}
+        onNext={navigateToNextActivity}
+        onPrevious={navigateToPreviousActivity}
       />
     </div>
   );

@@ -21,7 +21,34 @@ if (!GOOGLE_MAPS_API_KEY) {
   console.error('❌ VITE_GOOGLE_MAPS_API_KEY environment variable is required');
 }
 
-const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding, dealsToShow = [] }) => {
+// Vibrant color palette for inspector markers - wider range with high contrast
+const INSPECTOR_COLORS = [
+  { primary: '#E53E3E', secondary: '#C53030', name: 'Crimson Red' },      // Inspector 1
+  { primary: '#00D084', secondary: '#00A86B', name: 'Emerald Green' },    // Inspector 2  
+  { primary: '#0099FF', secondary: '#0078D4', name: 'Electric Blue' },    // Inspector 3
+  { primary: '#FF6B00', secondary: '#E55100', name: 'Vivid Orange' },     // Inspector 4
+  { primary: '#8B5CF6', secondary: '#7C3AED', name: 'Royal Purple' },     // Inspector 5
+  { primary: '#06B6D4', secondary: '#0891B2', name: 'Bright Cyan' },      // Inspector 6
+  { primary: '#F59E0B', secondary: '#D97706', name: 'Golden Yellow' },    // Inspector 7
+  { primary: '#EF4444', secondary: '#DC2626', name: 'Bright Red' },       // Inspector 8
+  { primary: '#10B981', secondary: '#059669', name: 'Fresh Green' },       // Inspector 9
+  { primary: '#3B82F6', secondary: '#2563EB', name: 'Sky Blue' },          // Inspector 10
+  { primary: '#F97316', secondary: '#EA580C', name: 'Flame Orange' },      // Inspector 11
+  { primary: '#A855F7', secondary: '#9333EA', name: 'Violet Purple' },     // Inspector 12
+  { primary: '#06B6D4', secondary: '#0891B2', name: 'Turquoise' },         // Inspector 13
+  { primary: '#84CC16', secondary: '#65A30D', name: 'Lime Green' },        // Inspector 14
+  { primary: '#EC4899', secondary: '#DB2777', name: 'Hot Pink' },          // Inspector 15
+  { primary: '#6366F1', secondary: '#4F46E5', name: 'Indigo Blue' },       // Inspector 16
+];
+
+// Get color for inspector by ID
+const getInspectorColor = (inspectorId) => {
+  if (!inspectorId) return INSPECTOR_COLORS[0]; // Default color
+  const colorIndex = (parseInt(inspectorId) - 1) % INSPECTOR_COLORS.length;
+  return INSPECTOR_COLORS[Math.max(0, colorIndex)];
+};
+
+const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hoveredAppointment, onAppointmentHover, onAppointmentLeave, setIsGeocoding, dealsToShow = [], inspectors = [] }) => {
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
   const markersRef = useRef([]); // Use ref instead of state to prevent loops
@@ -272,16 +299,19 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
 
       const position = appointment.coordinates;
 
-      // Create custom marker icon
+      // Create custom marker icon with inspector-specific color
       const isHovered = hoveredAppointment && hoveredAppointment.id === appointment.id;
       const isCompleted = appointment.done || false;
+      const inspectorColor = getInspectorColor(appointment.owner_id);
+      
       const markerIcon = {
         path: window.google.maps.SymbolPath.CIRCLE,
-        fillColor: '#00D3DD', // Cyan color for markers
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: isHovered ? 4 : 3,
-        scale: isHovered ? 15 : 12
+        fillColor: inspectorColor.primary,
+        fillOpacity: isCompleted ? 0.7 : 1, // Less dimmed for better visibility
+        strokeColor: isHovered ? inspectorColor.secondary : '#ffffff',
+        strokeWeight: isHovered ? 3 : 2, // Thinner stroke for more vibrant colors
+        scale: isHovered ? 16 : 13, // Slightly larger for better visibility
+        anchor: new window.google.maps.Point(0, 0)
       };
 
       // Extract short address for label (first part before comma)
@@ -677,7 +707,71 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
     calculateRoute();
   }, [map, directionsRenderer, geocodedAppointments]);
 
-  return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
+  // Create legend with inspectors who have appointments
+  const activeInspectors = inspectors.filter(inspector => 
+    appointments.some(apt => apt.owner_id === inspector.id)
+  );
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+      
+      {/* Inspector Legend - only show when there are multiple inspectors with appointments */}
+      {activeInspectors.length > 1 && (
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '20px',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: '8px',
+          padding: '12px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          border: '1px solid rgba(0, 0, 0, 0.1)',
+          backdropFilter: 'blur(4px)',
+          maxWidth: '200px',
+          zIndex: 1000
+        }}>
+          <h4 style={{
+            margin: '0 0 8px 0',
+            fontSize: '12px',
+            fontWeight: '600',
+            color: '#374151',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            Inspectors
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {activeInspectors.map(inspector => {
+              const inspectorColor = getInspectorColor(inspector.id);
+              return (
+                <div key={inspector.id} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '11px',
+                  color: '#4B5563'
+                }}>
+                  <div style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    backgroundColor: inspectorColor.primary,
+                    border: '2px solid #ffffff',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                    flexShrink: 0
+                  }} />
+                  <span style={{ fontWeight: '500', lineHeight: '1.2' }}>
+                    {inspector.name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const LoadingComponent = () => (
@@ -724,7 +818,8 @@ const GoogleMapsView = ({
   loading = false,
   isTimeout = false,
   error = null,
-  dealsToShow = [] // Deals to display as purple markers
+  dealsToShow = [], // Deals to display as purple markers
+  inspectors = [] // Inspector information for legend
 }) => {
   const [totalDriveTime, setTotalDriveTime] = useState(0);
   const [isGeocoding, setIsGeocoding] = useState(false);
@@ -832,6 +927,7 @@ const GoogleMapsView = ({
         onAppointmentLeave={onAppointmentLeave}
         setIsGeocoding={setIsGeocoding}
         dealsToShow={dealsToShow}
+        inspectors={inspectors}
       />
     );
   };
