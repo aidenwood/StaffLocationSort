@@ -685,7 +685,7 @@ const MapComponent = ({ appointments, potentialBooking, onRouteCalculated, hover
           destination,
           waypoints,
           travelMode: window.google.maps.TravelMode.DRIVING,
-          optimizeWaypoints: true,
+          optimizeWaypoints: false, // Keep appointments in chronological order
           avoidTolls: true
         }, (result, status) => {
           if (status === 'OK') {

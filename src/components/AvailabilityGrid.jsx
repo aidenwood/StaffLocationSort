@@ -34,18 +34,16 @@ const AvailabilityGrid = ({ pipedriveData }) => {
     isLiveData
   } = pipedriveData;
 
-  // Generate 4 weeks of weekdays (20 days total)
+  // Generate 4 weeks of all days (28 days total including weekends)
   const weekdays = useMemo(() => {
     const days = [];
     let currentDay = startDate;
     
     for (let week = 0; week < 4; week++) {
-      for (let day = 0; day < 5; day++) { // Monday to Friday
+      for (let day = 0; day < 7; day++) { // Sunday to Saturday
         days.push(new Date(currentDay));
         currentDay = addDays(currentDay, 1);
       }
-      // Skip weekend
-      currentDay = addDays(currentDay, 2);
     }
     
     return days;
@@ -744,7 +742,8 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       'sick': 'bg-red-100 text-red-800',
       'rain': 'bg-blue-100 text-blue-800',
       'rdo': 'bg-yellow-100 text-yellow-800',
-      'annual_leave': 'bg-purple-100 text-purple-800'
+      'annual_leave': 'bg-purple-100 text-purple-800',
+      'van_service': 'bg-orange-100 text-orange-800'
     };
     return statusColors[status] || 'bg-gray-100 text-gray-600';
   };
@@ -1120,7 +1119,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             <colgroup>
               <col className="w-48" />
               {weekdays.map((_, index) => (
-                <col key={index} className="w-32" />
+                <col key={index} className="w-24" />
               ))}
             </colgroup>
             {/* Header row with dates */}
@@ -1132,7 +1131,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                 {weekdays.map((day, index) => (
                   <th 
                     key={index}
-                    className="w-32 h-24 px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="w-24 h-24 px-1 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
                   >
                     <div>{format(day, 'EEE')}</div>
                     <div className="text-gray-400">{format(day, 'M/d')}</div>
@@ -1169,7 +1168,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                   return (
                     <td 
                       key={dayIndex}
-                      className="w-32 h-24 px-1 py-1 text-center border-r border-gray-100 relative cursor-pointer hover:opacity-80"
+                      className="w-24 h-24 px-1 py-1 text-center border-r border-gray-100 relative cursor-pointer hover:opacity-80"
                       title={`${format(day, 'MMM d')}: ${capacity.totalInspections}/${capacity.totalCapacity} inspections (${capacity.utilizationPercent}% utilization) - Click for deals`}
                       onClick={() => handleCapacityCellClick('Total', format(day, 'yyyy-MM-dd'), 'total')}
                     >
@@ -1226,7 +1225,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                         return (
                           <td 
                             key={dayIndex}
-                            className="w-32 h-24 px-1 py-1 text-center border-r border-blue-100 relative cursor-pointer hover:opacity-80"
+                            className="w-24 h-24 px-1 py-1 text-center border-r border-blue-100 relative cursor-pointer hover:opacity-80"
                             title={`${regionKey} - ${format(day, 'MMM d')}: ${regionalCapacity.inspections}/${regionalCapacity.capacity} inspections (${regionalCapacity.utilizationPercent}% utilization) - ${regionalCapacity.inspectors} inspectors - Click for deals`}
                             onClick={() => handleCapacityCellClick(regionKey, format(day, 'yyyy-MM-dd'), 'regional')}
                           >
@@ -1264,7 +1263,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                                 return (
                                   <td 
                                     key={dayIndex}
-                                    className="w-32 h-24 px-1 py-1 text-center border-r border-green-100 relative cursor-pointer hover:opacity-80"
+                                    className="w-24 h-24 px-1 py-1 text-center border-r border-green-100 relative cursor-pointer hover:opacity-80"
                                     title={`${locationKey} on ${format(day, 'MMM d')}: ${locationCount} inspections - Click for deals`}
                                     onClick={() => handleCapacityCellClick(locationKey, format(day, 'yyyy-MM-dd'), 'location')}
                                   >
@@ -1304,7 +1303,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                     return (
                       <td 
                         key={dayIndex}
-                        className="w-32 h-24 px-1 py-1 text-center border-r border-gray-100 relative"
+                        className="w-24 h-24 px-1 py-1 text-center border-r border-gray-100 relative"
                         title={`${inspector.name} - ${format(day, 'MMM d')}: ${dayData.count} inspections${dayData.dominantRegion ? ` in ${dayData.dominantRegion}` : ''}${isOutOfRegion(inspector, dayData.dominantRegion) ? ' - OUT OF REGION!' : ''}`}
                       >
                         <div 
@@ -1382,6 +1381,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                                       : existingRoster.status === 'rain' ? 'Rain'
                                       : existingRoster.status === 'rdo' ? 'RDO'
                                       : existingRoster.status === 'annual_leave' ? 'Leave'
+                                      : existingRoster.status === 'van_service' ? 'Van Service'
                                       : 'Available'
                                       }
                                     </div>

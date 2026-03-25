@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS inspector_roster (
   date DATE NOT NULL,
   region_code TEXT, -- R01, R02, etc.
   region_name TEXT, -- Brisbane/Logan/Ipswich, etc.
-  status TEXT DEFAULT 'working' CHECK (status IN ('working', 'sick', 'rain', 'rdo', 'annual_leave')),
+  status TEXT DEFAULT 'working' CHECK (status IN ('working', 'sick', 'rain', 'rdo', 'annual_leave', 'van_service')),
   notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS inspector_roster (
 -- Add comments for documentation
 COMMENT ON TABLE inspector_roster IS 'Stores daily roster assignments for property inspectors';
 COMMENT ON COLUMN inspector_roster.inspector_id IS 'Pipedrive user ID of the inspector';
-COMMENT ON COLUMN inspector_roster.status IS 'Inspector availability status: working, sick, rain, rdo (regular day off), annual_leave';
+COMMENT ON COLUMN inspector_roster.status IS 'Inspector availability status: working, sick, rain, rdo (regular day off), annual_leave, van_service';
 COMMENT ON COLUMN inspector_roster.region_code IS 'Assigned region code (R01-R09)';
 COMMENT ON COLUMN inspector_roster.region_name IS 'Human readable region name';
 

@@ -32,7 +32,7 @@ const InspectorCalendar = ({
   const [activityGroup, setActivityGroup] = useState([]); // All activities in the same timeslot
   const [currentActivityIndex, setCurrentActivityIndex] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [viewMode, setViewMode] = useState(5); // 1, 3, or 5 days
+  const [viewMode, setViewMode] = useState(7); // 1, 3, 5, or 7 days (includes weekends)
   // Removed local showOpportunities state - use enableOpportunities prop instead
 
   // Only use real Pipedrive data - no mock fallbacks
@@ -77,30 +77,21 @@ const InspectorCalendar = ({
   
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
   
-  // Calculate days to show based on viewMode (only weekdays)
+  // Calculate days to show based on viewMode (now includes weekends)
   const getViewDays = () => {
     const days = [];
     const start = new Date(weekStart);
     
-    // Find the first weekday (Monday) from current date
+    // Find the start of the week (Sunday) from current date
     const baseDate = selectedDate || currentWeek;
     const currentDay = baseDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
     
-    let startDate;
-    if (currentDay === 0) { // Sunday
-      startDate = addDays(baseDate, 1); // Move to Monday
-    } else if (currentDay === 6) { // Saturday
-      startDate = addDays(baseDate, 2); // Move to Monday
-    } else {
-      startDate = subDays(baseDate, currentDay - 1); // Move to Monday of current week
-    }
+    // Start from Sunday (day 0) of current week
+    const startDate = subDays(baseDate, currentDay); // Move to Sunday of current week
     
     for (let i = 0; i < viewMode; i++) {
       const day = addDays(startDate, i);
-      // Only add weekdays (Monday to Friday)
-      if (day.getDay() >= 1 && day.getDay() <= 5) {
-        days.push(day);
-      }
+      days.push(day);
     }
     
     return days.slice(0, viewMode);
@@ -134,18 +125,26 @@ const InspectorCalendar = ({
 
   const getActivityForSlot = (inspector, date, timeSlot) => {
     const dateString = format(date, 'yyyy-MM-dd');
+    
     const activities = effectiveActivities.filter(activity => {
-      // If inspector is provided, filter by inspector ID (handle number/string coercion)
-      if (inspector && Number(activity.owner_id) !== Number(inspector.id)) return false;
-      if (activity.due_date !== dateString) return false;
-      if (activity.done) return false;
       // Must have a time (not 00:00:00 or empty)
       if (!activity.due_time || activity.due_time === '00:00:00') return false;
+      if (activity.done) return false;
+      
+      // Get the adjusted date after timezone conversion
+      const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
+      if (!timeInfo) return false;
+      
+      // Check if activity is on this date (use adjusted date from timezone conversion)
+      if (timeInfo.date !== dateString) return false;
+      
+      // If inspector is provided, filter by inspector ID (handle number/string coercion)
+      if (inspector && Number(activity.owner_id) !== Number(inspector.id)) return false;
+      
       // Skip follow-up tasks
       if (activity.subject && activity.subject.includes('Inspector ENG Follow up')) return false;
       return true;
     });
-    
     
     return activities.find(activity => {
       const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
@@ -162,13 +161,15 @@ const InspectorCalendar = ({
   const getAllActivitiesForSlot = (date, timeSlot) => {
     const dateString = format(date, 'yyyy-MM-dd');
     return effectiveActivities.filter(activity => {
-      if (activity.due_date !== dateString) return false;
       if (activity.done) return false;
       if (!activity.due_time || activity.due_time === '00:00:00') return false;
       if (activity.subject && activity.subject.includes('Inspector ENG Follow up')) return false;
       
       const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
       if (!timeInfo) return false;
+      
+      // Check if activity is on this date (use adjusted date from timezone conversion)
+      if (timeInfo.date !== dateString) return false;
       
       const activityTime = timeInfo.time;
       const duration = activity.duration || '01:00:00';
@@ -186,6 +187,45 @@ const InspectorCalendar = ({
     const endMin = totalMinutes % 60;
     
     return `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+  };
+
+  // Get activity type information
+  const getActivityTypeByKey = (activityType) => {
+    // Default activity type mapping for Pipedrive activities
+    const activityTypes = {
+      'call': { name: 'Call', color: 'blue' },
+      'meeting': { name: 'Meeting', color: 'green' },
+      'task': { name: 'Task', color: 'orange' },
+      'deadline': { name: 'Deadline', color: 'red' },
+      'email': { name: 'Email', color: 'purple' },
+      'inspection': { name: 'Inspection', color: 'blue' },
+      'property_inspection': { name: 'Property Inspection', color: 'blue' }
+    };
+    
+    return activityTypes[activityType] || { name: 'Inspection', color: 'blue' };
+  };
+
+  // Strip HTML tags from text and clean up formatting
+  const stripHtmlTags = (html) => {
+    if (!html) return '';
+    
+    return html
+      .replace(/<div[^>]*>/gi, '\n') // Convert div to line breaks
+      .replace(/<\/div>/gi, '') // Remove closing divs
+      .replace(/<br\s*\/?>/gi, '\n') // Convert br to line breaks
+      .replace(/<b[^>]*>(.*?)<\/b>/gi, '$1') // Remove bold tags but keep content
+      .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '$1') // Remove strong tags but keep content
+      .replace(/<i[^>]*>(.*?)<\/i>/gi, '$1') // Remove italic tags but keep content
+      .replace(/<em[^>]*>(.*?)<\/em>/gi, '$1') // Remove em tags but keep content
+      .replace(/<[^>]*>/g, '') // Remove any remaining HTML tags
+      .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
+      .replace(/&amp;/g, '&') // Replace HTML entities
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n\s*\n/g, '\n') // Remove extra line breaks
+      .trim();
   };
 
   const isSlotAvailable = (inspector, date, timeSlot) => {
@@ -261,8 +301,16 @@ const InspectorCalendar = ({
     
     const converted = convertToAustralianTime(timeString, 'QLD');
     
+    // If time conversion crossed midnight, adjust the date
+    let adjustedDate = dateString;
+    if (converted.crossedMidnight) {
+      const date = new Date(dateString);
+      date.setDate(date.getDate() + 1);
+      adjustedDate = format(date, 'yyyy-MM-dd');
+    }
+    
     return {
-      date: dateString,
+      date: adjustedDate,
       time: converted.time // 24-hour format for calendar use
     };
   };
@@ -499,7 +547,7 @@ const InspectorCalendar = ({
           {activity.note && (
             <div className="text-xs bg-gray-50 border border-gray-200 rounded p-2">
               <div className="font-medium text-gray-700 mb-1">Notes:</div>
-              <div className="text-gray-600">{activity.note}</div>
+              <div className="text-gray-600 whitespace-pre-line">{stripHtmlTags(activity.note)}</div>
             </div>
           )}
 
@@ -642,7 +690,9 @@ const InspectorCalendar = ({
             {/* Header Row - Sticky */}
             <div className={`sticky top-0 z-10 grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
               viewMode === 1 ? 'grid-cols-1' : 
-              viewMode === 3 ? 'grid-cols-3' : 'grid-cols-5'
+              viewMode === 3 ? 'grid-cols-3' : 
+              viewMode === 5 ? 'grid-cols-5' :
+              viewMode === 7 ? 'grid-cols-7' : 'grid-cols-5'
             }`}>
               {weekDays.map(day => {
                 const isSelected = selectedDate && isSameDay(day, selectedDate);
@@ -689,7 +739,9 @@ const InspectorCalendar = ({
                 <div className="bg-white relative">
                   <div className={`grid gap-px bg-gray-200 ${
                     viewMode === 1 ? 'grid-cols-1' : 
-                    viewMode === 3 ? 'grid-cols-3' : 'grid-cols-5'
+                    viewMode === 3 ? 'grid-cols-3' : 
+                    viewMode === 5 ? 'grid-cols-5' :
+                    viewMode === 7 ? 'grid-cols-7' : 'grid-cols-5'
                   }`}>
 
                     {/* Day Columns */}
@@ -717,37 +769,46 @@ const InspectorCalendar = ({
                                 : getAllActivitiesForSlot(day, timeSlot).filter(a => displayInspector && Number(a.owner_id) === Number(displayInspector.id));
                               
                               const activity = allActivities[0]; // For backward compatibility
-                              const isAvailable = allActivities.length === 0 && !isLunchBreak(timeSlot);
                               const isPast = day < new Date() && !isSameDay(day, new Date());
                               const isLunch = isLunchBreak(timeSlot);
+                              
+                              // Check roster status - block all non-working days
+                              const rosterStatus = displayInspector ? getRosterForDate(displayInspector.id, day) : null;
+                              const isNonWorkingDay = rosterStatus && rosterStatus.status !== 'working';
+                              const isGreyedOut = isNonWorkingDay || isPast;
+                              const isAvailable = allActivities.length === 0 && !isLunchBreak(timeSlot) && !isNonWorkingDay && !isPast;
 
                               return (
                                 <div
                                   key={timeSlot}
-                                  className={`h-8 border-b border-gray-100 relative cursor-pointer transition-all ${
-                                    isPast 
-                                      ? 'bg-gray-50' 
+                                  className={`h-8 border-b border-gray-100 relative transition-all ${
+                                    isGreyedOut 
+                                      ? 'bg-gray-100 cursor-not-allowed opacity-50' 
                                       : isLunch
-                                        ? 'bg-orange-50 border-orange-200'
+                                        ? 'bg-orange-50 border-orange-200 cursor-pointer'
                                         : isAvailable 
-                                          ? 'hover:bg-green-50 hover:border-green-200' 
-                                          : ''
+                                          ? 'hover:bg-green-50 hover:border-green-200 cursor-pointer' 
+                                          : allActivities.length > 0
+                                            ? 'cursor-pointer'
+                                            : 'cursor-not-allowed'
                                   } ${
                                     isToday ? 'border-l-2 border-l-blue-400' : ''
                                   } ${
                                     slotIndex % 2 === 0 ? 'border-r border-gray-200' : ''
                                   }`}
-                                  onClick={() => !isPast && !isAllInspectors && handleSlotClick(displayInspector, day, timeSlot)}
+                                  onClick={() => !isGreyedOut && !isAllInspectors && handleSlotClick(displayInspector, day, timeSlot)}
                                   title={
-                                    isPast 
-                                      ? 'Past time slot'
-                                      : isLunch
-                                        ? 'Lunch Break (12:00-13:00)'
-                                        : isAllInspectors && allActivities.length > 1
-                                          ? `${allActivities.length} activities at ${timeSlot}`
-                                        : isAvailable 
-                                          ? `Available - Click to book at ${timeSlot}` 
-                                          : activity?.subject
+                                    isNonWorkingDay
+                                      ? `${rosterStatus.status.replace('_', ' ').toUpperCase()} - ${timeSlot}`
+                                      : isPast 
+                                        ? 'Past time slot'
+                                        : isLunch
+                                          ? 'Lunch Break (12:00-13:00)'
+                                          : isAllInspectors && allActivities.length > 1
+                                            ? `${allActivities.length} activities at ${timeSlot}`
+                                            : isAvailable 
+                                              ? `Available - Click to book at ${timeSlot}` 
+                                              : activity?.subject
                                   }
                                 >
                                   {/* Render all activities in this time slot */}
@@ -769,7 +830,21 @@ const InspectorCalendar = ({
                                       {allActivities.length}
                                     </div>
                                   )}
-                                  {!activity && !isPast && !isLunch && (
+                                  {/* Show status text for non-working days - only once per day at 09:00 slot */}
+                                  {isNonWorkingDay && !activity && timeSlot === '09:00' && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <div className="text-xs font-medium text-gray-600 bg-gray-200 px-2 py-1 rounded">
+                                        {rosterStatus.status === 'van_service' ? 'Van Service' :
+                                         rosterStatus.status === 'annual_leave' ? 'Annual Leave' :
+                                         rosterStatus.status === 'rdo' ? 'RDO' :
+                                         rosterStatus.status === 'sick' ? 'Sick' :
+                                         rosterStatus.status === 'rain' ? 'Rain Day' :
+                                         rosterStatus.status.replace('_', ' ')}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {!activity && !isGreyedOut && !isLunch && (
                                     <>
                                       {enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
                                         <div className="absolute inset-0 flex items-center justify-center" style={{ height: '64px', zIndex: 1 }}>

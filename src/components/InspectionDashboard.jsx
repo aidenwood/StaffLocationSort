@@ -34,22 +34,15 @@ import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
 import { getDealsForRegion, sortDealsByDistance, forceRefreshDeals } from '../api/pipedriveDeals.js';
 import { resetCircuitBreaker, getGeocodeStats, clearGeocodeCache } from '../services/geocoding';
 import Toast from './Toast.jsx';
+import { convertToAustralianTime } from '../utils/timezone';
 
-// Helper functions to skip weekends
-const getNextBusinessDay = (date) => {
-  let nextDay = addDays(date, 1);
-  while (getDay(nextDay) === 0 || getDay(nextDay) === 6) { // 0 = Sunday, 6 = Saturday
-    nextDay = addDays(nextDay, 1);
-  }
-  return nextDay;
+// Helper functions for date navigation - now include weekends
+const getNextDay = (date) => {
+  return addDays(date, 1);
 };
 
-const getPreviousBusinessDay = (date) => {
-  let prevDay = subDays(date, 1);
-  while (getDay(prevDay) === 0 || getDay(prevDay) === 6) { // 0 = Sunday, 6 = Saturday
-    prevDay = subDays(prevDay, 1);
-  }
-  return prevDay;
+const getPreviousDay = (date) => {
+  return subDays(date, 1);
 };
 
 const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
@@ -132,7 +125,6 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
   const addressMap = useMemo(() => {
     const sharedCache = getSharedAddressCache();
     const combined = { ...sharedCache, ...localAddressMap };
-    console.log(`📦 InspectionDashboard: Using ${Object.keys(sharedCache).length} shared + ${Object.keys(localAddressMap).length} local = ${Object.keys(combined).length} total cached addresses`);
     return combined;
   }, [localAddressMap, sharedCacheRefresh]);
   
@@ -167,6 +159,8 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
   // Get all inspector activities (for enrichment)
   const inspectorActivities = useMemo(() => {
     if (!activities) return [];
+    
+    
     return activities.filter(a => {
       // For "All Inspectors" view (selectedInspector is null), show all activities
       const matchesInspector = selectedInspector === null || Number(a.owner_id) === Number(selectedInspector);
@@ -221,7 +215,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               };
             }
           });
-          console.log(`🗺️ LocalAddressMap now contains ${Object.keys(updated).length} activities`);
+          // Updated local address map
           return updated;
         });
         
@@ -241,7 +235,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
             }
           });
           localStorage.setItem('staffLocationSort.addressCache', JSON.stringify(sharedCache));
-          console.log(`💾 InspectionDashboard: Saved ${enriched.filter(a => a.personAddress).length} enriched activities to shared cache`);
+          // Saved enriched activities to shared cache
         } catch (error) {
           console.warn('Error saving to shared address cache:', error);
         }
@@ -250,8 +244,6 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
         setTimeout(() => {
           setShowOpportunities(true);
           setOpportunitiesLoading(false);
-          // Calculate deal counts for time slots
-          calculateTimeSlotDealCounts();
         }, 1000);
       } catch (err) {
         console.error('Address enrichment failed:', err);
@@ -294,29 +286,30 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
       return a;
     });
     
-    console.log(`📊 Activities: ${enrichedCount} enriched/${activities?.length || 0} total`);
+    // Process activities for selected inspector
     return result;
   }, [activities, addressMap]);
 
   // Get enriched day activities for the map (inspector-specific)
   const dateString = format(selectedDate, 'yyyy-MM-dd');
-  console.log(`🗓️ Date filtering: selectedDate=${selectedDate.toDateString()}, dateString=${dateString}`);
   
   const enrichedMapActivities = useMemo(() => {
     const filtered = enrichedActivities.filter(a => {
       // For "All Inspectors" view (selectedInspector is null), show all activities
       const matchesInspector = selectedInspector === null || Number(a.owner_id) === Number(selectedInspector);
       
-      const dateMatch = a.due_date === dateString;
-      // Reduced 9am logging - only log when found
-      if (a.due_time && a.due_time.startsWith('09:') && dateMatch) {
-        console.log(`🕘 9am inspection: ${a.subject?.substring(0,50)} on ${a.due_date}`);
+      // Get timezone-adjusted date for this activity
+      let adjustedDate = a.due_date;
+      if (a.due_time && a.due_time !== '00:00:00') {
+        const converted = convertToAustralianTime(a.due_time, 'QLD');
+        if (converted.crossedMidnight) {
+          const date = new Date(a.due_date);
+          date.setDate(date.getDate() + 1);
+          adjustedDate = format(date, 'yyyy-MM-dd');
+        }
       }
       
-      // Debug Scott specifically (reduced)
-      if (a.subject && a.subject.toLowerCase().includes('scott') && dateMatch) {
-        console.log(`🔍 SCOTT MATCH: ${a.subject} on ${a.due_date} at ${a.due_time}`);
-      }
+      const dateMatch = adjustedDate === dateString;
       
       return matchesInspector &&
         dateMatch &&
@@ -332,15 +325,26 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
 
   // Get ALL inspection activities for the date (for distance sorting)
   const allDayInspectionActivities = useMemo(() => {
-    const filtered = enrichedActivities.filter(a =>
-      a.due_date === dateString &&
-      !a.done &&
-      a.due_time && a.due_time !== '00:00:00' &&
-      !(a.subject && a.subject.includes('Inspector ENG Follow up'))
-    );
+    const filtered = enrichedActivities.filter(a => {
+      // Get timezone-adjusted date for this activity
+      let adjustedDate = a.due_date;
+      if (a.due_time && a.due_time !== '00:00:00') {
+        const converted = convertToAustralianTime(a.due_time, 'QLD');
+        if (converted.crossedMidnight) {
+          const date = new Date(a.due_date);
+          date.setDate(date.getDate() + 1);
+          adjustedDate = format(date, 'yyyy-MM-dd');
+        }
+      }
+      
+      return adjustedDate === dateString &&
+        !a.done &&
+        a.due_time && a.due_time !== '00:00:00' &&
+        !(a.subject && a.subject.includes('Inspector ENG Follow up'));
+    });
     
     const withCoords = filtered.filter(a => a.coordinates);
-    console.log(`🗺️  ${withCoords.length}/${filtered.length} activities geocoded for ${dateString}`);
+    // Filter activities with coordinates
     
     return filtered;
   }, [enrichedActivities, dateString]);
@@ -357,13 +361,13 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
       // Fetch deals for the region
       const deals = await getDealsForRegion(region, { limit: 200 });
       if (!deals || deals.length === 0) {
-        console.log(`⚠️ No deals returned for region ${region}`);
+        // No deals for region
         return;
       }
       
       // Debug: Check how many deals have coordinates
       const dealsWithCoords = deals.filter(d => d.coordinates && d.coordinates.lat && d.coordinates.lng);
-      console.log(`📍 Deals analysis: ${dealsWithCoords.length}/${deals.length} deals have coordinates for region ${region}`);
+      // Analysis of deals with coordinates
       
       const timeSlots = ['09:00', '11:00', '13:00', '15:00'];
       const counts = {};
@@ -415,16 +419,9 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
           if (referenceInspection) {
             try {
               // Sort deals by distance to this specific inspection
-              console.log(`🔍 ${dayString} ${timeSlot}: Processing ${deals.length} deals with reference:`, {
-                address: referenceInspection.personAddress?.substring(0, 50),
-                coordinates: referenceInspection.coordinates
-              });
-              
               const sortedDeals = sortDealsByDistance(deals, [referenceInspection]);
-              console.log(`📊 ${dayString} ${timeSlot}: sortDealsByDistance returned ${sortedDeals.length} deals`);
               
               const dealsWithDistance = sortedDeals.filter(d => d.distanceInfo?.minDistance !== null);
-              console.log(`📏 ${dayString} ${timeSlot}: ${dealsWithDistance.length}/${sortedDeals.length} deals have valid distances`);
               
               if (dealsWithDistance.length > 0) {
                 const within1km = dealsWithDistance.filter(d => d.distanceInfo.minDistance <= 1).length;
@@ -457,7 +454,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
       }
       
       setTimeSlotDealCounts(counts);
-      console.log(`📅 Calculated deal counts for ${Object.keys(counts).length} time slots`);
+      // Deal counts calculated
       
     } catch (err) {
       console.error('❌ Error calculating time slot deal counts:', err);
@@ -469,7 +466,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
     if (showOpportunities && !opportunitiesLoading && enrichedActivities.length > 0) {
       calculateTimeSlotDealCounts();
     }
-  }, [selectedDate, selectedInspector, showOpportunities, enrichedActivities]);
+  }, [selectedDate, selectedInspector, showOpportunities, enrichedActivities.length]);
 
   const handleTimeSlotSelection = (slotData) => {
     setSelectedTimeSlot(slotData);
@@ -492,7 +489,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
 
   const handleBookingConfirm = (newActivity) => {
     // In a real app, this would save to Pipedrive API
-    console.log('New booking confirmed:', newActivity);
+    // New booking confirmed
     
     // Close the booking form
     handleBookingCancel();
@@ -533,13 +530,8 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
   };
 
   const handleDateChange = (newDate) => {
-    // If the selected date is a weekend, move to the next business day
-    const dayOfWeek = getDay(newDate);
-    if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
-      setSelectedDate(getNextBusinessDay(newDate));
-    } else {
-      setSelectedDate(newDate);
-    }
+    // Allow weekend dates now
+    setSelectedDate(newDate);
   };
 
   const handleRetryConnection = () => {
@@ -591,11 +583,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
       }
       
       if (referenceInspection) {
-        console.log(`🎯 Opening deals console for ${timeSlot} with reference inspection:`, {
-          time: referenceInspection.due_time,
-          address: referenceInspection.personAddress,
-          coordinates: referenceInspection.coordinates
-        });
+        // Open deals console with reference inspection
         
         // Store the sort-by inspection for DealsDebugConsole
         window.dealsSortByInspection = referenceInspection;
@@ -729,7 +717,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
             {/* Date Control */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
               <button
-                onClick={() => handleDateChange(getPreviousBusinessDay(selectedDate))}
+                onClick={() => handleDateChange(getPreviousDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Previous day"
               >
@@ -743,7 +731,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               />
               
               <button
-                onClick={() => handleDateChange(getNextBusinessDay(selectedDate))}
+                onClick={() => handleDateChange(getNextDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Next day"
               >
@@ -891,7 +879,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
             {/* Date Control */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
               <button
-                onClick={() => handleDateChange(getPreviousBusinessDay(selectedDate))}
+                onClick={() => handleDateChange(getPreviousDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Previous day"
               >
@@ -905,7 +893,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               />
               
               <button
-                onClick={() => handleDateChange(getNextBusinessDay(selectedDate))}
+                onClick={() => handleDateChange(getNextDay(selectedDate))}
                 className="flex items-center px-2 py-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Next day"
               >
@@ -1006,7 +994,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
             {/* Center Right: Date Control */}
             <div className="flex items-center bg-gray-50 rounded-md p-0.5 gap-0.5">
               <button
-                onClick={() => handleDateChange(getPreviousBusinessDay(selectedDate))}
+                onClick={() => handleDateChange(getPreviousDay(selectedDate))}
                 className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Previous day"
               >
@@ -1020,7 +1008,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               />
               
               <button
-                onClick={() => handleDateChange(getNextBusinessDay(selectedDate))}
+                onClick={() => handleDateChange(getNextDay(selectedDate))}
                 className="flex items-center p-1 rounded text-xs text-gray-600 hover:text-gray-800 transition-colors"
                 title="Next day"
               >
@@ -1084,10 +1072,10 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
         {/* Calendar Section */}
         <div className={`min-w-0 transition-all duration-500 ease-in-out overflow-hidden ${
           mobileViewMode === 'map' 
-            ? 'w-0 opacity-0 -translate-x-full'
+            ? 'h-0 w-0 lg:w-0 opacity-0 -translate-x-full lg:translate-x-0 -translate-y-full'
             : mobileViewMode === 'split'
-              ? 'flex-1 min-h-[50vh] lg:w-1/2 opacity-100 translate-x-0'
-              : 'flex-1 opacity-100 translate-x-0'
+              ? 'h-1/2 w-full min-h-[50vh] lg:h-auto lg:w-1/2 opacity-100 translate-x-0 translate-y-0'
+              : 'h-full w-full lg:h-auto lg:w-full opacity-100 translate-x-0 translate-y-0'
         }`}>
           <InspectorCalendar
             selectedInspector={selectedInspector}
@@ -1116,10 +1104,10 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
         {/* Map Section */}
         <div className={`flex flex-col gap-4 min-w-0 transition-all duration-500 ease-in-out overflow-hidden ${
           mobileViewMode === 'calendar'
-            ? 'w-0 opacity-0 translate-x-full'
+            ? 'h-0 w-0 lg:w-0 opacity-0 translate-x-full lg:translate-x-0 translate-y-full'
             : mobileViewMode === 'split'
-              ? 'flex-1 min-h-[50vh] lg:w-1/2 opacity-100 translate-x-0'
-              : 'flex-1 opacity-100 translate-x-0'
+              ? 'h-1/2 w-full min-h-[50vh] lg:h-auto lg:w-1/2 opacity-100 translate-x-0 translate-y-0'
+              : 'h-full w-full lg:h-auto lg:w-full opacity-100 translate-x-0 translate-y-0'
         }`}>
           {/* Drive Time Impact */}
           {driveTimeImpact && potentialBooking && (

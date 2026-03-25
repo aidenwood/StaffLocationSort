@@ -854,7 +854,7 @@ export const transformPipedriveActivity = (pipedriveActivity) => {
     
     // Time and date  
     due_date: pipedriveActivity.due_date,
-    due_time: pipedriveActivity.due_time || null, // Don't default to 09:00:00 - preserve original
+    due_time: pipedriveActivity.due_time || null,
     duration: '01:00:00', // Default 1 hour for inspections
     busy: true,
     

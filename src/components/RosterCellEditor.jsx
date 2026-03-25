@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRosterData } from '../hooks/useRosterData';
+import { regionBreakdown } from '../data/realInspectorData';
 
 const RosterCellEditor = ({ 
   inspector, 
@@ -20,24 +21,19 @@ const RosterCellEditor = ({
     inspector.id
   );
 
-  const regions = [
-    { code: 'R01', name: 'R01 - Brisbane/Logan/Ipswich' },
-    { code: 'R02', name: 'R02 - Gympie/Maryborough' },
-    { code: 'R03', name: 'R03 - Bundaberg' },
-    { code: 'R04', name: 'R04 - Toowoomba' },
-    { code: 'R05', name: 'R05 - Warwick/Stanthorpe' },
-    { code: 'R06', name: 'R06 - Roma' },
-    { code: 'R07', name: 'R07 - Grafton/Coffs' },
-    { code: 'R08', name: 'R08 - Glen Innes/Armidale' },
-    { code: 'R09', name: 'R09 - Newcastle' }
-  ];
+  // Use regions from realInspectorData to stay in sync
+  const regions = Object.entries(regionBreakdown).map(([code, data]) => ({
+    code,
+    name: data.name
+  }));
 
   const statuses = [
     { value: 'working', label: 'Working', color: 'bg-green-100 text-green-800' },
     { value: 'sick', label: 'Sick', color: 'bg-red-100 text-red-800' },
     { value: 'rain', label: 'Rain Day', color: 'bg-blue-100 text-blue-800' },
     { value: 'rdo', label: 'RDO', color: 'bg-yellow-100 text-yellow-800' },
-    { value: 'annual_leave', label: 'Annual Leave', color: 'bg-purple-100 text-purple-800' }
+    { value: 'annual_leave', label: 'Annual Leave', color: 'bg-purple-100 text-purple-800' },
+    { value: 'van_service', label: 'Van Service', color: 'bg-orange-100 text-orange-800' }
   ];
 
   useEffect(() => {

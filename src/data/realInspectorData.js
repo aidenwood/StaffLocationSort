@@ -37,6 +37,10 @@ export const regionBreakdown = {
   'R09': {
     name: 'R09 - NR (Newcastle Region)',
     locations: ['Aberglasslyn', 'Rutherford', 'Maitland', 'Newcastle', 'Mereweather', 'Gwandalan', 'Port Stephens', 'Cessnock', 'Lake Macquarie', 'Central Coast']
+  },
+  'R10': {
+    name: 'R10 - SP (Sydney/Penrith)',
+    locations: ['Sydney', 'Penrith', 'Parramatta', 'Liverpool', 'Campbelltown', 'Blacktown', 'Camden', 'Richmond', 'Windsor']
   }
 };
 

@@ -48,6 +48,9 @@ export const convertToAustralianTime = (utcTimeString, region = 'QLD', forceDST 
     // Add 10 hours for Australian timezone
     hours = hours + 10;
     
+    // Track if we crossed midnight (important for date adjustment)
+    const crossedMidnight = hours >= 24;
+    
     // Handle day rollover
     if (hours >= 24) {
       hours = hours - 24;
@@ -66,7 +69,8 @@ export const convertToAustralianTime = (utcTimeString, region = 'QLD', forceDST 
       time: timeString, // 24-hour format
       time12Hour: time12Hour, // 12-hour format 
       timezone: 'AEST',
-      utcOffset: '+10'
+      utcOffset: '+10',
+      crossedMidnight: crossedMidnight // Flag to indicate date adjustment needed
     };
     
   } catch (error) {

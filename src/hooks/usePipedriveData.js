@@ -30,6 +30,14 @@ const getCachedActivities = (cacheKey) => {
     if (!cached) return null;
     
     const parsedData = JSON.parse(cached);
+    
+    // If cache has 0 activities, ignore it and force fresh fetch
+    if (!parsedData.data || parsedData.data.length === 0) {
+      console.log(`🚫 Ignoring corrupted cache for ${cacheKey} (0 activities)`);
+      localStorage.removeItem(`${ACTIVITIES_CACHE_PREFIX}.${cacheKey}`);
+      return null;
+    }
+    
     console.log(`📦 Using cached activities for ${cacheKey} (${parsedData.data?.length || 0} activities, ${Math.round((Date.now() - parsedData.timestamp) / 1000)}s old)`);
     return parsedData;
   } catch (error) {
