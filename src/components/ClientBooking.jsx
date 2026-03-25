@@ -2,11 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addDays } from 'date-fns';
 import { MapPin, Clock, User, Phone, ChevronLeft, ChevronRight, Calendar, Search } from 'lucide-react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
-import { 
-  inspectors, 
-  getActivitiesByInspectorAndDate,
-  loganLocations 
-} from '../data/mockActivities';
+// Mock data removed - using real inspector data only
 import { 
   realInspectors,
   realRoofInspectors,
@@ -220,7 +216,7 @@ const ClientBookingForm = ({ selectedAddress }) => {
 
       // Check if any inspector in Logan region is available
       const availableInspectors = loganInspectors.filter(inspector => {
-        const activities = getActivitiesByInspectorAndDate(inspector.id, date);
+        const activities = []; // TODO: Replace with live data fetching
         return !activities.find(activity => {
           const activityTime = activity.due_time.substring(0, 5);
           const endTime = calculateEndTime(activityTime, activity.duration.substring(0, 5));

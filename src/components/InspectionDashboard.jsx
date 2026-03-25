@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Grid3x3,
-  Target
+  Target,
+  RefreshCw
 } from 'lucide-react';
 import InspectorCalendar from './InspectorCalendar';
 import InspectorView from './InspectorView';
@@ -25,11 +26,14 @@ import ApiDebugConsole from './ApiDebugConsole';
 import DealsDebugConsole from './DealsDebugConsole';
 import AppUnavailableModal from './AppUnavailableModal';
 import DatePickerDropdown from './DatePickerDropdown';
-import { inspectors } from '../data/mockActivities';
+// Mock data removed - using live Pipedrive data only
 import { useApiDebug } from '../hooks/useApiDebug.js';
+import { useToast } from '../hooks/useToast.js';
 import useRosterData from '../hooks/useRosterData.js';
 import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
-import { getDealsForRegion, sortDealsByDistance } from '../api/pipedriveDeals.js';
+import { getDealsForRegion, sortDealsByDistance, forceRefreshDeals } from '../api/pipedriveDeals.js';
+import { resetCircuitBreaker, getGeocodeStats, clearGeocodeCache } from '../services/geocoding';
+import Toast from './Toast.jsx';
 
 // Helper functions to skip weekends
 const getNextBusinessDay = (date) => {
@@ -48,7 +52,9 @@ const getPreviousBusinessDay = (date) => {
   return prevDay;
 };
 
-const InspectionDashboard = ({ pipedriveData }) => {
+const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
+  // Toast notifications
+  const { toasts, showToast, hideToast } = useToast();
   // Load selectedInspector from localStorage or default to Ben Thompson (ID 2)
   const [selectedInspector, setSelectedInspector] = useState(() => {
     const saved = localStorage.getItem('staffLocationSort.selectedInspector');
@@ -180,7 +186,9 @@ const InspectionDashboard = ({ pipedriveData }) => {
     const nextActivity = sorted.find(a => a.due_date >= today) || sorted[0];
     if (nextActivity?.due_date) {
       const [y, m, d] = nextActivity.due_date.split('-').map(Number);
-      setSelectedDate(new Date(y, m - 1, d));
+      const newDate = new Date(y, m - 1, d);
+      console.log(`📅 Auto-selecting date: due_date="${nextActivity.due_date}" -> Date object=${newDate.toDateString()}`);
+      setSelectedDate(newDate);
     }
   }, [inspectorActivities]);
 
@@ -292,13 +300,26 @@ const InspectionDashboard = ({ pipedriveData }) => {
 
   // Get enriched day activities for the map (inspector-specific)
   const dateString = format(selectedDate, 'yyyy-MM-dd');
+  console.log(`🗓️ Date filtering: selectedDate=${selectedDate.toDateString()}, dateString=${dateString}`);
+  
   const enrichedMapActivities = useMemo(() => {
     const filtered = enrichedActivities.filter(a => {
       // For "All Inspectors" view (selectedInspector is null), show all activities
       const matchesInspector = selectedInspector === null || Number(a.owner_id) === Number(selectedInspector);
       
+      const dateMatch = a.due_date === dateString;
+      // Reduced 9am logging - only log when found
+      if (a.due_time && a.due_time.startsWith('09:') && dateMatch) {
+        console.log(`🕘 9am inspection: ${a.subject?.substring(0,50)} on ${a.due_date}`);
+      }
+      
+      // Debug Scott specifically (reduced)
+      if (a.subject && a.subject.toLowerCase().includes('scott') && dateMatch) {
+        console.log(`🔍 SCOTT MATCH: ${a.subject} on ${a.due_date} at ${a.due_time}`);
+      }
+      
       return matchesInspector &&
-        a.due_date === dateString &&
+        dateMatch &&
         !a.done &&
         a.due_time && a.due_time !== '00:00:00' &&
         !(a.subject && a.subject.includes('Inspector ENG Follow up'));
@@ -594,12 +615,72 @@ const InspectionDashboard = ({ pipedriveData }) => {
     );
   }
 
-  // Calculate dashboard stats using REAL data
+  // Calculate dashboard stats using REAL data  
   const todaysActivities = activities ? activities.filter(activity => {
-    return activity.due_date === selectedDate.toISOString().split('T')[0];
+    return activity.due_date === format(selectedDate, 'yyyy-MM-dd'); // Fix timezone issue
   }) : [];
   const totalActivities = activities ? activities.length : 0;
   const completedActivities = activities ? activities.filter(a => a.done).length : 0;
+
+  // Refresh functions
+  const handleRefreshInspections = async () => {
+    const loadingToastId = showToast('Refreshing inspections...', 'loading');
+    try {
+      const result = await refreshInspections();
+      const newCount = result?.activities?.length || 0;
+      
+      // Count activities that need geocoding
+      const activitiesNeedingGeocode = activities?.filter(a => 
+        a.personAddress && !a.coordinates
+      ) || [];
+      
+      hideToast(loadingToastId);
+      
+      if (activitiesNeedingGeocode.length > 0) {
+        showToast(`Found ${newCount} inspections (${activitiesNeedingGeocode.length} need geocoding)`, 'success');
+        console.log(`⚠️ ${activitiesNeedingGeocode.length} activities have addresses but no coordinates`);
+      } else {
+        showToast(`Found ${newCount} inspections`, 'success');
+      }
+    } catch (error) {
+      console.error('Error refreshing inspections:', error);
+      hideToast(loadingToastId);
+      showToast('Failed to refresh inspections', 'error');
+    }
+  };
+
+  const handleRefreshDeals = async () => {
+    const loadingToastId = showToast('Refreshing deals & geocoding...', 'loading');
+    try {
+      // Check geocoding stats first
+      const geocodeStats = getGeocodeStats();
+      console.log('🔍 Geocoding stats before refresh:', geocodeStats);
+      
+      // Only reset circuit breaker and clear cache if there were failures
+      if (geocodeStats.circuitBreakerTripped || geocodeStats.consecutiveFailures > 0) {
+        console.log('⚡ Resetting geocoding circuit breaker and cache');
+        resetCircuitBreaker();
+        clearGeocodeCache(); // Clear failed geocoding cache
+      }
+      
+      // Determine current region based on selected inspector
+      const inspector = pipedriveInspectors?.find(i => i.id === selectedInspector);
+      const region = inspector?.region || 'R01'; // Default to R01
+      
+      const result = await forceRefreshDeals(region);
+      
+      const message = result.newDeals > 0 
+        ? `Found ${result.newDeals} new deals (${result.totalDeals} total)` 
+        : `Refreshed ${result.totalDeals} deals`;
+      
+      hideToast(loadingToastId);
+      showToast(message, 'success');
+    } catch (error) {
+      console.error('Error refreshing deals:', error);
+      hideToast(loadingToastId);
+      showToast('Failed to refresh deals', 'error');
+    }
+  };
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col">
@@ -999,14 +1080,14 @@ const InspectionDashboard = ({ pipedriveData }) => {
       </div>
 
       {/* Main Content - Responsive Split Layout */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 min-h-0 overflow-auto">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4 min-h-0 overflow-hidden">
         {/* Calendar Section */}
-        <div className={`min-w-0 ${
+        <div className={`min-w-0 transition-all duration-500 ease-in-out overflow-hidden ${
           mobileViewMode === 'map' 
-            ? 'hidden'
+            ? 'w-0 opacity-0 -translate-x-full'
             : mobileViewMode === 'split'
-              ? 'flex-1 min-h-[50vh] lg:w-1/2'
-              : 'flex-1'
+              ? 'flex-1 min-h-[50vh] lg:w-1/2 opacity-100 translate-x-0'
+              : 'flex-1 opacity-100 translate-x-0'
         }`}>
           <InspectorCalendar
             selectedInspector={selectedInspector}
@@ -1033,12 +1114,12 @@ const InspectionDashboard = ({ pipedriveData }) => {
         </div>
 
         {/* Map Section */}
-        <div className={`flex flex-col gap-4 min-w-0 ${
+        <div className={`flex flex-col gap-4 min-w-0 transition-all duration-500 ease-in-out overflow-hidden ${
           mobileViewMode === 'calendar'
-            ? 'hidden'
+            ? 'w-0 opacity-0 translate-x-full'
             : mobileViewMode === 'split'
-              ? 'flex-1 min-h-[50vh] lg:w-1/2'
-              : 'flex-1'
+              ? 'flex-1 min-h-[50vh] lg:w-1/2 opacity-100 translate-x-0'
+              : 'flex-1 opacity-100 translate-x-0'
         }`}>
           {/* Drive Time Impact */}
           {driveTimeImpact && potentialBooking && (
@@ -1205,6 +1286,20 @@ const InspectionDashboard = ({ pipedriveData }) => {
               >
                 <MapPin className="w-3 h-3" />
               </button>
+              <button
+                onClick={handleRefreshInspections}
+                className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                title="Refresh Inspections"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+              <button
+                onClick={handleRefreshDeals}
+                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+                title="Refresh Deals"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
             </div>
           </div>
         </div>
@@ -1268,10 +1363,30 @@ const InspectionDashboard = ({ pipedriveData }) => {
                 Deals
               </button>
             </div>
+            <div className="w-px h-4 bg-gray-300"></div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Refresh:</span>
+              <button
+                onClick={handleRefreshInspections}
+                className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
+                title="Refresh Inspections"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Inspections
+              </button>
+              <button
+                onClick={handleRefreshDeals}
+                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
+                title="Refresh Deals"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Deals
+              </button>
+            </div>
           </div>
           
           <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Activities: {activities?.length || 0}</span>
+            <span>Activities: {totalActivities}</span>
             <span>•</span>
             <span>Inspectors: {pipedriveInspectors?.length || 0}</span>
             {error && (
@@ -1283,6 +1398,17 @@ const InspectionDashboard = ({ pipedriveData }) => {
           </div>
         </div>
       </div>
+
+      {/* Toast Notifications */}
+      {toasts.map((toast) => (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          duration={toast.duration}
+          onClose={() => hideToast(toast.id)}
+        />
+      ))}
     </div>
   );
 };

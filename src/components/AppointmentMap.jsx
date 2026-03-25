@@ -3,11 +3,8 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet'
 import { format, parseISO } from 'date-fns';
 import L from 'leaflet';
 import { Clock, MapPin, User, Car, Navigation } from 'lucide-react';
-import { 
-  getActivitiesByInspector, 
-  getInspectorById, 
-  getActivityTypeByKey 
-} from '../data/mockActivities';
+// Mock data removed - using live Pipedrive data only
+import { usePipedriveData } from '../hooks/usePipedriveData';
 
 // Fix Leaflet default markers in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -93,7 +90,7 @@ const AppointmentMap = ({ selectedInspector, selectedDate, potentialBooking, onD
   const todaysAppointments = useMemo(() => {
     if (!selectedInspector || !selectedDate) return [];
     
-    const activities = getActivitiesByInspector(selectedInspector);
+    const activities = []; // TODO: Replace with live data fetching
     const dateString = format(selectedDate, 'yyyy-MM-dd');
     
     return activities
@@ -256,7 +253,11 @@ const AppointmentMap = ({ selectedInspector, selectedDate, potentialBooking, onD
     }
   }, [potentialBooking]);
 
-  const inspector = selectedInspector ? getInspectorById(selectedInspector) : null;
+  // Get inspector data from live Pipedrive data
+  const { inspectors: inspectorList } = usePipedriveData();
+  const inspector = selectedInspector ? inspectorList.find(inspector => 
+    inspector.id === selectedInspector || inspector.pipedriveId === selectedInspector
+  ) : null;
 
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
@@ -309,7 +310,8 @@ const AppointmentMap = ({ selectedInspector, selectedDate, potentialBooking, onD
 
           {/* Current appointments */}
           {appointmentsWithDriveTimes.map((marker, index) => {
-            const activityType = getActivityTypeByKey(marker.activity.type);
+            // Handle activity type directly from Pipedrive data
+            const activityType = marker.activity.type || 'inspection';
             return (
               <Marker
                 key={marker.id}

@@ -16,7 +16,7 @@ import {
   Shield,
   Eye
 } from 'lucide-react';
-import { inspectors, activityTypes } from '../data/mockActivities';
+// Mock data removed - using live Pipedrive data only
 import { 
   ALLOWED_TIME_SLOTS, 
   TIME_SLOT_LABELS, 

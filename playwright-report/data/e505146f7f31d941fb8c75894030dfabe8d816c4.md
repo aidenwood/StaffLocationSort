@@ -1,0 +1,479 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - heading "Inspector Dashboard" [level=1] [ref=e7]
+      - generic [ref=e9]: Pipedrive Activities
+    - generic [ref=e10]:
+      - combobox [ref=e12] [cursor=pointer]:
+        - option "All Inspectors"
+        - option "Benjamin Frohloff"
+        - option "Benjamin Wharton" [selected]
+        - option "Jayden Williams"
+        - option "Nick Stevens"
+        - option "Richard Lugert"
+        - option "Charlie Staff"
+        - option "Tony Punzo"
+        - option "Eric Knutsen"
+        - option "Finlay Coop"
+        - option "Tim McGill"
+        - option "Ross Runnalls"
+        - option "Travis Mills"
+        - option "Lucas McConnell"
+        - option "Scott Rodman"
+        - option "Kai Valerio"
+        - option "Tommy Dennerley"
+        - option "Ethan Taylor"
+        - option "Aiden Wood"
+      - generic [ref=e13]:
+        - button "Previous day" [ref=e14] [cursor=pointer]:
+          - img [ref=e15]
+        - button "Wed, Mar 25" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]: Wed, Mar 25
+          - img [ref=e20]
+        - button "Next day" [ref=e22] [cursor=pointer]:
+          - img [ref=e23]
+      - generic [ref=e25]:
+        - button "Split" [ref=e26] [cursor=pointer]:
+          - img [ref=e27]
+          - generic [ref=e29]: Split
+        - button "Calendar" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - generic [ref=e33]: Calendar
+        - button "Map" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+          - generic [ref=e37]: Map
+        - button "Grid" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e41]: Grid
+    - generic [ref=e42]:
+      - button "Opportunities" [ref=e43] [cursor=pointer]:
+        - img [ref=e44]
+        - text: Opportunities
+      - generic [ref=e50]: Live
+  - generic [ref=e51]:
+    - generic [ref=e54]:
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - generic [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]: Mon
+            - generic [ref=e60]: Mar 23
+          - generic [ref=e61] [cursor=pointer]:
+            - generic [ref=e62]: Tue
+            - generic [ref=e63]: Mar 24
+          - generic [ref=e64] [cursor=pointer]:
+            - generic [ref=e65]: Wed
+            - generic [ref=e66]: Mar 25
+          - generic [ref=e67] [cursor=pointer]:
+            - generic [ref=e68]: Thu
+            - generic [ref=e69]: Mar 26
+            - 'generic "Rostered: R02 - Gympie/Maryborough" [ref=e70]': R02
+          - generic [ref=e71] [cursor=pointer]:
+            - generic [ref=e72]: Fri
+            - generic [ref=e73]: Mar 27
+        - generic [ref=e76]:
+          - generic [ref=e78]:
+            - generic "Past time slot" [ref=e79] [cursor=pointer]:
+              - generic [ref=e80]: 06:00
+            - generic "Past time slot" [ref=e81] [cursor=pointer]
+            - generic "Past time slot" [ref=e82] [cursor=pointer]:
+              - generic [ref=e83]: 07:00
+            - generic "Past time slot" [ref=e84] [cursor=pointer]
+            - generic "Past time slot" [ref=e85] [cursor=pointer]:
+              - generic [ref=e86]: 08:00
+            - generic "Past time slot" [ref=e87] [cursor=pointer]
+            - generic "Past time slot" [ref=e88] [cursor=pointer]:
+              - generic [ref=e89]: 09:00
+            - generic "Past time slot" [ref=e90] [cursor=pointer]
+            - generic "Past time slot" [ref=e91] [cursor=pointer]:
+              - generic [ref=e92]: 10:00
+            - generic "Past time slot" [ref=e93] [cursor=pointer]
+            - generic "Past time slot" [ref=e94] [cursor=pointer]:
+              - generic [ref=e95]: 11:00
+            - generic "Past time slot" [ref=e96] [cursor=pointer]
+            - generic "Past time slot" [ref=e97] [cursor=pointer]:
+              - generic [ref=e99]: 🍽️
+              - generic [ref=e100]: 12:00
+            - generic "Past time slot" [ref=e101] [cursor=pointer]:
+              - generic [ref=e103]: 🍽️
+            - generic "Past time slot" [ref=e104] [cursor=pointer]:
+              - generic [ref=e105]: 13:00
+            - generic "Past time slot" [ref=e106] [cursor=pointer]
+            - generic "Past time slot" [ref=e107] [cursor=pointer]:
+              - generic [ref=e108]: 14:00
+            - generic "Past time slot" [ref=e109] [cursor=pointer]
+            - generic "Past time slot" [ref=e110] [cursor=pointer]:
+              - generic [ref=e111]: 15:00
+            - generic "Past time slot" [ref=e112] [cursor=pointer]
+            - generic "Past time slot" [ref=e113] [cursor=pointer]:
+              - generic [ref=e114]: 16:00
+            - generic "Past time slot" [ref=e115] [cursor=pointer]
+            - generic "Past time slot" [ref=e116] [cursor=pointer]:
+              - generic [ref=e117]: 17:00
+            - generic "Past time slot" [ref=e118] [cursor=pointer]
+            - generic "Past time slot" [ref=e119] [cursor=pointer]:
+              - generic [ref=e120]: 18:00
+            - generic "Past time slot" [ref=e121] [cursor=pointer]
+            - generic "Past time slot" [ref=e122] [cursor=pointer]:
+              - generic [ref=e123]: 19:00
+          - generic [ref=e125]:
+            - generic "Past time slot" [ref=e126] [cursor=pointer]:
+              - generic [ref=e127]: 06:00
+            - generic "Past time slot" [ref=e128] [cursor=pointer]
+            - generic "Past time slot" [ref=e129] [cursor=pointer]:
+              - generic [ref=e130]: 07:00
+            - generic "Past time slot" [ref=e131] [cursor=pointer]
+            - generic "Past time slot" [ref=e132] [cursor=pointer]:
+              - generic [ref=e133]: 08:00
+            - generic "Past time slot" [ref=e134] [cursor=pointer]
+            - generic "Past time slot" [ref=e135] [cursor=pointer]:
+              - generic [ref=e136]: 09:00
+            - generic "Past time slot" [ref=e137] [cursor=pointer]
+            - generic "Past time slot" [ref=e138] [cursor=pointer]:
+              - generic [ref=e139]: 10:00
+            - generic "Past time slot" [ref=e140] [cursor=pointer]
+            - generic "Past time slot" [ref=e141] [cursor=pointer]:
+              - generic [ref=e142]: 11:00
+            - generic "Past time slot" [ref=e143] [cursor=pointer]
+            - generic "Past time slot" [ref=e144] [cursor=pointer]:
+              - generic [ref=e146]: 🍽️
+              - generic [ref=e147]: 12:00
+            - generic "Past time slot" [ref=e148] [cursor=pointer]:
+              - generic [ref=e150]: 🍽️
+            - generic "Past time slot" [ref=e151] [cursor=pointer]:
+              - generic [ref=e152]: 13:00
+            - generic "Past time slot" [ref=e153] [cursor=pointer]
+            - generic "Past time slot" [ref=e154] [cursor=pointer]:
+              - generic [ref=e155]: 14:00
+            - generic "Past time slot" [ref=e156] [cursor=pointer]
+            - generic "Past time slot" [ref=e157] [cursor=pointer]:
+              - generic [ref=e158]: 15:00
+            - generic "Past time slot" [ref=e159] [cursor=pointer]
+            - generic "Past time slot" [ref=e160] [cursor=pointer]:
+              - generic [ref=e161]: 16:00
+            - generic "Past time slot" [ref=e162] [cursor=pointer]
+            - generic "Past time slot" [ref=e163] [cursor=pointer]:
+              - generic [ref=e164]: 17:00
+            - generic "Past time slot" [ref=e165] [cursor=pointer]
+            - generic "Past time slot" [ref=e166] [cursor=pointer]:
+              - generic [ref=e167]: 18:00
+            - generic "Past time slot" [ref=e168] [cursor=pointer]
+            - generic "Past time slot" [ref=e169] [cursor=pointer]:
+              - generic [ref=e170]: 19:00
+          - generic [ref=e175]:
+            - generic "Available - Click to book at 06:00" [ref=e176] [cursor=pointer]:
+              - generic [ref=e178]: 06:00
+              - generic [ref=e179]: 06:00
+            - generic "Available - Click to book at 06:30" [ref=e180] [cursor=pointer]:
+              - generic [ref=e182]: 06:30
+            - generic "Available - Click to book at 07:00" [ref=e183] [cursor=pointer]:
+              - generic [ref=e185]: 07:00
+              - generic [ref=e186]: 07:00
+            - generic "Available - Click to book at 07:30" [ref=e187] [cursor=pointer]:
+              - generic [ref=e189]: 07:30
+            - generic "Available - Click to book at 08:00" [ref=e190] [cursor=pointer]:
+              - generic [ref=e192]: 08:00
+              - generic [ref=e193]: 08:00
+            - generic "Available - Click to book at 08:30" [ref=e194] [cursor=pointer]:
+              - generic [ref=e196]: 08:30
+            - generic "Available - Click to book at 09:00" [ref=e197] [cursor=pointer]:
+              - button "Deals" [ref=e199]:
+                - img [ref=e200]
+                - text: Deals
+              - generic [ref=e204]: 09:00
+            - generic "Available - Click to book at 09:30" [ref=e205] [cursor=pointer]:
+              - generic [ref=e207]: 09:30
+            - generic "Available - Click to book at 10:00" [ref=e208] [cursor=pointer]:
+              - generic [ref=e210]: 10:00
+              - generic [ref=e211]: 10:00
+            - generic "Available - Click to book at 10:30" [ref=e212] [cursor=pointer]:
+              - generic [ref=e214]: 10:30
+            - generic "Available - Click to book at 11:00" [ref=e215] [cursor=pointer]:
+              - button "Deals" [ref=e217]:
+                - img [ref=e218]
+                - text: Deals
+              - generic [ref=e222]: 11:00
+            - generic "Available - Click to book at 11:30" [ref=e223] [cursor=pointer]:
+              - generic [ref=e225]: 11:30
+            - generic "Lunch Break (12:00-13:00)" [ref=e226] [cursor=pointer]:
+              - generic [ref=e228]: 🍽️
+              - generic [ref=e229]: 12:00
+            - generic "Lunch Break (12:00-13:00)" [ref=e230] [cursor=pointer]:
+              - generic [ref=e232]: 🍽️
+            - generic "Available - Click to book at 13:00" [ref=e233] [cursor=pointer]:
+              - button "Deals" [ref=e235]:
+                - img [ref=e236]
+                - text: Deals
+              - generic [ref=e240]: 13:00
+            - generic "Available - Click to book at 13:30" [ref=e241] [cursor=pointer]:
+              - generic [ref=e243]: 13:30
+            - generic "Available - Click to book at 14:00" [ref=e244] [cursor=pointer]:
+              - generic [ref=e246]: 14:00
+              - generic [ref=e247]: 14:00
+            - generic "Available - Click to book at 14:30" [ref=e248] [cursor=pointer]:
+              - generic [ref=e250]: 14:30
+            - generic "Available - Click to book at 15:00" [ref=e251] [cursor=pointer]:
+              - button "Deals" [ref=e253]:
+                - img [ref=e254]
+                - text: Deals
+              - generic [ref=e258]: 15:00
+            - generic "Available - Click to book at 15:30" [ref=e259] [cursor=pointer]:
+              - generic [ref=e261]: 15:30
+            - generic "Available - Click to book at 16:00" [ref=e262] [cursor=pointer]:
+              - generic [ref=e264]: 16:00
+              - generic [ref=e265]: 16:00
+            - generic "Available - Click to book at 16:30" [ref=e266] [cursor=pointer]:
+              - generic [ref=e268]: 16:30
+            - generic "Available - Click to book at 17:00" [ref=e269] [cursor=pointer]:
+              - generic [ref=e271]: 17:00
+              - generic [ref=e272]: 17:00
+            - generic "Available - Click to book at 17:30" [ref=e273] [cursor=pointer]:
+              - generic [ref=e275]: 17:30
+            - generic "Available - Click to book at 18:00" [ref=e276] [cursor=pointer]:
+              - generic [ref=e278]: 18:00
+              - generic [ref=e279]: 18:00
+            - generic "Available - Click to book at 18:30" [ref=e280] [cursor=pointer]:
+              - generic [ref=e282]: 18:30
+            - generic "Available - Click to book at 19:00" [ref=e283] [cursor=pointer]:
+              - generic [ref=e285]: 19:00
+              - generic [ref=e286]: 19:00
+          - generic [ref=e288]:
+            - generic "Available - Click to book at 06:00" [ref=e289] [cursor=pointer]:
+              - generic [ref=e291]: 06:00
+              - generic [ref=e292]: 06:00
+            - generic "Available - Click to book at 06:30" [ref=e293] [cursor=pointer]:
+              - generic [ref=e295]: 06:30
+            - generic "Available - Click to book at 07:00" [ref=e296] [cursor=pointer]:
+              - generic [ref=e298]: 07:00
+              - generic [ref=e299]: 07:00
+            - generic "Available - Click to book at 07:30" [ref=e300] [cursor=pointer]:
+              - generic [ref=e302]: 07:30
+            - generic "Available - Click to book at 08:00" [ref=e303] [cursor=pointer]:
+              - generic [ref=e305]: 08:00
+              - generic [ref=e306]: 08:00
+            - generic "Available - Click to book at 08:30" [ref=e307] [cursor=pointer]:
+              - generic [ref=e309]: 08:30
+            - generic "Available - Click to book at 09:00" [ref=e310] [cursor=pointer]:
+              - button "Deals" [ref=e312]:
+                - img [ref=e313]
+                - text: Deals
+              - generic [ref=e317]: 09:00
+            - generic "Available - Click to book at 09:30" [ref=e318] [cursor=pointer]:
+              - generic [ref=e320]: 09:30
+            - generic "Available - Click to book at 10:00" [ref=e321] [cursor=pointer]:
+              - generic [ref=e323]: 10:00
+              - generic [ref=e324]: 10:00
+            - generic "Available - Click to book at 10:30" [ref=e325] [cursor=pointer]:
+              - generic [ref=e327]: 10:30
+            - generic "Available - Click to book at 11:00" [ref=e328] [cursor=pointer]:
+              - button "Deals" [ref=e330]:
+                - img [ref=e331]
+                - text: Deals
+              - generic [ref=e335]: 11:00
+            - generic "Available - Click to book at 11:30" [ref=e336] [cursor=pointer]:
+              - generic [ref=e338]: 11:30
+            - generic "Lunch Break (12:00-13:00)" [ref=e339] [cursor=pointer]:
+              - generic [ref=e341]: 🍽️
+              - generic [ref=e342]: 12:00
+            - generic "Lunch Break (12:00-13:00)" [ref=e343] [cursor=pointer]:
+              - generic [ref=e345]: 🍽️
+            - generic "Available - Click to book at 13:00" [ref=e346] [cursor=pointer]:
+              - button "Deals" [ref=e348]:
+                - img [ref=e349]
+                - text: Deals
+              - generic [ref=e353]: 13:00
+            - generic "Available - Click to book at 13:30" [ref=e354] [cursor=pointer]:
+              - generic [ref=e356]: 13:30
+            - generic "Available - Click to book at 14:00" [ref=e357] [cursor=pointer]:
+              - generic [ref=e359]: 14:00
+              - generic [ref=e360]: 14:00
+            - generic "Available - Click to book at 14:30" [ref=e361] [cursor=pointer]:
+              - generic [ref=e363]: 14:30
+            - generic "Available - Click to book at 15:00" [ref=e364] [cursor=pointer]:
+              - button "Deals" [ref=e366]:
+                - img [ref=e367]
+                - text: Deals
+              - generic [ref=e371]: 15:00
+            - generic "Available - Click to book at 15:30" [ref=e372] [cursor=pointer]:
+              - generic [ref=e374]: 15:30
+            - generic "Available - Click to book at 16:00" [ref=e375] [cursor=pointer]:
+              - generic [ref=e377]: 16:00
+              - generic [ref=e378]: 16:00
+            - generic "Available - Click to book at 16:30" [ref=e379] [cursor=pointer]:
+              - generic [ref=e381]: 16:30
+            - generic "Available - Click to book at 17:00" [ref=e382] [cursor=pointer]:
+              - generic [ref=e384]: 17:00
+              - generic [ref=e385]: 17:00
+            - generic "Available - Click to book at 17:30" [ref=e386] [cursor=pointer]:
+              - generic [ref=e388]: 17:30
+            - generic "Available - Click to book at 18:00" [ref=e389] [cursor=pointer]:
+              - generic [ref=e391]: 18:00
+              - generic [ref=e392]: 18:00
+            - generic "Available - Click to book at 18:30" [ref=e393] [cursor=pointer]:
+              - generic [ref=e395]: 18:30
+            - generic "Available - Click to book at 19:00" [ref=e396] [cursor=pointer]:
+              - generic [ref=e398]: 19:00
+              - generic [ref=e399]: 19:00
+          - generic [ref=e401]:
+            - generic "Available - Click to book at 06:00" [ref=e402] [cursor=pointer]:
+              - generic [ref=e404]: 06:00
+              - generic [ref=e405]: 06:00
+            - generic "Available - Click to book at 06:30" [ref=e406] [cursor=pointer]:
+              - generic [ref=e408]: 06:30
+            - generic "Available - Click to book at 07:00" [ref=e409] [cursor=pointer]:
+              - generic [ref=e411]: 07:00
+              - generic [ref=e412]: 07:00
+            - generic "Available - Click to book at 07:30" [ref=e413] [cursor=pointer]:
+              - generic [ref=e415]: 07:30
+            - generic "Available - Click to book at 08:00" [ref=e416] [cursor=pointer]:
+              - generic [ref=e418]: 08:00
+              - generic [ref=e419]: 08:00
+            - generic "Available - Click to book at 08:30" [ref=e420] [cursor=pointer]:
+              - generic [ref=e422]: 08:30
+            - generic "Available - Click to book at 09:00" [ref=e423] [cursor=pointer]:
+              - button "Deals" [ref=e425]:
+                - img [ref=e426]
+                - text: Deals
+              - generic [ref=e430]: 09:00
+            - generic "Available - Click to book at 09:30" [ref=e431] [cursor=pointer]:
+              - generic [ref=e433]: 09:30
+            - generic "Available - Click to book at 10:00" [ref=e434] [cursor=pointer]:
+              - generic [ref=e436]: 10:00
+              - generic [ref=e437]: 10:00
+            - generic "Available - Click to book at 10:30" [ref=e438] [cursor=pointer]:
+              - generic [ref=e440]: 10:30
+            - generic "Available - Click to book at 11:00" [ref=e441] [cursor=pointer]:
+              - button "Deals" [ref=e443]:
+                - img [ref=e444]
+                - text: Deals
+              - generic [ref=e448]: 11:00
+            - generic "Available - Click to book at 11:30" [ref=e449] [cursor=pointer]:
+              - generic [ref=e451]: 11:30
+            - generic "Lunch Break (12:00-13:00)" [ref=e452] [cursor=pointer]:
+              - generic [ref=e454]: 🍽️
+              - generic [ref=e455]: 12:00
+            - generic "Lunch Break (12:00-13:00)" [ref=e456] [cursor=pointer]:
+              - generic [ref=e458]: 🍽️
+            - generic "Available - Click to book at 13:00" [ref=e459] [cursor=pointer]:
+              - button "Deals" [ref=e461]:
+                - img [ref=e462]
+                - text: Deals
+              - generic [ref=e466]: 13:00
+            - generic "Available - Click to book at 13:30" [ref=e467] [cursor=pointer]:
+              - generic [ref=e469]: 13:30
+            - generic "Available - Click to book at 14:00" [ref=e470] [cursor=pointer]:
+              - generic [ref=e472]: 14:00
+              - generic [ref=e473]: 14:00
+            - generic "Available - Click to book at 14:30" [ref=e474] [cursor=pointer]:
+              - generic [ref=e476]: 14:30
+            - generic "Available - Click to book at 15:00" [ref=e477] [cursor=pointer]:
+              - button "Deals" [ref=e479]:
+                - img [ref=e480]
+                - text: Deals
+              - generic [ref=e484]: 15:00
+            - generic "Available - Click to book at 15:30" [ref=e485] [cursor=pointer]:
+              - generic [ref=e487]: 15:30
+            - generic "Available - Click to book at 16:00" [ref=e488] [cursor=pointer]:
+              - generic [ref=e490]: 16:00
+              - generic [ref=e491]: 16:00
+            - generic "Available - Click to book at 16:30" [ref=e492] [cursor=pointer]:
+              - generic [ref=e494]: 16:30
+            - generic "Available - Click to book at 17:00" [ref=e495] [cursor=pointer]:
+              - generic [ref=e497]: 17:00
+              - generic [ref=e498]: 17:00
+            - generic "Available - Click to book at 17:30" [ref=e499] [cursor=pointer]:
+              - generic [ref=e501]: 17:30
+            - generic "Available - Click to book at 18:00" [ref=e502] [cursor=pointer]:
+              - generic [ref=e504]: 18:00
+              - generic [ref=e505]: 18:00
+            - generic "Available - Click to book at 18:30" [ref=e506] [cursor=pointer]:
+              - generic [ref=e508]: 18:30
+            - generic "Available - Click to book at 19:00" [ref=e509] [cursor=pointer]:
+              - generic [ref=e511]: 19:00
+              - generic [ref=e512]: 19:00
+      - generic [ref=e513]:
+        - generic [ref=e516]: Booked
+        - generic [ref=e519]: Available
+        - generic [ref=e520]:
+          - generic [ref=e522]: 🍽️
+          - generic [ref=e523]: Lunch
+        - generic [ref=e526]: Past
+    - generic [ref=e527]:
+      - text: "0"
+      - generic [ref=e529]:
+        - generic [ref=e530]:
+          - generic [ref=e531]:
+            - heading "Route Map" [level=3] [ref=e532]
+            - generic [ref=e533]:
+              - button "Previous day" [ref=e534] [cursor=pointer]:
+                - img [ref=e535]
+              - generic [ref=e537]: Wednesday, Mar 25
+              - button "Next day" [ref=e538] [cursor=pointer]:
+                - img [ref=e539]
+          - generic [ref=e541]:
+            - generic [ref=e544]: Benjamin Wharton
+            - generic [ref=e545]: •
+            - generic [ref=e546]: 0 appointments
+        - generic [ref=e550]:
+          - generic:
+            - button "Keyboard shortcuts"
+          - region "Map" [ref=e551]
+          - generic [ref=e552]:
+            - iframe [ref=e604]:
+              
+            - generic [ref=e606] [cursor=pointer]:
+              - button "Zoom in" [ref=e607]
+              - button "Zoom out" [ref=e609]
+            - link "Open this area in Google Maps (opens a new window)" [ref=e611] [cursor=pointer]:
+              - /url: https://maps.google.com/maps?ll=-27.6378,153.1094&z=12&t=m&hl=en-US&gl=US&mapclient=apiv3
+              - img "Google" [ref=e613]
+            - generic [ref=e614]:
+              - button "Keyboard shortcuts" [ref=e620] [cursor=pointer]
+              - generic [ref=e625]: Map data ©2026 Google
+              - link "Terms (opens in new tab)" [ref=e630] [cursor=pointer]:
+                - /url: https://www.google.com/intl/en-US_US/help/terms_maps.html
+                - text: Terms
+              - link "Report a map error" [ref=e635] [cursor=pointer]:
+                - /url: https://www.google.com/maps/@-27.6378,153.1094,12z/data=!10m1!1e1!12b1?source=apiv3&rapsrc=apiv3
+  - generic [ref=e637]:
+    - generic [ref=e638]:
+      - generic [ref=e639]:
+        - generic [ref=e640]: "Pages:"
+        - link "Activities" [ref=e641] [cursor=pointer]:
+          - /url: /#activities
+          - img [ref=e642]
+          - text: Activities
+        - link "Book" [ref=e647] [cursor=pointer]:
+          - /url: /#book
+          - img [ref=e648]
+          - text: Book
+        - link "Risk Estimator" [ref=e650] [cursor=pointer]:
+          - /url: /#estimator
+          - img [ref=e651]
+          - text: Risk Estimator
+      - generic [ref=e656]:
+        - generic [ref=e657]: "Developer Tools:"
+        - button "New Booking" [ref=e658] [cursor=pointer]:
+          - img [ref=e659]
+          - text: New Booking
+        - button "Debug" [ref=e660] [cursor=pointer]:
+          - img [ref=e661]
+          - text: Debug
+        - button "Deals" [ref=e670] [cursor=pointer]:
+          - img [ref=e671]
+          - text: Deals
+      - generic [ref=e675]:
+        - generic [ref=e676]: "Refresh:"
+        - button "Inspections" [ref=e677] [cursor=pointer]:
+          - img [ref=e678]
+          - text: Inspections
+        - button "Deals" [ref=e683] [cursor=pointer]:
+          - img [ref=e684]
+          - text: Deals
+    - generic [ref=e689]:
+      - generic [ref=e690]: "Activities: 248"
+      - generic [ref=e691]: •
+      - generic [ref=e692]: "Inspectors: 18"
+```

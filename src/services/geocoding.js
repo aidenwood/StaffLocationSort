@@ -320,5 +320,7 @@ export default {
   geocodeAddresses, 
   getCenterPoint, 
   getZoomLevel, 
-  clearGeocodeCache 
+  clearGeocodeCache,
+  getGeocodeStats,
+  resetCircuitBreaker
 };

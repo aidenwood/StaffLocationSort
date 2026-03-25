@@ -13,6 +13,7 @@ function App() {
 
   // Shared Pipedrive data - fetched once, consumed by all views
   const pipedriveData = usePipedriveData();
+  const { refresh: refreshInspections } = pipedriveData;
 
   // Enriched address cache - populated by SimpleActivityList, read by InspectionDashboard
   const [addressCache, setAddressCache] = useState(() => {
@@ -166,7 +167,7 @@ function App() {
   }
 
   // Default: Staff Dashboard view
-  return <InspectionDashboard pipedriveData={enrichedPipedriveData} />
+  return <InspectionDashboard pipedriveData={enrichedPipedriveData} refreshInspections={refreshInspections} />
 }
 
 export default App

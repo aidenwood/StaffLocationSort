@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addDays, subDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign, X, Target, ExternalLink } from 'lucide-react';
-import { getActivityTypeByKey } from '../data/mockActivities';
+// Mock data removed - activity type logic moved inline
 import { convertToAustralianTime } from '../utils/timezone';
 
 const InspectorCalendar = ({ 
@@ -330,7 +330,8 @@ const InspectorCalendar = ({
   };
 
   const ActivityBlock = ({ activity, timeSlot, isStacked = false, stackIndex = 0, totalStacked = 1, allActivitiesInSlot = [] }) => {
-    const activityType = getActivityTypeByKey(activity.type);
+    // Handle activity type directly from Pipedrive data
+    const activityType = activity.type || 'inspection';
     
     // Get inspector info for "All Inspectors" view
     const activityInspector = inspectors.find(inspector => 

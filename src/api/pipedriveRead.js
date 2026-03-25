@@ -230,7 +230,7 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
     const client = createPipedriveClient(true); // Back to V2 client
     const maxPages = 5; // Increased to get more activities
 
-    console.log('🔍 Fetching activities...');
+    console.log(`🔍 Fetching activities with filter ${filterId}, date range: ${startDate} to ${endDate}`);
 
     const allActivities = [];
     let cursor = null;
@@ -248,6 +248,9 @@ export const fetchActivitiesWithFilterV2 = async (filterId, startDate = null, en
         sort_direction: 'desc' // Back to v2 format
         // Note: v2 API doesn't support 'fields' parameter, deal data is included by default
       };
+
+      // Note: V2 API with filters doesn't support start_date/end_date parameters
+      // Date filtering will be done client-side after fetching
 
       if (cursor) params.cursor = cursor; // v2 uses cursor
 
@@ -849,9 +852,9 @@ export const transformPipedriveActivity = (pipedriveActivity) => {
     done: pipedriveActivity.done,
     type: determineActivityType(pipedriveActivity.subject || ''),
     
-    // Time and date
+    // Time and date  
     due_date: pipedriveActivity.due_date,
-    due_time: pipedriveActivity.due_time || '09:00:00',
+    due_time: pipedriveActivity.due_time || null, // Don't default to 09:00:00 - preserve original
     duration: '01:00:00', // Default 1 hour for inspections
     busy: true,
     

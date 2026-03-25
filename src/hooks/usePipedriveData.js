@@ -10,13 +10,9 @@ import {
   transformPipedriveActivity,
   healthCheck as pipedriveHealthCheck 
 } from '../api/pipedriveRead.js';
+import { format } from 'date-fns';
 import { PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID } from '../config/pipedriveFilters.js';
-import { 
-  mockActivities, 
-  inspectors, 
-  getActivitiesByInspector,
-  getActivitiesByInspectorAndDate 
-} from '../data/mockActivities.js';
+// Mock data removed - using live Pipedrive data only
 import { 
   PIPEDRIVE_USERS,
   getTestUser,
@@ -226,15 +222,19 @@ export const usePipedriveData = (options = {}) => {
 
         const today = new Date();
         const twoWeeksFromNow = new Date(today.getTime() + (14 * 24 * 60 * 60 * 1000));
-        const limitedStartDate = startDate || today.toISOString().split('T')[0];
-        const limitedEndDate = endDate || twoWeeksFromNow.toISOString().split('T')[0];
+        const limitedStartDate = startDate || format(today, 'yyyy-MM-dd'); // Fix timezone
+        const limitedEndDate = endDate || format(twoWeeksFromNow, 'yyyy-MM-dd'); // Fix timezone
 
         let rawActivities = [];
 
-        // Use working V2 API approach (always successful with 188 activities)
+        // Use working V2 API approach (client-side date filtering)
         try {
-          rawActivities = await fetchActivitiesWithFilterV2(PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID);
-          console.log(`📊 Received ${rawActivities.length} activities`);
+          rawActivities = await fetchActivitiesWithFilterV2(
+            PIPEDRIVE_PROPERTY_INSPECTION_FILTER_ID, 
+            limitedStartDate, 
+            limitedEndDate
+          );
+          console.log(`📊 Received ${rawActivities.length} activities (client-side filtered for ${limitedStartDate} to ${limitedEndDate})`);
           
           // NOTE: Address enrichment moved to individual components (SimpleActivityList)
           // to avoid 174+ Person API calls. Components enrich only their filtered subset.
@@ -252,6 +252,12 @@ export const usePipedriveData = (options = {}) => {
         activities = rawActivities
           .map(transformPipedriveActivity)
           .filter(Boolean);
+          
+        // Debug: Log 9am activities (reduced logging)
+        const nineAmActivities = activities.filter(a => a.due_time && a.due_time.startsWith('09:'));
+        if (nineAmActivities.length > 0) {
+          console.log(`🕘 Found ${nineAmActivities.length} 9am activities from Pipedrive`);
+        }
 
         // Filter by selected inspector if specified; cap at 50 per inspector (skip when "all")
         if (userId && userId !== 'all' && activities.length > 0) {
@@ -267,8 +273,8 @@ export const usePipedriveData = (options = {}) => {
 
         isLiveData = true;
       } else {
-        console.log('📋 Using mock data (live data disabled)');
-        activities = userId ? getActivitiesByInspector(userId) : mockActivities;
+        console.log('📋 No live data available');
+        activities = [];
       }
 
       // Cache the results in localStorage
@@ -363,11 +369,7 @@ export const usePipedriveData = (options = {}) => {
   // Get activities for specific inspector and date
   const getInspectorActivities = useCallback(async (inspectorId, date = null) => {
     try {
-      if (!shouldUseLiveData) {
-        return date
-          ? getActivitiesByInspectorAndDate(inspectorId, new Date(date))
-          : getActivitiesByInspector(inspectorId);
-      }
+      // Always use live data - mock data removed
 
       let rawActivities = [];
       const dateString = date || null;
@@ -529,7 +531,7 @@ export const usePipedriveActivities = (inspectorId = null, date = null) => {
   useEffect(() => {
     const loadActivities = async () => {
       if (inspectorId) {
-        const dateString = date instanceof Date ? date.toISOString().split('T')[0] : date;
+        const dateString = date instanceof Date ? format(date, 'yyyy-MM-dd') : date; // Fix timezone
         const activities = await getInspectorActivities(inspectorId, dateString);
         setFilteredActivities(activities);
       } else {

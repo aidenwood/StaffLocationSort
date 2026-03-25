@@ -2,12 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { format, addDays, subDays } from 'date-fns';
 import { Clock, MapPin, Navigation, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
-import { 
-  getActivitiesByInspector, 
-  getInspectorById, 
-  getActivityTypeByKey 
-} from '../data/mockActivities';
+// Mock data removed - using live Pipedrive data only
 import { geocodeAddress, getCenterPoint, getZoomLevel, clearGeocodeCache } from '../services/geocoding';
+import { usePipedriveData } from '../hooks/usePipedriveData';
 
 // Google Maps API Key
 const GOOGLE_MAPS_API_KEY = 'AIzaSyCMzl7FEizPoEordMy_wHwbnBVeh2XcPfk';
@@ -916,7 +913,11 @@ const GoogleMapsView = ({
     return url;
   }, [todaysAppointments]);
 
-  const inspector = selectedInspector ? getInspectorById(selectedInspector) : null;
+  // Get inspector data from live Pipedrive data
+  const { inspectors: inspectorList } = usePipedriveData();
+  const inspector = selectedInspector ? inspectorList.find(inspector => 
+    inspector.id === selectedInspector || inspector.pipedriveId === selectedInspector
+  ) : null;
 
   const handleRouteCalculated = useCallback((driveTimeMinutes) => {
     setTotalDriveTime(driveTimeMinutes);

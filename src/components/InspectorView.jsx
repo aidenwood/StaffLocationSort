@@ -12,13 +12,13 @@ import {
 } from 'lucide-react';
 import InspectorCalendar from './InspectorCalendar';
 import GoogleMapsView from './GoogleMapsView';
-import { inspectors, getActivitiesByInspectorAndDate, getInspectorById } from '../data/mockActivities';
+// Mock data removed - using live Pipedrive data only
 
 const InspectorView = ({ inspectorId, onBack }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   
-  const inspector = getInspectorById(inspectorId);
-  const todaysAppointments = getActivitiesByInspectorAndDate(inspectorId, selectedDate);
+  const inspector = null; // TODO: Replace with live data fetching
+  const todaysAppointments = []; // TODO: Replace with live data fetching
 
   if (!inspector) {
     return (

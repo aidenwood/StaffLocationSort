@@ -1,12 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, addDays, subDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock, MapPin, User } from 'lucide-react';
-import { 
-  inspectors, 
-  getActivitiesByInspectorAndDate, 
-  getActivityTypeByKey,
-  getInspectorById 
-} from '../data/mockActivities';
+// Mock data removed - using live Pipedrive data only
 
 const CalendarViewer = ({ onSelectTimeSlot, selectedInspector }) => {
   const [currentWeek, setCurrentWeek] = useState(new Date());
@@ -35,7 +30,7 @@ const CalendarViewer = ({ onSelectTimeSlot, selectedInspector }) => {
   }, []);
 
   const getActivityForSlot = (inspector, date, timeSlot) => {
-    const activities = getActivitiesByInspectorAndDate(inspector.id, date);
+    const activities = []; // TODO: Replace with live data fetching
     return activities.find(activity => {
       const activityTime = activity.due_time.substring(0, 5); // Convert HH:MM:SS to HH:MM
       const activityEndTime = calculateEndTime(activityTime, activity.duration.substring(0, 5));
@@ -70,7 +65,8 @@ const CalendarViewer = ({ onSelectTimeSlot, selectedInspector }) => {
   };
 
   const ActivityBlock = ({ activity, timeSlot }) => {
-    const activityType = getActivityTypeByKey(activity.type);
+    // Handle activity type directly from Pipedrive data
+    const activityType = activity.type || 'inspection';
     const startTime = activity.due_time.substring(0, 5); // Convert HH:MM:SS to HH:MM
     const endTime = calculateEndTime(startTime, activity.duration.substring(0, 5));
     

@@ -371,7 +371,20 @@ export const getDealsForRegion = async (region, options = {}) => {
   // Check localStorage cache first
   const cachedDeals = getCachedDeals(cacheKey);
   if (cachedDeals) {
-    return cachedDeals;
+    // Validate cached deals have coordinates
+    const dealsWithCoordinates = cachedDeals.filter(deal => deal.coordinates && deal.coordinates.lat && deal.coordinates.lng);
+    const dealsWithAddresses = cachedDeals.filter(deal => deal.address && deal.address.trim());
+    
+    console.log(`🔍 Cache validation: ${dealsWithCoordinates.length}/${cachedDeals.length} deals have coordinates, ${dealsWithAddresses.length} have addresses`);
+    
+    // If we have deals with addresses but no coordinates, cache is corrupted - re-fetch and re-geocode
+    if (dealsWithAddresses.length > 0 && dealsWithCoordinates.length === 0) {
+      console.warn('⚠️ Cache corrupted: Deals have addresses but no coordinates. Re-fetching...');
+      // Clear the corrupted cache
+      localStorage.removeItem(`${CACHE_KEY_PREFIX}.${cacheKey}`);
+    } else if (cachedDeals.length > 0) {
+      return cachedDeals;
+    }
   }
 
   try {
@@ -526,6 +539,7 @@ export const clearDealsCache = (region = null) => {
       );
       keys.forEach(key => localStorage.removeItem(key));
       console.log(`🗑️ Cleared deals cache for region: ${region} (${keys.length} entries)`);
+      return keys.length;
     } else {
       // Clear all deals cache
       const keys = Object.keys(localStorage).filter(key => 
@@ -533,10 +547,38 @@ export const clearDealsCache = (region = null) => {
       );
       keys.forEach(key => localStorage.removeItem(key));
       console.log(`🗑️ Cleared all deals cache (${keys.length} entries)`);
+      return keys.length;
     }
   } catch (error) {
     console.warn('Error clearing deals cache:', error);
+    return 0;
   }
+};
+
+/**
+ * Force refresh deals for a region - clears cache and re-fetches with geocoding
+ * @param {string} region - Region to refresh
+ * @returns {Promise<{newDeals: number, totalDeals: number}>}
+ */
+export const forceRefreshDeals = async (region) => {
+  console.log(`🔄 Force refreshing deals for region: ${region}`);
+  
+  // Get current cached deals count for comparison
+  const currentCacheKey = region;
+  const currentCachedDeals = getCachedDeals(currentCacheKey);
+  const previousCount = currentCachedDeals ? currentCachedDeals.length : 0;
+  
+  // Clear the cache for this region
+  clearDealsCache(region);
+  
+  // Re-fetch deals (will trigger geocoding since cache is empty)
+  const refreshedDeals = await getDealsForRegion(region, { limit: 200 });
+  
+  return {
+    newDeals: refreshedDeals.length - previousCount,
+    totalDeals: refreshedDeals.length,
+    previousCount
+  };
 };
 
 /**
@@ -914,6 +956,7 @@ export default {
   enrichDealsWithAddresses,
   getCacheStatus,
   clearDealsCache,
+  forceRefreshDeals,
   healthCheckDeals,
   transformPipedriveDeal,
   getFilterForRegion,
