@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, MapPin, User, Clock, AlertCircle, Sun, Moon } from 'lucide-react';
+import { Calendar, MapPin, User, Clock, AlertCircle, Sun, Moon, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { enrichActivitiesWithAddresses } from '../api/pipedriveRead.js';
 import ApiTestButton from './ApiTestButton.jsx';
@@ -225,6 +225,24 @@ const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
                         <p className="mt-2 text-sm text-gray-500 line-clamp-2">
                           {activity.note}
                         </p>
+                      )}
+                      
+                      {/* Open in Pipedrive */}
+                      {(activity.deal_id || activity.id) && (
+                        <div className="mt-3 pt-2 border-t border-gray-100">
+                          <a
+                            href={activity.deal_id 
+                              ? `https://rebuildrelief.pipedrive.com/deal/${activity.deal_id}`
+                              : `https://rebuildrelief.pipedrive.com/activity/${activity.id}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            <span>{activity.deal_id ? 'Open Deal in Pipedrive' : 'Open Activity in Pipedrive'}</span>
+                          </a>
+                        </div>
                       )}
                     </div>
                     
