@@ -294,15 +294,114 @@ export const transformPipedriveDeal = (deal, stagesMap = null) => {
   } else if (deal.deal_address && typeof deal.deal_address === 'string' && deal.deal_address.trim()) {
     address = deal.deal_address.trim();
     addressSource = 'deal_address_field';
-  } else if (deal.person?.address) {
-    address = deal.person.address;
-    addressSource = 'person_address';
-  } else if (deal.org?.address) {
+  }
+  
+  // Check person custom fields for address if not found in deal
+  if (!address && deal.person) {
+    // First check the known person address hash
+    if (deal.person['6fa72064159f058167dcdab4ae78eb140eae6f05'] && typeof deal.person['6fa72064159f058167dcdab4ae78eb140eae6f05'] === 'string') {
+      address = deal.person['6fa72064159f058167dcdab4ae78eb140eae6f05'].trim();
+      addressSource = 'person_address_hash';
+    } 
+    // Then check all person custom fields
+    else {
+      for (const key of Object.keys(deal.person)) {
+        if (key.length === 40 && deal.person[key] && typeof deal.person[key] === 'string') {
+          const value = String(deal.person[key]).trim();
+          // Check if it looks like a real street address
+          if (value && value.length > 10 && value.length < 200 &&
+              /\d/.test(value) && // Has at least one number
+              /[a-zA-Z]/.test(value) && // Has letters
+              // Must look like an actual address
+              (/\d+\s+[A-Za-z]/.test(value) || // Street number pattern OR
+               /\b(unit|lot|suite|level)\s*\d+/i.test(value)) && // Unit/lot pattern
+              !value.includes('[FBA]') && 
+              !value.includes('[R') &&
+              !value.includes('facebook') &&
+              !value.includes('@') && 
+              !value.startsWith('http')) {
+            address = value;
+            addressSource = 'person_custom_field';
+            console.log(`✅ Found address in person custom field ${key}: ${value.substring(0, 50)}...`);
+            break;
+          }
+        }
+      }
+    }
+    // Fallback to standard person address field
+    if (!address && deal.person.address) {
+      address = deal.person.address;
+      addressSource = 'person_address';
+    }
+  }
+  
+  // Check org address if still no address
+  if (!address && deal.org?.address) {
     address = deal.org.address;
     addressSource = 'org_address';
-  } else if (deal.address) {
+  }
+  
+  // Check deal address field
+  if (!address && deal.address) {
     address = deal.address;
     addressSource = 'deal_address';
+  }
+  
+  // Check all deal custom fields (40-character hashes) for addresses
+  if (!address) {
+    for (const key of Object.keys(deal)) {
+      if (key.length === 40 && key !== 'fc56b2671002827523bc3711b6a790f5ff00963f' && deal[key] && typeof deal[key] === 'string') {
+        const value = String(deal[key]).trim();
+        // More strict address validation - must be a real street address
+        if (value && value.length > 10 && value.length < 200 && // Reasonable address length
+            /\d/.test(value) && // Has at least one number
+            /[a-zA-Z]/.test(value) && // Has letters
+            (
+              // Must have actual street type indicators (not just state/region)
+              /\d+\s+[A-Za-z]/.test(value) && // Starts with street number pattern
+              /\b(Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Crescent|Cres|Place|Pl|Lane|Ln|Court|Ct|Way|Parade|Pde|Terrace|Tce|Circuit|Cct|Close|Cl|Boulevard|Blvd)\b/i.test(value)
+            ) &&
+            // Exclude metadata and non-address content
+            !value.includes('[FBA]') && // Not metadata
+            !value.includes('[R') && // Not region codes like [R8]
+            !value.includes('facebook') && // Not social media references
+            !value.includes('Lead Gen') && 
+            !value.includes('Advertising') &&
+            !value.includes('@') && // Not email
+            !value.startsWith('http') && // Not URL
+            !/^\d{8,}$/.test(value) && // Not just a phone number
+            !/^[A-Z0-9\-]+$/.test(value)) { // Not just an ID
+          address = value;
+          addressSource = 'deal_custom_field';
+          console.log(`✅ Found address in deal custom field ${key}: ${value.substring(0, 50)}...`);
+          break;
+        }
+      }
+    }
+  }
+  
+  // Check organization custom fields if still no address  
+  if (!address && deal.org) {
+    for (const key of Object.keys(deal.org)) {
+      if (key.length === 40 && deal.org[key] && typeof deal.org[key] === 'string') {
+        const value = String(deal.org[key]).trim();
+        // Check for valid address patterns
+        if (value && value.length > 10 && value.length < 200 &&
+            /\d/.test(value) && 
+            /[a-zA-Z]/.test(value) && 
+            (/\d+\s+[A-Za-z]/.test(value) || /\b(unit|lot|suite|level)\s*\d+/i.test(value)) &&
+            !value.includes('[FBA]') &&
+            !value.includes('[R') &&
+            !value.includes('facebook') &&
+            !value.includes('@') && 
+            !value.startsWith('http')) {
+          address = value;
+          addressSource = 'org_custom_field';
+          console.log(`✅ Found address in org custom field ${key}: ${value.substring(0, 50)}...`);
+          break;
+        }
+      }
+    }
   }
 
   // Try to parse address from deal title if no address found

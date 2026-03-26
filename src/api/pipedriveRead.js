@@ -652,34 +652,28 @@ export const fetchPersonAddressForActivity = async (activity) => {
           }
         }
         
-        // Last resort: look for proper street addresses in custom fields
+        // Last resort: look for addresses in custom fields - less strict for edge cases
         if (!address) {
           for (const key of Object.keys(person)) {
             if (key.length === 40 && key !== PERSON_ADDRESS_HASH && person[key] && typeof person[key] === 'string') {
               const value = String(person[key]).trim();
-              // Improved check for actual street addresses - more permissive
-              if (value && value.length > 10 &&
-                  // Must contain street type
-                  (value.includes('Street') || value.includes('St,') || value.includes('St ') || 
-                   value.includes('Road') || value.includes('Rd,') || value.includes('Rd ') ||
-                   value.includes('Avenue') || value.includes('Ave,') || value.includes('Ave ') ||
-                   value.includes('Drive') || value.includes('Dr,') || value.includes('Dr ') ||
-                   value.includes('Crescent') || value.includes('Cres,') || value.includes('Cres ') ||
-                   value.includes('Place') || value.includes('Pl,') || value.includes('Pl ') ||
-                   value.includes('Lane') || value.includes('Ln,') || value.includes('Ln ') ||
-                   value.includes('Court') || value.includes('Ct,') || value.includes('Ct ')) &&
-                  // Support all Australian states (optional - allow addresses without state)
-                  (value.includes('QLD') || value.includes('NSW') || value.includes('VIC') || 
-                   value.includes('SA') || value.includes('WA') || value.includes('TAS') || 
-                   value.includes('NT') || value.includes('ACT') || value.includes('Australia') ||
-                   // Also support abbreviated versions
-                   value.includes('Qld') || value.includes('N.S.W') || value.includes('Vic') ||
-                   // Or no state if it looks like a valid address
-                   /\d{4}/.test(value)) && // Contains 4-digit postcode
-                  // Must NOT contain marketing text
+              // More lenient check to catch remaining 3 addresses
+              if (value && value.length > 10 && value.length < 200 &&
+                  /\d/.test(value) && // Has at least one number
+                  /[a-zA-Z]/.test(value) && // Has letters
+                  // Either street type OR postcode OR starts with number
+                  ((/\b(Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Crescent|Cres|Place|Pl|Lane|Ln|Court|Ct|Way|Parade|Pde|Terrace|Tce|Circuit|Cct|Close|Cl|Boulevard|Blvd)\b/i.test(value)) ||
+                   /\b\d{4}\b/.test(value) || // 4-digit postcode
+                   /^\d+\s+[A-Za-z]/.test(value) || // Starts with street number
+                   // Also allow unit/lot patterns
+                   /\b(unit|lot|suite|level)\s*\d+/i.test(value)) &&
+                  // Must NOT contain marketing text or metadata
+                  !value.includes('[FBA]') && !value.includes('[R') &&
                   !value.includes('Lead Gen') && !value.includes('Advertising') && 
                   !value.includes('Region:') && !value.includes('Landing Page') &&
-                  !value.includes('Email:') && !value.includes('Phone:')) {
+                  !value.includes('Email:') && !value.includes('Phone:') &&
+                  !value.includes('@') && !value.startsWith('http')) {
+                console.log(`✅ Found address in person custom field ${key}: ${value.substring(0, 50)}...`);
                 address = value;
                 break;
               }
@@ -707,13 +701,46 @@ export const fetchPersonAddressForActivity = async (activity) => {
         if (dealResponse.data.success && dealResponse.data.data) {
           const deal = dealResponse.data.data;
           
-          // Hash key for Deal address in Pipedrive  
+          // Hash keys for addresses in Pipedrive  
           const DEAL_ADDRESS_HASH = 'fc56b2671002827523bc3711b6a790f5ff00963f';
+          const PERSON_ADDRESS_HASH = '6fa72064159f058167dcdab4ae78eb140eae6f05';
           
           // Debug: Log deal fields to see what's available
           console.log(`🔍 Deal ${dealId} fields:`, Object.keys(deal).filter(key => key.includes('address') || key.length === 40));
           
-          // First check the specific hash key for Deal address
+          // FIRST: Check if deal has person data with address
+          if (deal.person_id && deal.person_id.value) {
+            // Deal includes nested person data
+            const dealPerson = deal.person_id;
+            
+            // Check person hash key in deal's person data
+            if (dealPerson[PERSON_ADDRESS_HASH] && typeof dealPerson[PERSON_ADDRESS_HASH] === 'string') {
+              const address = String(dealPerson[PERSON_ADDRESS_HASH]).trim();
+              if (address && !address.includes('Lead Gen') && !address.includes('Advertising')) {
+                console.log(`✅ Found address in deal's person hash field: ${address.substring(0, 50)}...`);
+                return address;
+              }
+            }
+            
+            // Check all person custom fields in deal's person data
+            for (const key of Object.keys(dealPerson)) {
+              if (key.length === 40 && dealPerson[key] && typeof dealPerson[key] === 'string') {
+                const value = String(dealPerson[key]).trim();
+                // Less strict check - any field with numbers and letters could be address
+                if (value && value.length > 10 && 
+                    /\d/.test(value) && // Has numbers
+                    /[a-zA-Z]/.test(value) && // Has letters
+                    !value.includes('@') && // Not email
+                    !value.includes('Lead Gen') &&
+                    !value.includes('Advertising')) {
+                  console.log(`✅ Found address in deal's person field ${key}: ${value.substring(0, 50)}...`);
+                  return value;
+                }
+              }
+            }
+          }
+          
+          // Then check the specific hash key for Deal address
           if (deal[DEAL_ADDRESS_HASH] && typeof deal[DEAL_ADDRESS_HASH] === 'string') {
             const address = String(deal[DEAL_ADDRESS_HASH]).trim();
             if (address && !address.includes('Lead Gen') && !address.includes('Advertising')) {
@@ -743,22 +770,22 @@ export const fetchPersonAddressForActivity = async (activity) => {
             }
           }
           
-          // Check deal custom fields (40-character hashes)
+          // Check deal custom fields (40-character hashes) - less strict for edge cases
           for (const key of Object.keys(deal)) {
             if (key.length === 40 && key !== DEAL_ADDRESS_HASH && deal[key] && typeof deal[key] === 'string') {
               const value = String(deal[key]).trim();
+              // More lenient check for the 3 remaining addresses
               if (value && value.length > 10 && 
-                  (value.includes('Street') || value.includes('St,') || value.includes('St ') || 
-                   value.includes('Road') || value.includes('Rd,') || value.includes('Rd ') ||
-                   value.includes('Avenue') || value.includes('Ave,') || value.includes('Ave ') ||
-                   value.includes('Drive') || value.includes('Dr,') || value.includes('Dr ') ||
-                   value.includes('Crescent') || value.includes('Cres,') || value.includes('Cres ') ||
-                   value.includes('Place') || value.includes('Pl,') || value.includes('Pl ') ||
-                   value.includes('Lane') || value.includes('Ln,') || value.includes('Ln ') ||
-                   value.includes('Court') || value.includes('Ct,') || value.includes('Ct ') ||
-                   /\d{4}/.test(value)) && // Contains 4-digit postcode
+                  /\d/.test(value) && // Has at least one number
+                  /[a-zA-Z]/.test(value) && // Has letters  
+                  // Either has street indicators OR postcode OR starts with number
+                  ((/\b(Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Crescent|Cres|Place|Pl|Lane|Ln|Court|Ct|Way|Parade|Terrace|Circuit|Close|Boulevard)\b/i.test(value)) ||
+                   /\b\d{4}\b/.test(value) || // 4-digit postcode
+                   /^\d+\s+[A-Za-z]/.test(value)) && // Starts with street number
+                  !value.includes('[FBA]') && !value.includes('[R') && // Not metadata
                   !value.includes('Lead Gen') && !value.includes('Advertising') &&
-                  !value.includes('Email:') && !value.includes('Phone:')) {
+                  !value.includes('Email:') && !value.includes('Phone:') &&
+                  !value.includes('@') && !value.startsWith('http')) {
                 console.log(`✅ Found address in deal custom field ${key}: ${value.substring(0, 50)}...`);
                 return value;
               }
@@ -824,6 +851,65 @@ export const fetchPersonAddressForActivity = async (activity) => {
         }
       } catch (orgError) {
         console.warn(`Could not fetch org ${activity.org_id} for activity ${activity.id}:`, orgError.message);
+      }
+    }
+    
+    // FINAL FALLBACK: Extract address from deal title for property inspections
+    // Format: "Name - Address" or "Name- Address" or "Name -Address"
+    if (dealId || (activity.deal && activity.deal.title)) {
+      try {
+        // Try to get deal title from various sources
+        let dealTitle = null;
+        
+        // First check if deal title is already in activity data
+        if (activity.deal && activity.deal.title) {
+          dealTitle = activity.deal.title;
+        }
+        
+        // Otherwise check if we already have the deal data from earlier fetch
+        const cachedDealKey = `pipedrive_deal_${dealId}`;
+        const cachedDeal = localStorage.getItem(cachedDealKey);
+        if (cachedDeal) {
+          try {
+            const deal = JSON.parse(cachedDeal);
+            dealTitle = deal.title;
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
+        
+        // If not cached, fetch the deal again (or use the one we already fetched)
+        if (!dealTitle) {
+          const client = createPipedriveClient();
+          const dealResponse = await client.get(`/deals/${dealId}`);
+          if (dealResponse.data.success && dealResponse.data.data) {
+            dealTitle = dealResponse.data.data.title;
+          }
+        }
+        
+        if (dealTitle && dealTitle.includes('-')) {
+          // Split on dash and take everything after it as the address
+          const parts = dealTitle.split('-');
+          if (parts.length >= 2) {
+            // Join back in case address has dashes, take everything after first dash
+            const potentialAddress = parts.slice(1).join('-').trim();
+            
+            // Basic validation - should have numbers and letters
+            if (potentialAddress && 
+                potentialAddress.length > 10 && 
+                /\d/.test(potentialAddress) && // Has numbers
+                /[a-zA-Z]/.test(potentialAddress) && // Has letters
+                !potentialAddress.includes('@') && // Not email
+                !potentialAddress.startsWith('http')) { // Not URL
+              
+              console.log(`✅ FALLBACK: Extracted address from deal title: ${potentialAddress}`);
+              console.log(`   Original title: ${dealTitle}`);
+              return potentialAddress;
+            }
+          }
+        }
+      } catch (titleError) {
+        console.warn(`Could not extract address from deal title:`, titleError.message);
       }
     }
     
