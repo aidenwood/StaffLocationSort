@@ -1338,7 +1338,7 @@ const AvailabilityGrid = ({ pipedriveData }) => {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredInspectors.map((inspector) => (
                 <tr key={inspector.id} className="hover:bg-gray-50">
-                  <td className="w-48 h-24 px-4 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 sticky left-0 bg-white hover:bg-gray-50 z-10">
+                  <td className="w-48 h-24 px-4 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 sticky left-0 bg-white hover:bg-gray-50 z-50">
                     <div className="flex flex-col justify-center h-full">
                       <div>{inspector.name}</div>
                       <div className="text-xs text-gray-500">{inspector.region || inspector.regionName}</div>

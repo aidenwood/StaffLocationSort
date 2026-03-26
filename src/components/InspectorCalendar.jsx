@@ -39,6 +39,32 @@ const InspectorCalendar = ({
   const effectiveActivities = activities || [];
   const effectiveInspectors = inspectors || [];
   
+  // Map region codes to display cities (from roster data)
+  const getRegionDisplayName = (regionCode, regionName) => {
+    if (!regionCode) return '';
+    
+    // If it's already a city name (like 'Brisbane'), use it directly
+    if (regionCode && !regionCode.startsWith('R')) {
+      return regionCode;
+    }
+    
+    // Map old region codes to primary cities (for backward compatibility)
+    const regionToCityMap = {
+      'R01': 'Brisbane',
+      'R02': 'Gympie', 
+      'R03': 'Sunshine Coast',
+      'R04': 'Toowoomba',
+      'R05': 'Rockhampton',
+      'R06': 'Coffs Harbour',
+      'R07': 'Tamworth',
+      'R08': 'Armidale', 
+      'R09': 'Newcastle',
+      'R10': 'Sydney'
+    };
+    
+    return regionToCityMap[regionCode] || regionCode;
+  };
+
   // Get current inspector or handle "all inspectors" view
   const isAllInspectors = selectedInspector === null || selectedInspector === 'all';
   const displayInspector = isAllInspectors 
@@ -604,16 +630,19 @@ const InspectorCalendar = ({
           )}
 
           {/* Open in Pipedrive */}
-          {activity.id && (
+          {(activity.deal_id || activity.id) && (
             <div className="pt-2 border-t border-gray-200">
               <a
-                href={`https://rebuildrelief.pipedrive.com/activity/${activity.id}`}
+                href={activity.deal_id 
+                  ? `https://rebuildrelief.pipedrive.com/deal/${activity.deal_id}`
+                  : `https://rebuildrelief.pipedrive.com/activity/${activity.id}`
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
-                <span>Open in Pipedrive</span>
+                <span>{activity.deal_id ? 'Open Deal in Pipedrive' : 'Open Activity in Pipedrive'}</span>
               </a>
             </div>
           )}
@@ -740,7 +769,7 @@ const InspectorCalendar = ({
         <div className={`${fullScreen ? 'flex-1 min-h-0' : ''} overflow-auto`}>
           <div className="min-w-full">
             {/* Header Row - Sticky */}
-            <div className={`sticky top-0 z-10 grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
+            <div className={`sticky top-0 z-20 grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
               viewMode === 1 ? 'grid-cols-1' : 
               viewMode === 3 ? 'grid-cols-3' : 
               viewMode === 5 ? 'grid-cols-5' :
@@ -770,11 +799,12 @@ const InspectorCalendar = ({
                     {(() => {
                       const roster = getRosterForDate(selectedInspector, day);
                       if (roster && roster.region_code) {
+                        const cityName = getRegionDisplayName(roster.region_code, roster.region_name);
                         return (
                           <div className={`text-xs font-medium ${
                             isSelected ? 'text-blue-200' : 'text-gray-500'
                           }`} title={`Rostered: ${roster.region_name || roster.region_code}`}>
-                            {roster.region_code}
+                            {cityName}
                           </div>
                         );
                       }

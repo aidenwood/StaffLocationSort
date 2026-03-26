@@ -656,17 +656,29 @@ export const fetchPersonAddressForActivity = async (activity) => {
           Object.keys(person).forEach(key => {
             if (key.length === 40 && key !== PERSON_ADDRESS_HASH && person[key] && typeof person[key] === 'string') {
               const value = String(person[key]).trim();
-              // More specific check for actual street addresses (QLD and NSW)
-              if (value && 
+              // Improved check for actual street addresses - more permissive
+              if (value && value.length > 10 &&
                   // Must contain street type
                   (value.includes('Street') || value.includes('St,') || value.includes('St ') || 
-                   value.includes('Road') || value.includes('Avenue') || value.includes('Drive') || 
-                   value.includes('Crescent') || value.includes('Place') || value.includes('Lane')) &&
-                  // Must contain Australian state (both QLD and NSW)
-                  (value.includes('QLD') || value.includes('NSW') || value.includes('Australia')) &&
+                   value.includes('Road') || value.includes('Rd,') || value.includes('Rd ') ||
+                   value.includes('Avenue') || value.includes('Ave,') || value.includes('Ave ') ||
+                   value.includes('Drive') || value.includes('Dr,') || value.includes('Dr ') ||
+                   value.includes('Crescent') || value.includes('Cres,') || value.includes('Cres ') ||
+                   value.includes('Place') || value.includes('Pl,') || value.includes('Pl ') ||
+                   value.includes('Lane') || value.includes('Ln,') || value.includes('Ln ') ||
+                   value.includes('Court') || value.includes('Ct,') || value.includes('Ct ')) &&
+                  // Support all Australian states (optional - allow addresses without state)
+                  (value.includes('QLD') || value.includes('NSW') || value.includes('VIC') || 
+                   value.includes('SA') || value.includes('WA') || value.includes('TAS') || 
+                   value.includes('NT') || value.includes('ACT') || value.includes('Australia') ||
+                   // Also support abbreviated versions
+                   value.includes('Qld') || value.includes('N.S.W') || value.includes('Vic') ||
+                   // Or no state if it looks like a valid address
+                   /\d{4}/.test(value)) && // Contains 4-digit postcode
                   // Must NOT contain marketing text
                   !value.includes('Lead Gen') && !value.includes('Advertising') && 
-                  !value.includes('Region:') && !value.includes('Landing Page')) {
+                  !value.includes('Region:') && !value.includes('Landing Page') &&
+                  !value.includes('Email:') && !value.includes('Phone:')) {
                 address = value;
               }
             }
@@ -679,6 +691,131 @@ export const fetchPersonAddressForActivity = async (activity) => {
         }
         
         return address || null;
+      }
+    }
+    
+    // If no person address found, check deal for address
+    if (activity.deal && activity.deal.id) {
+      try {
+        console.log(`📋 No person address found for activity ${activity.id}, checking deal ${activity.deal.id}`);
+        const client = createPipedriveClient();
+        const dealResponse = await client.get(`/deals/${activity.deal.id}`);
+        
+        if (dealResponse.data.success && dealResponse.data.data) {
+          const deal = dealResponse.data.data;
+          
+          // Hash key for Deal address in Pipedrive  
+          const DEAL_ADDRESS_HASH = 'fc56b2671002827523bc3711b6a790f5ff00963f';
+          
+          // First check the specific hash key for Deal address
+          if (deal[DEAL_ADDRESS_HASH] && typeof deal[DEAL_ADDRESS_HASH] === 'string') {
+            const address = String(deal[DEAL_ADDRESS_HASH]).trim();
+            if (address && !address.includes('Lead Gen') && !address.includes('Advertising')) {
+              console.log(`✅ Found address in deal hash field: ${address.substring(0, 50)}...`);
+              return address;
+            }
+          }
+          
+          // Check deal address fields
+          const dealAddressFields = [
+            'address',
+            'property_address',
+            'inspection_address',
+            'site_address',
+            'deal_address'
+          ];
+          
+          for (const fieldName of dealAddressFields) {
+            if (deal[fieldName] && typeof deal[fieldName] === 'string' && deal[fieldName].trim()) {
+              const address = deal[fieldName].trim();
+              if (address.length > 10 && !address.includes('Lead Gen') && !address.includes('Advertising')) {
+                console.log(`✅ Found address in deal.${fieldName}: ${address.substring(0, 50)}...`);
+                return address;
+              }
+            }
+          }
+          
+          // Check deal custom fields (40-character hashes)
+          Object.keys(deal).forEach(key => {
+            if (key.length === 40 && key !== DEAL_ADDRESS_HASH && deal[key] && typeof deal[key] === 'string') {
+              const value = String(deal[key]).trim();
+              if (value && value.length > 10 && 
+                  (value.includes('Street') || value.includes('St,') || value.includes('St ') || 
+                   value.includes('Road') || value.includes('Rd,') || value.includes('Rd ') ||
+                   value.includes('Avenue') || value.includes('Ave,') || value.includes('Ave ') ||
+                   value.includes('Drive') || value.includes('Dr,') || value.includes('Dr ') ||
+                   value.includes('Crescent') || value.includes('Cres,') || value.includes('Cres ') ||
+                   value.includes('Place') || value.includes('Pl,') || value.includes('Pl ') ||
+                   value.includes('Lane') || value.includes('Ln,') || value.includes('Ln ') ||
+                   value.includes('Court') || value.includes('Ct,') || value.includes('Ct ') ||
+                   /\d{4}/.test(value)) && // Contains 4-digit postcode
+                  !value.includes('Lead Gen') && !value.includes('Advertising') &&
+                  !value.includes('Email:') && !value.includes('Phone:')) {
+                console.log(`✅ Found address in deal custom field ${key}: ${value.substring(0, 50)}...`);
+                return value;
+              }
+            }
+          });
+        }
+      } catch (dealError) {
+        console.warn(`Could not fetch deal ${activity.deal?.id} for activity ${activity.id}:`, dealError.message);
+      }
+    }
+    
+    // If no person or deal address found, check organization
+    if (activity.org_id) {
+      try {
+        console.log(`📋 No person/deal address found for activity ${activity.id}, checking org ${activity.org_id}`);
+        const client = createPipedriveClient();
+        const orgResponse = await client.get(`/organizations/${activity.org_id}`);
+        
+        if (orgResponse.data.success && orgResponse.data.data) {
+          const org = orgResponse.data.data;
+          
+          // Check organization address fields
+          const orgAddressFields = [
+            'address',
+            'postal_address_formatted_address',
+            'formatted_address',
+            'full_address',
+            'street_address',
+            'business_address'
+          ];
+          
+          for (const fieldName of orgAddressFields) {
+            if (org[fieldName] && typeof org[fieldName] === 'string' && org[fieldName].trim()) {
+              const address = org[fieldName].trim();
+              if (address.length > 10 && !address.includes('Lead Gen') && !address.includes('Advertising')) {
+                console.log(`✅ Found address in org.${fieldName}: ${address.substring(0, 50)}...`);
+                return address;
+              }
+            }
+          }
+          
+          // Check org custom fields
+          Object.keys(org).forEach(key => {
+            if (key.length === 40 && org[key] && typeof org[key] === 'string') {
+              const value = String(org[key]).trim();
+              if (value && value.length > 10 && 
+                  (value.includes('Street') || value.includes('St,') || value.includes('St ') || 
+                   value.includes('Road') || value.includes('Rd,') || value.includes('Rd ') ||
+                   value.includes('Avenue') || value.includes('Ave,') || value.includes('Ave ') ||
+                   value.includes('Drive') || value.includes('Dr,') || value.includes('Dr ') ||
+                   value.includes('Crescent') || value.includes('Cres,') || value.includes('Cres ') ||
+                   value.includes('Place') || value.includes('Pl,') || value.includes('Pl ') ||
+                   value.includes('Lane') || value.includes('Ln,') || value.includes('Ln ') ||
+                   value.includes('Court') || value.includes('Ct,') || value.includes('Ct ') ||
+                   /\d{4}/.test(value)) && // Contains 4-digit postcode
+                  !value.includes('Lead Gen') && !value.includes('Advertising') &&
+                  !value.includes('Email:') && !value.includes('Phone:')) {
+                console.log(`✅ Found address in org custom field ${key}: ${value.substring(0, 50)}...`);
+                return value;
+              }
+            }
+          });
+        }
+      } catch (orgError) {
+        console.warn(`Could not fetch org ${activity.org_id} for activity ${activity.id}:`, orgError.message);
       }
     }
     

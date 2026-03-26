@@ -22,11 +22,34 @@ const RosterCellEditor = ({
     inspector.id
   );
 
-  // Use regions from realInspectorData to stay in sync
-  const regions = Object.entries(regionBreakdown).map(([code, data]) => ({
-    code,
-    name: data.name
-  }));
+  // Create city-level roster options for each region
+  const regions = [];
+  
+  Object.entries(regionBreakdown).forEach(([regionCode, data]) => {
+    // Map regions to their primary cities for roster options
+    const regionToCities = {
+      'R01': ['Brisbane', 'Logan', 'Ipswich', 'Gold Coast'],
+      'R02': ['Gympie', 'Maryborough'],
+      'R03': ['Sunshine Coast'],
+      'R04': ['Toowoomba', 'Gatton'],
+      'R05': ['Rockhampton', 'Emerald', 'Roma'],
+      'R06': ['Coffs Harbour', 'Port Macquarie', 'Grafton'],
+      'R07': ['Tamworth', 'Armidale'],
+      'R08': ['Armidale', 'Glen Innes'],
+      'R09': ['Newcastle', 'Central Coast', 'Maitland'],
+      'R10': ['Sydney', 'Penrith']
+    };
+    
+    const cities = regionToCities[regionCode] || [regionCode];
+    
+    cities.forEach(city => {
+      regions.push({
+        code: city, // Store city name as code for new system
+        name: `${regionCode} - ${city}`,
+        regionCode: regionCode // Keep track of parent region
+      });
+    });
+  });
 
   const statuses = [
     { value: 'working', label: 'Working', color: 'bg-green-100 text-green-800' },
