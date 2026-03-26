@@ -631,6 +631,44 @@ const AvailabilityGrid = ({ pipedriveData }) => {
     return utilizationPercent > 0 ? 'text-white' : 'text-gray-600';
   };
 
+  // Get background color for actual region pill based on whether it matches rostered region
+  const getRegionMatchColor = (inspector, dominantRegion, rosterData) => {
+    // If there's roster data and it matches the actual region, use light green
+    if (rosterData?.region_code && dominantRegion) {
+      const rosteredRegion = rosterData.region_code.toLowerCase();
+      const actualRegion = dominantRegion.toLowerCase();
+      
+      // Map region codes to their covered locations
+      const regionCodeMappings = {
+        'r01': ['brisbane', 'logan', 'ipswich', 'gold coast', 'beaudesert'],
+        'r02': ['gympie', 'maryborough', 'tin can bay'],
+        'r03': ['sunshine coast', 'moreton region'],
+        'r04': ['gatton', 'toowoomba', 'oakey', 'stanthorpe', 'tara', 'warwick', 'texas'],
+        'r05': ['emerald', 'rockhampton', 'roma'],
+        'r06': ['grafton', 'port macquarie', 'coffs harbour'],
+        'r07': ['tamworth', 'armidale', 'glen innes'],
+        'r08': ['grafton', 'port macquarie', 'coffs harbour'],
+        'r09': ['aberglasslyn', 'rutherford', 'maitland', 'newcastle', 'mereweather', 'gwandalan', 'port stephens', 'cessnock', 'lake macquarie', 'central coast'],
+        'r10': ['sydney', 'penrith', 'parramatta', 'liverpool', 'campbelltown', 'blacktown', 'camden', 'richmond', 'windsor', 'western sydney', 'greater sydney']
+      };
+      
+      // Check if the actual region matches the rostered region code
+      const rosteredLocations = regionCodeMappings[rosteredRegion] || [];
+      const isMatch = rosteredLocations.some(location => 
+        actualRegion.includes(location) || location.includes(actualRegion)
+      ) || actualRegion === rosteredRegion || rosteredRegion.includes(actualRegion);
+      
+      if (isMatch) {
+        return 'bg-green-100 text-green-800'; // Light green for match
+      } else {
+        return 'bg-orange-100 text-orange-800'; // Light orange for mismatch
+      }
+    }
+    
+    // Default light gray if no roster data to compare against
+    return 'bg-gray-100 text-gray-700';
+  };
+
   // Check if inspector is working outside their assigned region
   const isOutOfRegion = (inspector, dominantRegion) => {
     if (!inspector.region && !inspector.regionName) return false;
@@ -685,7 +723,8 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       'R06': 'bg-orange-100 text-orange-800',
       'R07': 'bg-pink-100 text-pink-800',
       'R08': 'bg-indigo-100 text-indigo-800',
-      'R09': 'bg-teal-100 text-teal-800'
+      'R09': 'bg-teal-100 text-teal-800',
+      'R10': 'bg-violet-100 text-violet-800'
     };
     
     // Check if it's a region code first
@@ -729,7 +768,18 @@ const AvailabilityGrid = ({ pipedriveData }) => {
       'Coffs Harbour': 'bg-cyan-100 text-cyan-800',
       'Newcastle': 'bg-indigo-100 text-indigo-800',
       'Port Macquarie': 'bg-cyan-200 text-cyan-900',
-      'Northern NSW': 'bg-cyan-200 text-cyan-900'
+      'Northern NSW': 'bg-cyan-200 text-cyan-900',
+      'Penrith': 'bg-violet-100 text-violet-800',
+      'Sydney': 'bg-violet-100 text-violet-800',
+      'Western Sydney': 'bg-violet-100 text-violet-800',
+      'Greater Sydney': 'bg-violet-100 text-violet-800',
+      'Parramatta': 'bg-violet-100 text-violet-800',
+      'Liverpool': 'bg-violet-100 text-violet-800',
+      'Campbelltown': 'bg-violet-100 text-violet-800',
+      'Blacktown': 'bg-violet-100 text-violet-800',
+      'Camden': 'bg-violet-100 text-violet-800',
+      'Richmond': 'bg-violet-100 text-violet-800',
+      'Windsor': 'bg-violet-100 text-violet-800'
     };
     
     return colors[region] || 'bg-gray-100 text-gray-600';
@@ -1339,14 +1389,11 @@ const AvailabilityGrid = ({ pipedriveData }) => {
                                   //   console.log(`❌ MISSING PILL: ${inspector.name} on ${dayString} - count: ${dayData.count}, dominantRegion: "${dayData.dominantRegion}"`);
                                   // }
                                   
-                                  // Debug log for pills (minimal - we know detection works)
-                                  if (dayData.count > 0 && shouldShow && Math.random() < 0.01) {
-                                    console.log(`✅ ACTUAL pill: ${inspector.name} on ${dayString} -> ${dayData.dominantRegion}`);
-                                  }
+                                  // Debug logging removed - was causing console spam
                                   return shouldShow;
                                 })() && (
                                   <div 
-                                    className="text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1 bg-red-500 text-white border-4 border-black"
+                                    className={`text-xs px-2 py-1 rounded-md flex items-center justify-center gap-1 ${getRegionMatchColor(inspector, dayData.dominantRegion, existingRoster)}`}
                                     style={{
                                       zIndex: 99999,
                                       position: 'relative',

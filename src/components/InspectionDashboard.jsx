@@ -143,14 +143,8 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
     return combined;
   }, [localAddressMap, sharedCacheRefresh]);
   
-  // Refresh shared cache every 30 seconds to pick up changes from other components
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSharedCacheRefresh(prev => prev + 1);
-    }, 30000); // 30 seconds
-    
-    return () => clearInterval(interval);
-  }, []);
+  // Manual refresh only - no auto-refresh to avoid interrupting user experience
+  // User can use the manual refresh button when needed
 
   // Save selectedInspector to localStorage when it changes
   useEffect(() => {
@@ -369,6 +363,9 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
     try {
       if (!selectedInspector) return;
       
+      // Clear existing counts to ensure fresh calculation
+      setTimeSlotDealCounts({});
+      
       // Get current inspector region
       const currentInspector = pipedriveInspectors?.find(i => i.id === selectedInspector);
       const region = currentInspector?.region || 'R1';
@@ -376,13 +373,13 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
       // Fetch deals for the region
       const deals = await getDealsForRegion(region, { limit: 200 });
       if (!deals || deals.length === 0) {
-        // No deals for region
+        console.log('⚠️ No deals found for region', region);
         return;
       }
       
       // Debug: Check how many deals have coordinates
       const dealsWithCoords = deals.filter(d => d.coordinates && d.coordinates.lat && d.coordinates.lng);
-      // Analysis of deals with coordinates
+      console.log(`📍 ${dealsWithCoords.length}/${deals.length} deals have coordinates`);
       
       const timeSlots = ['09:00', '11:00', '13:00', '15:00'];
       const counts = {};
@@ -469,7 +466,8 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
       }
       
       setTimeSlotDealCounts(counts);
-      // Deal counts calculated
+      console.log(`✅ Deal counts calculated for week of ${format(startOfCurrentWeek, 'yyyy-MM-dd')}:`, 
+        Object.keys(counts).length, 'slots with counts');
       
     } catch (err) {
       console.error('❌ Error calculating time slot deal counts:', err);
@@ -477,11 +475,17 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
   };
 
   // Recalculate deal counts when date or inspector changes and opportunities are enabled
+  // Use week start as dependency to ensure recalculation when navigating weeks
+  const weekStart = useMemo(() => {
+    return startOfWeek(selectedDate, { weekStartsOn: 1 });
+  }, [selectedDate]);
+  
   useEffect(() => {
-    if (showOpportunities && !opportunitiesLoading && enrichedActivities.length > 0) {
+    if (showOpportunities && !opportunitiesLoading) {
+      console.log(`📊 Recalculating deal counts for week of ${format(weekStart, 'yyyy-MM-dd')}`);
       calculateTimeSlotDealCounts();
     }
-  }, [selectedDate, selectedInspector, showOpportunities, enrichedActivities.length]);
+  }, [weekStart, selectedInspector, showOpportunities]);
 
   const handleTimeSlotSelection = (slotData) => {
     setSelectedTimeSlot(slotData);
@@ -1294,12 +1298,6 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               >
                 <Users className="w-3 h-3" />
               </a>
-              <a
-                href="/#book"
-                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
-              >
-                <Calendar className="w-3 h-3" />
-              </a>
               <button
                 onClick={() => setShowBookingForm(true)}
                 className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
@@ -1354,13 +1352,6 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               >
                 <Users className="w-3 h-3" />
                 Activities
-              </a>
-              <a
-                href="/#book"
-                className="flex items-center gap-1 px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
-              >
-                <Calendar className="w-3 h-3" />
-                Book
               </a>
               <a
                 href="/#estimator"

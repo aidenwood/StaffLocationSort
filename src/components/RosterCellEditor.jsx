@@ -13,6 +13,7 @@ const RosterCellEditor = ({
   const [status, setStatus] = useState('working');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const dropdownRef = useRef(null);
 
   const { updateRoster, getRosterForDate } = useRosterData(
@@ -37,15 +38,18 @@ const RosterCellEditor = ({
   ];
 
   useEffect(() => {
-    // Create date object without timezone issues
-    const dateObj = new Date(date + 'T00:00:00');
-    const existingRoster = getRosterForDate(inspector.id, dateObj);
-    if (existingRoster) {
-      setSelectedRegion(existingRoster.region_code || '');
-      setStatus(existingRoster.status || 'working');
-      setNotes(existingRoster.notes || '');
+    // Only initialize values once when component mounts, don't overwrite user edits
+    if (!initialized) {
+      const dateObj = new Date(date + 'T00:00:00');
+      const existingRoster = getRosterForDate(inspector.id, dateObj);
+      if (existingRoster) {
+        setSelectedRegion(existingRoster.region_code || '');
+        setStatus(existingRoster.status || 'working');
+        setNotes(existingRoster.notes || '');
+      }
+      setInitialized(true);
     }
-  }, [inspector.id, date, getRosterForDate]);
+  }, [inspector.id, date, getRosterForDate, initialized]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {

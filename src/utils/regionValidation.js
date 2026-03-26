@@ -69,6 +69,12 @@ export const regionCenters = {
     lng: 151.7789, 
     name: 'R09 - NR (Newcastle Region)',
     locations: ['Aberglasslyn', 'Rutherford', 'Maitland', 'Newcastle', 'Mereweather', 'Gwandalan', 'Port Stephens', 'Cessnock', 'Lake Macquarie', 'Central Coast']
+  },
+  'R10': { 
+    lat: -33.7488, 
+    lng: 151.2093, 
+    name: 'R10 - SP (Sydney/Penrith)',
+    locations: ['Sydney', 'Penrith', 'Parramatta', 'Liverpool', 'Campbelltown', 'Blacktown', 'Camden', 'Richmond', 'Windsor']
   }
 };
 

@@ -732,7 +732,7 @@ const DealsDebugConsole = ({
                         {deal.stageName}
                       </span>
                     )}
-                    {deal.person?.name && (
+                    {deal.person?.name && deal.person.name !== 'Unknown Customer' && (
                       <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
                         <User className="w-3 h-3" />
                         {deal.person.name}
