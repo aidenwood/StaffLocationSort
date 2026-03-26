@@ -641,19 +641,20 @@ export const fetchPersonAddressForActivity = async (activity) => {
         
         // If no standard field, check custom fields for formatted_address
         if (!address) {
-          Object.keys(person).forEach(key => {
+          for (const key of Object.keys(person)) {
             if (key.includes('formatted_address') && person[key] && typeof person[key] === 'string') {
               const value = String(person[key]).trim();
               if (value && !value.includes('Lead Gen') && !value.includes('Advertising') && !value.includes('Region:')) {
                 address = value;
+                break;
               }
             }
-          });
+          }
         }
         
         // Last resort: look for proper street addresses in custom fields
         if (!address) {
-          Object.keys(person).forEach(key => {
+          for (const key of Object.keys(person)) {
             if (key.length === 40 && key !== PERSON_ADDRESS_HASH && person[key] && typeof person[key] === 'string') {
               const value = String(person[key]).trim();
               // Improved check for actual street addresses - more permissive
@@ -680,9 +681,10 @@ export const fetchPersonAddressForActivity = async (activity) => {
                   !value.includes('Region:') && !value.includes('Landing Page') &&
                   !value.includes('Email:') && !value.includes('Phone:')) {
                 address = value;
+                break;
               }
             }
-          });
+          }
         }
         
         // If address is an object, get the value
@@ -695,11 +697,12 @@ export const fetchPersonAddressForActivity = async (activity) => {
     }
     
     // If no person address found, check deal for address
-    if (activity.deal && activity.deal.id) {
+    const dealId = activity.deal_id || (activity.deal && activity.deal.id);
+    if (dealId) {
       try {
-        console.log(`📋 No person address found for activity ${activity.id}, checking deal ${activity.deal.id}`);
+        console.log(`📋 No person address found for activity ${activity.id}, checking deal ${dealId}`);
         const client = createPipedriveClient();
-        const dealResponse = await client.get(`/deals/${activity.deal.id}`);
+        const dealResponse = await client.get(`/deals/${dealId}`);
         
         if (dealResponse.data.success && dealResponse.data.data) {
           const deal = dealResponse.data.data;
@@ -707,13 +710,18 @@ export const fetchPersonAddressForActivity = async (activity) => {
           // Hash key for Deal address in Pipedrive  
           const DEAL_ADDRESS_HASH = 'fc56b2671002827523bc3711b6a790f5ff00963f';
           
+          // Debug: Log deal fields to see what's available
+          console.log(`🔍 Deal ${dealId} fields:`, Object.keys(deal).filter(key => key.includes('address') || key.length === 40));
+          
           // First check the specific hash key for Deal address
           if (deal[DEAL_ADDRESS_HASH] && typeof deal[DEAL_ADDRESS_HASH] === 'string') {
             const address = String(deal[DEAL_ADDRESS_HASH]).trim();
             if (address && !address.includes('Lead Gen') && !address.includes('Advertising')) {
-              console.log(`✅ Found address in deal hash field: ${address.substring(0, 50)}...`);
+              console.log(`✅ Found address in deal hash field ${DEAL_ADDRESS_HASH}: ${address.substring(0, 50)}...`);
               return address;
             }
+          } else {
+            console.log(`⚠️ Deal hash field ${DEAL_ADDRESS_HASH} not found or empty in deal ${dealId}`);
           }
           
           // Check deal address fields
@@ -736,7 +744,7 @@ export const fetchPersonAddressForActivity = async (activity) => {
           }
           
           // Check deal custom fields (40-character hashes)
-          Object.keys(deal).forEach(key => {
+          for (const key of Object.keys(deal)) {
             if (key.length === 40 && key !== DEAL_ADDRESS_HASH && deal[key] && typeof deal[key] === 'string') {
               const value = String(deal[key]).trim();
               if (value && value.length > 10 && 
@@ -755,10 +763,10 @@ export const fetchPersonAddressForActivity = async (activity) => {
                 return value;
               }
             }
-          });
+          }
         }
       } catch (dealError) {
-        console.warn(`Could not fetch deal ${activity.deal?.id} for activity ${activity.id}:`, dealError.message);
+        console.warn(`Could not fetch deal ${dealId} for activity ${activity.id}:`, dealError.message);
       }
     }
     
@@ -793,7 +801,7 @@ export const fetchPersonAddressForActivity = async (activity) => {
           }
           
           // Check org custom fields
-          Object.keys(org).forEach(key => {
+          for (const key of Object.keys(org)) {
             if (key.length === 40 && org[key] && typeof org[key] === 'string') {
               const value = String(org[key]).trim();
               if (value && value.length > 10 && 
@@ -812,7 +820,7 @@ export const fetchPersonAddressForActivity = async (activity) => {
                 return value;
               }
             }
-          });
+          }
         }
       } catch (orgError) {
         console.warn(`Could not fetch org ${activity.org_id} for activity ${activity.id}:`, orgError.message);
@@ -872,11 +880,11 @@ export const enrichActivitiesWithAddresses = async (activities) => {
       
       const batchResults = await Promise.all(
         batch.map(async (activity) => {
-          // Skip if no person_id
-          if (!activity.person_id && !(activity.deal && activity.deal.person_id)) {
+          // Skip only if no person_id AND no deal_id
+          if (!activity.person_id && !activity.deal_id && !(activity.deal && activity.deal.person_id)) {
             return {
               ...activity,
-              addressSource: 'no_person_id'
+              addressSource: 'no_person_or_deal_id'
             };
           }
           
