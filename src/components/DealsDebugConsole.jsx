@@ -19,7 +19,8 @@ const DealsDebugConsole = ({
   inspectionActivities = [],
   viewMode = 'split', // 'split', 'calendar', 'map'
   onDealsUpdate = () => {}, // Callback to update deals shown on map
-  context = null // Context from time slot button (timeSlot, date, radius, etc.)
+  context = null, // Context from time slot button (timeSlot, date, radius, etc.)
+  dealStageFilter = 'all' // Stage filter: 'all', 'lead_to_book', 'lead_interested'
 }) => {
   
   // Get distance-based color scheme - bright purple for close, fading for distant
@@ -166,6 +167,38 @@ const DealsDebugConsole = ({
       
       let processedDeals = result || [];
       
+      // Apply stage filter FIRST (before distance calculation)
+      if (dealStageFilter !== 'all') {
+        // Log stage names to debug
+        const stageNames = [...new Set(processedDeals.map(d => d.stageName).filter(Boolean))];
+        console.log(`📋 Available stage names: ${stageNames.join(', ')}`);
+        
+        processedDeals = processedDeals.filter(deal => {
+          // If no stageName, don't filter out (show the deal)
+          if (!deal.stageName) {
+            console.warn(`⚠️ Deal ${deal.id} has no stageName, including in results`);
+            return true;
+          }
+          const stageLower = deal.stageName.toLowerCase();
+          
+          if (dealStageFilter === 'lead_to_book') {
+            // More flexible matching for "Lead to Book" stages
+            return stageLower.includes('book') || 
+                   stageLower.includes('to book') || 
+                   stageLower.includes('ready') ||
+                   stageLower === 'lead to book';
+          } else if (dealStageFilter === 'lead_interested') {
+            // More flexible matching for "Lead Interested" stages
+            return stageLower.includes('interested') || 
+                   stageLower.includes('lead interested') ||
+                   stageLower.includes('qualify') ||
+                   stageLower === 'lead interested';
+          }
+          return true;
+        });
+        console.log(`🎯 Stage filter applied early: ${processedDeals.length}/${(result || []).length} deals match "${dealStageFilter}"`);
+      }
+      
       // Apply distance sorting if enabled and we have inspection activities
       if (sortByDistance && inspectionActivities.length > 0) {
         
@@ -245,7 +278,7 @@ const DealsDebugConsole = ({
       
       setDeals(processedDeals);
       setLastFetchTime(new Date()); // Track when deals were fetched
-      console.log(`✅ Loaded ${processedDeals.length} deals for region ${region}${sortByDistance ? ' (sorted by distance)' : ''}`);
+      console.log(`✅ Loaded ${processedDeals.length} deals for region ${region}${sortByDistance ? ' (sorted by distance)' : ''}${dealStageFilter !== 'all' ? ` (filtered by ${dealStageFilter})` : ''}`);
       
     } catch (err) {
       console.error('❌ Error fetching deals:', err);
@@ -253,7 +286,7 @@ const DealsDebugConsole = ({
     } finally {
       setLoading(false);
     }
-  }, [selectedRegion, dealType, sortByDistance, inspectionActivities, selectedSortInspection]);
+  }, [selectedRegion, dealType, sortByDistance, inspectionActivities, selectedSortInspection, dealStageFilter]);
 
   // Filter deals based on selected distance
   const filteredDeals = selectedDistanceFilter 
@@ -424,6 +457,17 @@ const DealsDebugConsole = ({
                   'Deals Console'
               }
             </h2>
+            {dealStageFilter !== 'all' && (
+              <span className={`px-1.5 py-0.5 text-xs rounded font-medium ${
+                dealStageFilter === 'lead_to_book' ? 'bg-green-100 text-green-700' :
+                dealStageFilter === 'lead_interested' ? 'bg-blue-100 text-blue-700' :
+                'bg-gray-100 text-gray-700'
+              }`}>
+                {dealStageFilter === 'lead_to_book' ? 'Lead to Book' :
+                 dealStageFilter === 'lead_interested' ? 'Lead Interested' :
+                 dealStageFilter}
+              </span>
+            )}
             {lastFetchTime && (
               <div className="flex items-center gap-2 flex-shrink-0">
                 <span className="text-xs text-gray-500" title={`Last updated: ${lastFetchTime.toLocaleString()}`}>
@@ -677,6 +721,17 @@ const DealsDebugConsole = ({
                       }`}>
                         {deal.priority}
                       </span>
+                    {deal.stageName && (
+                      <span className={`px-1.5 py-0.5 text-xs rounded font-medium ${
+                        deal.stageName.toLowerCase().includes('book') ? 'bg-green-100 text-green-700' :
+                        deal.stageName.toLowerCase().includes('interested') ? 'bg-blue-100 text-blue-700' :
+                        deal.stageName.toLowerCase().includes('lead') ? 'bg-yellow-100 text-yellow-700' :
+                        deal.stageName.toLowerCase().includes('close') || deal.stageName.toLowerCase().includes('won') ? 'bg-purple-100 text-purple-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {deal.stageName}
+                      </span>
+                    )}
                     {deal.person?.name && (
                       <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
                         <User className="w-3 h-3" />

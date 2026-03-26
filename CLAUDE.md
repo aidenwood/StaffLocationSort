@@ -81,9 +81,15 @@
 - Use headed mode for debugging: `npx playwright test --headed`
 
 ## COMMON COMMANDS
-- Dev server: `npm run dev`
+- Dev server: `npm run dev:netlify` (USE THIS, NOT `npm run dev`)
 - Playwright tests: `npx playwright test tests/[filename] --headed`
 - Install packages: `npm install [package-name]`
+
+## DEV SERVER RULES
+- **NEVER run the dev server unless explicitly asked**
+- Let the user run their own dev servers
+- Only run `npm run dev:netlify` if the user specifically asks you to
+- Assume the dev server is already running unless told otherwise
 
 ## FORBIDDEN BEHAVIORS
 - Removing Google Places because "it's not working"

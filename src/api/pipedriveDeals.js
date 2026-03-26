@@ -10,6 +10,8 @@ import { calculateDistance } from '../utils/regionValidation.js';
 // Deals cache configuration
 const CACHE_EXPIRY_MS = 4 * 60 * 60 * 1000; // 4 hours (deals addresses change infrequently)
 const CACHE_KEY_PREFIX = 'staffLocationSort.dealsCache';
+const STAGES_CACHE_KEY = 'staffLocationSort.stagesCache';
+const STAGES_CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours (stages rarely change)
 
 // Cache utilities
 const getCachedDeals = (region) => {
@@ -166,11 +168,111 @@ export const REGIONAL_DEAL_FILTERS = {
 // Legacy cache removed - using localStorage cache instead
 
 /**
+ * Fetch and cache all pipeline stages from Pipedrive
+ * @returns {Promise<Object>} Map of stage_id to stage data
+ */
+export const fetchAndCacheStages = async () => {
+  try {
+    // Check cache first
+    const cached = localStorage.getItem(STAGES_CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      const now = Date.now();
+      
+      // Return cached data if not expired
+      if (now - timestamp < STAGES_CACHE_EXPIRY) {
+        console.log(`📦 Using cached stages (${Object.keys(data).length} stages, ${Math.round((now - timestamp) / 1000 / 60)} minutes old)`);
+        return data;
+      }
+    }
+    
+    console.log('🔄 Fetching fresh pipeline stages from Pipedrive...');
+    const client = createPipedriveClient();
+    
+    // Fetch all stages
+    const response = await client.get('/stages', {
+      params: {
+        limit: 100 // Get all stages (most companies have <100 stages)
+      }
+    });
+    
+    if (!response.data.success) {
+      throw new Error(`Failed to fetch stages: ${response.data.error || 'Unknown error'}`);
+    }
+    
+    // Transform stages into a map for quick lookup
+    const stagesMap = {};
+    const stages = response.data.data || [];
+    
+    stages.forEach(stage => {
+      stagesMap[stage.id] = {
+        id: stage.id,
+        name: stage.name,
+        pipeline_id: stage.pipeline_id,
+        pipeline_name: stage.pipeline_name,
+        order_nr: stage.order_nr,
+        active_flag: stage.active_flag,
+        deal_probability: stage.deal_probability,
+        rotten_flag: stage.rotten_flag,
+        rotten_days: stage.rotten_days
+      };
+    });
+    
+    // Cache the stages
+    const cacheData = {
+      data: stagesMap,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(STAGES_CACHE_KEY, JSON.stringify(cacheData));
+    
+    console.log(`✅ Fetched and cached ${Object.keys(stagesMap).length} stages`);
+    
+    // Log stage names for debugging
+    const stageNames = stages.map(s => s.name).slice(0, 10);
+    console.log(`📋 Sample stages: ${stageNames.join(', ')}${stages.length > 10 ? '...' : ''}`);
+    
+    return stagesMap;
+  } catch (error) {
+    console.error('❌ Error fetching stages:', error);
+    
+    // Try to return cached data even if expired
+    const cached = localStorage.getItem(STAGES_CACHE_KEY);
+    if (cached) {
+      const { data } = JSON.parse(cached);
+      console.log('⚠️ Using expired cache due to error');
+      return data;
+    }
+    
+    // Return empty map if no cache available
+    return {};
+  }
+};
+
+/**
+ * Get stage name by ID (using cache)
+ * @param {number} stageId - Stage ID
+ * @returns {Promise<string>} Stage name
+ */
+export const getStageName = async (stageId) => {
+  const stages = await fetchAndCacheStages();
+  return stages[stageId]?.name || `Stage ${stageId}`;
+};
+
+/**
+ * Clear stages cache (useful for forcing refresh)
+ */
+export const clearStagesCache = () => {
+  localStorage.removeItem(STAGES_CACHE_KEY);
+  console.log('🗑️ Cleared stages cache');
+};
+
+/**
  * Transform Pipedrive deal data to standardized format
  * @param {Object} deal - Raw deal object from Pipedrive
+ * @param {Object} stagesMap - Optional pre-fetched stages map
  * @returns {Object} Transformed deal data
  */
-export const transformPipedriveDeal = (deal) => {
+export const transformPipedriveDeal = (deal, stagesMap = null) => {
 
   // Extract address with priority order:
   // 1. Custom 'Deal Address' field
@@ -225,12 +327,18 @@ export const transformPipedriveDeal = (deal) => {
   if (value > 800) priority = 'high';
   else if (value < 300) priority = 'low';
 
+  // Get stage name if stages map is provided
+  const stageData = stagesMap ? stagesMap[deal.stage_id] : null;
+  
   return {
     id: deal.id,
     title: deal.title || `Property Inspection - ${deal.person?.name || 'Unknown'}`,
     value: value,
     priority: priority,
     stage: deal.stage_id,
+    stageName: stageData?.name || null,
+    stageOrder: stageData?.order_nr || null,
+    pipelineName: stageData?.pipeline_name || null,
     person: {
       id: deal.person?.id,
       name: deal.person?.name || (parsedFromTitle?.name) || 'Unknown Customer',
@@ -268,6 +376,9 @@ export const fetchDealsWithFilter = async (filterId, options = {}) => {
 
   try {
     console.log(`📋 Fetching deals with filter ${filterId}${fetchAll ? ' (all pages)' : ''}...`);
+    
+    // Fetch stages first (will use cache if available)
+    const stagesMap = await fetchAndCacheStages();
     
     const client = createPipedriveClient();
     let allDeals = [];
@@ -310,8 +421,8 @@ export const fetchDealsWithFilter = async (filterId, options = {}) => {
       }
     }
 
-    // Transform deals to standardized format
-    const transformedDeals = allDeals.map(transformPipedriveDeal);
+    // Transform deals to standardized format with stage names
+    const transformedDeals = allDeals.map(deal => transformPipedriveDeal(deal, stagesMap));
     
     // Address analysis summary
     const addressStats = transformedDeals.reduce((stats, deal) => {
@@ -646,23 +757,30 @@ export const calculateDealDistances = (deal, inspectionActivities) => {
       regionCenter.lng
     );
     
-    distances.push({
-      activity: {
-        id: 'grid-region-center',
-        subject: `${regionCenter.name} Center`,
-        personAddress: regionCenter.name
-      },
-      distance: Math.round(distance * 100) / 100,
-      activityAddress: regionCenter.name,
-      coordSource: 'grid-region-center'
-    });
-    
-    // Return early with just the region center distance
-    return {
-      minDistance: Math.round(distance * 100) / 100,
-      closestActivity: distances[0].activity,
-      allDistances: distances
-    };
+    // Skip if distance is exactly 0.0 (indicates geocoding error)
+    if (distance >= 0.01) {
+      distances.push({
+        activity: {
+          id: 'grid-region-center',
+          subject: `${regionCenter.name} Center`,
+          personAddress: regionCenter.name
+        },
+        distance: Math.round(distance * 100) / 100,
+        activityAddress: regionCenter.name,
+        coordSource: 'grid-region-center'
+      });
+      
+      // Return early with just the region center distance
+      return {
+        minDistance: Math.round(distance * 100) / 100,
+        closestActivity: distances[0].activity,
+        allDistances: distances
+      };
+    } else {
+      // Distance is 0.0, likely geocoding error
+      console.warn(`⚠️ Skipping deal ${deal.id} - 0.0km from region center (likely geocoding error)`);
+      return { minDistance: null, closestActivity: null, allDistances: [] };
+    }
   }
 
   // Original logic for inspection activities
@@ -710,16 +828,21 @@ export const calculateDealDistances = (deal, inspectionActivities) => {
         lng
       );
       
-      distances.push({
-        activity,
-        distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
-        activityAddress: activity.personAddress?.formatted_address || 
-                        activity.personAddress?.address ||
-                        activity.personAddress ||
-                        activity.subject?.replace(/.*?(?=\d)/, '').trim() || 
-                        'Unknown address',
-        coordSource
-      });
+      // Skip if distance is exactly 0.0 (indicates geocoding error - same location)
+      if (distance >= 0.01) {
+        distances.push({
+          activity,
+          distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
+          activityAddress: activity.personAddress?.formatted_address || 
+                          activity.personAddress?.address ||
+                          activity.personAddress ||
+                          activity.subject?.replace(/.*?(?=\d)/, '').trim() || 
+                          'Unknown address',
+          coordSource
+        });
+      } else {
+        console.warn(`⚠️ Skipping deal ${deal.id} - 0.0km from inspection (likely geocoding error)`);
+      }
       
       // Reduced logging - only log first calculation for verification
       if (distances.length === 0) {

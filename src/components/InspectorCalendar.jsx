@@ -189,6 +189,58 @@ const InspectorCalendar = ({
     return `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
   };
 
+  // Check if there's any activity within a 2-hour window of the given timeslot
+  const hasActivityWithinTwoHours = (day, timeSlot, inspector) => {
+    const [slotHour, slotMin] = timeSlot.split(':').map(Number);
+    const slotMinutes = slotHour * 60 + slotMin;
+    
+    // Check from 2 hours before to 2 hours after (120 minutes each way)
+    const windowStart = Math.max(0, slotMinutes - 120);
+    const windowEnd = Math.min(24 * 60, slotMinutes + 120);
+    
+    // Get all activities for the day
+    const dateString = format(day, 'yyyy-MM-dd');
+    const dayActivities = effectiveActivities.filter(activity => {
+      if (activity.done) return false;
+      if (!activity.due_time || activity.due_time === '00:00:00') return false;
+      
+      // Get timezone-adjusted date
+      const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
+      if (!timeInfo || timeInfo.date !== dateString) return false;
+      
+      // Check inspector match
+      if (inspector && Number(activity.owner_id) !== Number(inspector.id)) return false;
+      
+      return true;
+    });
+    
+    // Check if any activity falls within the window
+    return dayActivities.some(activity => {
+      const timeInfo = getPipedriveDateTime(activity.due_time, activity.due_date);
+      if (!timeInfo) return false;
+      
+      const [actHour, actMin] = timeInfo.time.split(':').map(Number);
+      const actMinutes = actHour * 60 + actMin;
+      
+      // Activity starts within window
+      if (actMinutes >= windowStart && actMinutes <= windowEnd) {
+        return true;
+      }
+      
+      // Check if activity extends into the window (considering duration)
+      const duration = activity.duration || '01:00:00';
+      const [durHour, durMin] = duration.split(':').map(Number);
+      const actEndMinutes = actMinutes + (durHour * 60 + durMin);
+      
+      // Activity ends within window or spans across it
+      if (actEndMinutes >= windowStart && actMinutes <= windowEnd) {
+        return true;
+      }
+      
+      return false;
+    });
+  };
+
   // Get activity type information
   const getActivityTypeByKey = (activityType) => {
     // Default activity type mapping for Pipedrive activities
@@ -785,18 +837,18 @@ const InspectorCalendar = ({
                                     isGreyedOut 
                                       ? 'bg-gray-100 cursor-not-allowed opacity-50' 
                                       : isLunch
-                                        ? 'bg-orange-50 border-orange-200 cursor-pointer'
+                                        ? 'bg-orange-50 border-orange-200'
                                         : isAvailable 
-                                          ? 'hover:bg-green-50 hover:border-green-200 cursor-pointer' 
+                                          ? '' 
                                           : allActivities.length > 0
                                             ? 'cursor-pointer'
-                                            : 'cursor-not-allowed'
+                                            : ''
                                   } ${
                                     isToday ? 'border-l-2 border-l-blue-400' : ''
                                   } ${
                                     slotIndex % 2 === 0 ? 'border-r border-gray-200' : ''
                                   }`}
-                                  onClick={() => !isGreyedOut && !isAllInspectors && handleSlotClick(displayInspector, day, timeSlot)}
+                                  onClick={() => !isGreyedOut && !isAllInspectors && activity && handleSlotClick(displayInspector, day, timeSlot)}
                                   title={
                                     isNonWorkingDay
                                       ? `${rosterStatus.status.replace('_', ' ').toUpperCase()} - ${timeSlot}`
@@ -844,84 +896,73 @@ const InspectorCalendar = ({
                                     </div>
                                   )}
                                   
-                                  {!activity && !isGreyedOut && !isLunch && (
-                                    <>
-                                      {enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
-                                        <div className="absolute inset-0 flex items-center justify-center" style={{ height: '64px', zIndex: 1 }}>
-                                          {(() => {
-                                            const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
-                                            const counts = timeSlotDealCounts[dayKey];
-                                            const within1km = counts?.within1km || 0;
-                                            const within2_5km = counts?.within2_5km || 0;
-                                            const within5km = counts?.within5km || 0;
-                                            const within10km = counts?.within10km || 0;
-                                            const within15km = counts?.within15km || 0;
-                                            const within30km = counts?.within30km || 0;
-                                            const radiusText = counts?.radiusText || '';
-                                            
-                                            // Determine display count, color, and radius (purple gradient system)
-                                            let displayCount = 0;
-                                            let colorClass = "bg-purple-600 hover:bg-purple-700"; // Bright purple for 1km
-                                            let selectedRadius = null;
-                                            
-                                            if (within1km > 0) {
-                                              displayCount = within1km;
-                                              colorClass = "bg-purple-600 hover:bg-purple-700 text-white shadow-md"; // Bright purple for 1km
-                                              selectedRadius = 1;
-                                            } else if (within2_5km > 0) {
-                                              displayCount = within2_5km;
-                                              colorClass = "bg-purple-500 hover:bg-purple-600 text-white"; // Medium purple for 2.5km
-                                              selectedRadius = 2.5;
-                                            } else if (within5km > 0) {
-                                              displayCount = within5km;
-                                              colorClass = "bg-purple-400 hover:bg-purple-500 text-white"; // Light purple for 5km
-                                              selectedRadius = 5;
-                                            } else if (within10km > 0) {
-                                              displayCount = within10km;
-                                              colorClass = "bg-purple-300 hover:bg-purple-400 text-purple-900"; // Very light purple for 10km
-                                              selectedRadius = 10;
-                                            } else if (within15km > 0) {
-                                              displayCount = within15km;
-                                              colorClass = "bg-purple-200 hover:bg-purple-300 text-purple-800"; // Subtle purple for 15km
-                                              selectedRadius = 15;
-                                            } else if (within30km > 0) {
-                                              displayCount = within30km;
-                                              colorClass = "bg-purple-100 hover:bg-purple-200 text-purple-700"; // Barely purple for 30km
-                                              selectedRadius = 30;
-                                            }
-                                            
-                                            // Only show button if there are deals or if we haven't calculated yet
-                                            const hasDeals = displayCount > 0;
-                                            const hasData = counts !== undefined;
-                                            
-                                            if (!hasData || hasDeals) {
-                                              return (
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onShowDealsDebugConsole(day, timeSlot, selectedRadius);
-                                                  }}
-                                                  className={`${colorClass} text-xs px-2 py-1.5 rounded-md font-medium transition-colors flex items-center gap-1 shadow-sm min-h-[48px]`}
-                                                >
-                                                  <Target className="w-3 h-3" />
-                                                  {displayCount > 0 ? `${displayCount} Deal${displayCount === 1 ? '' : 's'}${radiusText ? ` (${radiusText})` : ''}` : 'Deals'}
-                                                </button>
-                                              );
-                                            }
-                                            
-                                            // Don't show button if no deals found
-                                            return null;
-                                          })()}
-                                        </div>
-                                      ) : (
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100">
-                                          <div className="bg-green-500 text-white text-xs px-2 py-0.5 rounded font-medium">
-                                            {timeSlot}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
+                                  {/* Deal recommendation button - show for standard timeslots only when no activity */}
+                                  {!activity && !isGreyedOut && !isLunch && enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
+                                    <div className="absolute inset-0 flex items-center justify-center" style={{ height: '64px', width: '100%' }}>
+                                      {(() => {
+                                        const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
+                                        const counts = timeSlotDealCounts[dayKey];
+                                        const within1km = counts?.within1km || 0;
+                                        const within2_5km = counts?.within2_5km || 0;
+                                        const within5km = counts?.within5km || 0;
+                                        const within10km = counts?.within10km || 0;
+                                        const within15km = counts?.within15km || 0;
+                                        const within30km = counts?.within30km || 0;
+                                        const radiusText = counts?.radiusText || '';
+                                        
+                                        // Determine display count, color, and radius (purple gradient system)
+                                        let displayCount = 0;
+                                        let colorClass = "bg-purple-600 hover:bg-purple-700"; // Bright purple for 1km
+                                        let selectedRadius = null;
+                                        
+                                        if (within1km > 0) {
+                                          displayCount = within1km;
+                                          colorClass = "bg-purple-600 hover:bg-purple-700"; // Bright purple for closest
+                                          selectedRadius = 1;
+                                        } else if (within2_5km > 0) {
+                                          displayCount = within2_5km;
+                                          colorClass = "bg-purple-500 hover:bg-purple-600"; // Medium-bright purple  
+                                          selectedRadius = 2.5;
+                                        } else if (within5km > 0) {
+                                          displayCount = within5km;
+                                          colorClass = "bg-purple-400 hover:bg-purple-500"; // Medium purple
+                                          selectedRadius = 5;
+                                        } else if (within10km > 0) {
+                                          displayCount = within10km;
+                                          colorClass = "bg-purple-300 hover:bg-purple-400"; // Light purple
+                                          selectedRadius = 10;
+                                        } else if (within15km > 0) {
+                                          displayCount = within15km;
+                                          colorClass = "bg-purple-200 hover:bg-purple-300 text-purple-800"; // Very light purple with dark text
+                                          selectedRadius = 15;
+                                        } else if (within30km > 0) {
+                                          displayCount = within30km;
+                                          colorClass = "bg-purple-100 hover:bg-purple-200 text-purple-700"; // Barely purple with dark text
+                                          selectedRadius = 30;
+                                        }
+                                        
+                                        // Only show button if there are deals to recommend
+                                        if (displayCount === 0) return null;
+                                        
+                                        return (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onShowDealsDebugConsole(day, timeSlot, selectedRadius);
+                                            }}
+                                            className={`${colorClass} text-white px-3 py-2 rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center gap-1`}
+                                            title={`${displayCount} deal${displayCount !== 1 ? 's' : ''} within ${selectedRadius}km - Click to see recommendations`}
+                                          >
+                                            <Target className="w-4 h-4" />
+                                            <span>{displayCount}</span>
+                                            <span className="text-xs">within {selectedRadius}km</span>
+                                          </button>
+                                        );
+                                      })()}
+                                    </div>
+                                  ) : null}
+                                  
+                                  {/* Removed hover time slot indicator to prevent interference */}
                                   {isLunch && !activity && (
                                     <div className="absolute inset-0 flex items-center justify-center">
                                       <div className="text-orange-600 text-xs font-medium">

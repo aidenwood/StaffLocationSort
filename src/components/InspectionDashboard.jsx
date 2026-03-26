@@ -16,7 +16,9 @@ import {
   ChevronRight,
   Grid3x3,
   Target,
-  RefreshCw
+  RefreshCw,
+  Menu,
+  X
 } from 'lucide-react';
 import InspectorCalendar from './InspectorCalendar';
 import InspectorView from './InspectorView';
@@ -74,6 +76,19 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
   const [mobileViewMode, setMobileViewMode] = useState('split'); // 'split', 'calendar', 'map'
   const [dealsToShowOnMap, setDealsToShowOnMap] = useState([]); // Deals to display as markers on map
   const [dealsConsoleContext, setDealsConsoleContext] = useState(null); // Context for deals console (time slot info)
+  const [showDeveloperMenu, setShowDeveloperMenu] = useState(false); // Developer tools dropdown menu
+  
+  // Deal stage filter state - saved to localStorage
+  const [dealStageFilter, setDealStageFilter] = useState(() => {
+    const saved = localStorage.getItem('staffLocationSort.dealStageFilter');
+    return saved || 'all'; // 'all', 'lead_to_book', 'lead_interested'
+  });
+
+  // Save deal stage filter preference when it changes
+  useEffect(() => {
+    localStorage.setItem('staffLocationSort.dealStageFilter', dealStageFilter);
+  }, [dealStageFilter]);
+
 
   // ⚠️ URGENT: Wrap setDealsToShowOnMap in useCallback to prevent infinite loops in DealsDebugConsole
   const handleDealsUpdate = useCallback((deals) => {
@@ -1221,6 +1236,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
         viewMode={mobileViewMode}
         onDealsUpdate={handleDealsUpdate}
         context={dealsConsoleContext} // Pass time slot context
+        dealStageFilter={dealStageFilter} // Pass deal stage filter for filtering
       />
 
       {/* App Unavailable Modal */}
@@ -1235,6 +1251,41 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
       <div className="bg-gray-50 border-t border-gray-200 px-2 sm:px-4 py-2 flex-shrink-0">
         {/* Mobile Layout */}
         <div className="block sm:hidden">
+          {/* Deal Filter Toggle - Mobile */}
+          <div className="flex justify-center mb-2">
+            <div className="flex bg-gray-100 rounded-md p-0.5">
+              <button
+                onClick={() => setDealStageFilter('all')}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  dealStageFilter === 'all'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setDealStageFilter('lead_to_book')}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  dealStageFilter === 'lead_to_book'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                To Book
+              </button>
+              <button
+                onClick={() => setDealStageFilter('lead_interested')}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  dealStageFilter === 'lead_interested'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Interested
+              </button>
+            </div>
+          </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1">
               <a
@@ -1320,37 +1371,19 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               </a>
             </div>
             <div className="w-px h-4 bg-gray-300"></div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Developer Tools:</span>
-              <button
-                onClick={() => setShowBookingForm(true)}
-                className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-                New Booking
-              </button>
-              <button
-                onClick={() => setShowDebugConsole(true)}
-                className="flex items-center gap-1 px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-colors"
-                title="API Debug Console"
-              >
-                <Bug className="w-3 h-3" />
-                Debug
-                {debugData.consoleLogs?.length > 0 && (
-                  <span className="bg-red-500 text-white text-xs rounded-full px-1">
-                    {debugData.consoleLogs.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setShowDealsDebugConsole(true)}
-                className="flex items-center gap-1 px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors"
-                title="Deals Debug Console"
-              >
-                <MapPin className="w-3 h-3" />
-                Deals
-              </button>
-            </div>
+            <button
+              onClick={() => setShowDeveloperMenu(!showDeveloperMenu)}
+              className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-colors"
+              title="Developer Tools Menu"
+            >
+              {showDeveloperMenu ? <X className="w-3 h-3" /> : <Menu className="w-3 h-3" />}
+              <span>Dev Tools</span>
+              {debugData.consoleLogs?.length > 0 && (
+                <span className="bg-red-500 text-white text-xs rounded-full px-1 ml-1">
+                  {debugData.consoleLogs.length}
+                </span>
+              )}
+            </button>
             <div className="w-px h-4 bg-gray-300"></div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">Refresh:</span>
@@ -1373,19 +1406,119 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
             </div>
           </div>
           
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>Activities: {totalActivities}</span>
-            <span>•</span>
-            <span>Inspectors: {pipedriveInspectors?.length || 0}</span>
-            {error && (
-              <>
-                <span>•</span>
-                <span className="text-red-600">API Error</span>
-              </>
-            )}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Activities: {totalActivities}</span>
+              <span>•</span>
+              <span>Inspectors: {pipedriveInspectors?.length || 0}</span>
+              {error && (
+                <>
+                  <span>•</span>
+                  <span className="text-red-600">API Error</span>
+                </>
+              )}
+            </div>
+            <div className="w-px h-4 bg-gray-300"></div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Deal Stage:</span>
+              <div className="flex bg-gray-100 rounded-md p-0.5">
+                <button
+                  onClick={() => setDealStageFilter('all')}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    dealStageFilter === 'all'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  All Deals
+                </button>
+                <button
+                  onClick={() => setDealStageFilter('lead_to_book')}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    dealStageFilter === 'lead_to_book'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Lead to Book
+                </button>
+                <button
+                  onClick={() => setDealStageFilter('lead_interested')}
+                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                    dealStageFilter === 'lead_interested'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Lead Interested
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Developer Tools Menu Modal */}
+      {showDeveloperMenu && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-4 m-4 max-w-sm w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Developer Tools</h3>
+              <button
+                onClick={() => setShowDeveloperMenu(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setShowBookingForm(true);
+                  setShowDeveloperMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm">New Booking Form</span>
+              </button>
+              <a
+                href="/#book"
+                onClick={() => setShowDeveloperMenu(false)}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
+              >
+                <Calendar className="w-4 h-4" />
+                <span className="text-sm">Book Page</span>
+              </a>
+              <button
+                onClick={() => {
+                  setShowDebugConsole(true);
+                  setShowDeveloperMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+              >
+                <Bug className="w-4 h-4" />
+                <span className="text-sm">API Debug Console</span>
+                {debugData.consoleLogs?.length > 0 && (
+                  <span className="bg-red-500 text-white text-xs rounded-full px-1.5 ml-auto">
+                    {debugData.consoleLogs.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => {
+                  setShowDealsDebugConsole(true);
+                  setShowDeveloperMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 transition-colors"
+              >
+                <MapPin className="w-4 h-4" />
+                <span className="text-sm">Deals Debug Console</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notifications */}
       {toasts.map((toast) => (
