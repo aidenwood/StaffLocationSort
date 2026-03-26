@@ -293,40 +293,55 @@ const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
                         )}
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <Calendar className="h-4 w-4 mr-2 text-blue-500" />
-                          <span>
-                            {activity.due_date 
-                              ? format(new Date(activity.due_date), 'MMM dd, yyyy')
-                              : 'No date'
-                            }
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center">
-                          <Clock className="h-4 w-4 mr-2 text-green-500" />
-                          <span>
-                            {selectedInspector === 'all' 
-                              ? activity.due_time || '09:00' // Show raw time for all inspectors
-                              : formatActivityTime(
-                                  activity.due_time || '09:00',
-                                  currentInspector?.region || currentInspector?.regionName || 'QLD',
-                                  forceDST
-                                )
-                            }
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center">
-                          <MapPin className="h-4 w-4 mr-2 text-red-500" />
-                          <span className="truncate">
-                            {activity.personAddress || activity.location?.value || (typeof activity.location === 'string' ? activity.location : null) || 'No address available'}
-                          </span>
-                          {activity.coordinates && (
-                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                              📍 {activity.coordinates.lat?.toFixed(4)}, {activity.coordinates.lng?.toFixed(4)}
+                      <div className="flex items-center justify-between text-sm text-gray-600">
+                        {/* Left side - Date and Time */}
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 mr-2 text-blue-500" />
+                            <span>
+                              {activity.due_date 
+                                ? format(new Date(activity.due_date), 'MMM dd, yyyy')
+                                : 'No date'
+                              }
                             </span>
+                          </div>
+                          
+                          <div className="flex items-center">
+                            <Clock className="h-4 w-4 mr-2 text-green-500" />
+                            <span>
+                              {selectedInspector === 'all' 
+                                ? activity.due_time || '09:00' // Show raw time for all inspectors
+                                : formatActivityTime(
+                                    activity.due_time || '09:00',
+                                    currentInspector?.region || currentInspector?.regionName || 'QLD',
+                                    forceDST
+                                  )
+                              }
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Right side - Address */}
+                        <div className="flex items-center">
+                          {(activity.personAddress || activity.location?.value || (typeof activity.location === 'string' && activity.location)) ? (
+                            <>
+                              <MapPin className="h-4 w-4 mr-2 text-green-500" />
+                              <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-sm font-medium">
+                                ✅ {activity.personAddress || activity.location?.value || activity.location}
+                              </span>
+                              {activity.coordinates && (
+                                <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                  📍 {activity.coordinates.lat?.toFixed(2)}, {activity.coordinates.lng?.toFixed(2)}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <MapPin className="h-4 w-4 mr-2 text-red-500" />
+                              <span className="text-red-600 font-medium">
+                                ❌ No address available
+                              </span>
+                            </>
                           )}
                         </div>
                       </div>
