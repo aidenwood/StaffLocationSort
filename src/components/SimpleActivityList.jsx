@@ -58,25 +58,18 @@ const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
 
     const enrich = async () => {
       setEnriching(true);
-      setEnrichmentProgress({ current: 0, total: filteredActivities.length });
+      setEnrichmentProgress({ current: 0, total: filteredActivities.length, cached: 0, processing: 0 });
       
       try {
-        // Simulate progress updates during enrichment
-        const batchSize = 10;
-        const enriched = [];
-        
-        for (let i = 0; i < filteredActivities.length; i += batchSize) {
-          const batch = filteredActivities.slice(i, Math.min(i + batchSize, filteredActivities.length));
-          // This is a simplified version - in reality enrichActivitiesWithAddresses handles batching
-          setEnrichmentProgress({ current: i, total: filteredActivities.length });
-          await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for UI update
-        }
-        
-        // Do the actual enrichment
-        const finalEnriched = await enrichActivitiesWithAddresses(filteredActivities);
+        // Do the actual enrichment with real progress updates
+        const finalEnriched = await enrichActivitiesWithAddresses(
+          filteredActivities,
+          (progress) => {
+            setEnrichmentProgress(progress);
+          }
+        );
         setEnrichedActivities(finalEnriched);
         onActivitiesEnriched?.(finalEnriched);
-        setEnrichmentProgress({ current: filteredActivities.length, total: filteredActivities.length });
       } catch (err) {
         console.error('Address enrichment failed:', err);
         setEnrichedActivities(filteredActivities);
@@ -126,17 +119,16 @@ const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
       
       {/* Data Discrepancy Debug Info */}
       {selectedInspector === 'all' && allActivities && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 mb-4 text-sm">
-          <div className="font-medium text-yellow-900 mb-1">Debug Info:</div>
-          <div className="text-yellow-800">
-            • Raw activities from API: {allActivities.length}<br/>
-            • After filtering/sorting: {filteredActivities.length}<br/>
-            • After enrichment: {activities.length}<br/>
-            {allActivities.length !== filteredActivities.length && (
-              <span className="text-red-600">
-                ⚠️ {allActivities.length - filteredActivities.length} activities were filtered out
-              </span>
-            )}
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4 text-sm">
+          <div className="font-medium text-blue-900 mb-1">Activity Breakdown:</div>
+          <div className="text-blue-800">
+            • Total in Pipedrive filter: Check header above ↑<br/>
+            • Upcoming activities (today+): {allActivities.length}<br/>
+            • After address enrichment: {activities.length}<br/>
+            • Missing addresses: {activities.filter(a => !(a.personAddress || a.location?.value || (typeof a.location === 'string' && a.location))).length}<br/>
+            <span className="text-gray-600 text-xs mt-1 block">
+              📅 Note: Only showing activities with due_date ≥ today. Past activities are hidden.
+            </span>
           </div>
         </div>
       )}
@@ -205,7 +197,11 @@ const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
           <div className="flex items-center justify-center mb-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             <span className="ml-3 text-gray-600">
-              {loading ? 'Loading activities...' : `Enriching addresses... (${enrichmentProgress.current}/${enrichmentProgress.total})`}
+              {loading ? 'Loading activities...' : 
+                enrichmentProgress.cached ? 
+                  `Enriching addresses... (${enrichmentProgress.current}/${enrichmentProgress.total} - ${enrichmentProgress.cached} from cache)` :
+                  `Enriching addresses... (${enrichmentProgress.current}/${enrichmentProgress.total})`
+              }
             </span>
           </div>
           {enriching && enrichmentProgress.total > 0 && (
@@ -216,9 +212,19 @@ const SimpleActivityList = ({ pipedriveData, onActivitiesEnriched }) => {
                   style={{ width: `${(enrichmentProgress.current / enrichmentProgress.total) * 100}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500 text-center mt-2">
-                Processing batch {Math.min(enrichmentProgress.current + 10, enrichmentProgress.total)} of {enrichmentProgress.total}
-              </p>
+              <div className="flex justify-between text-xs text-gray-500 mt-2">
+                <span>
+                  {enrichmentProgress.currentBatch && enrichmentProgress.totalBatches ? 
+                    `Batch ${enrichmentProgress.currentBatch}/${enrichmentProgress.totalBatches}` :
+                    'Preparing...'
+                  }
+                </span>
+                <span>
+                  {enrichmentProgress.cached > 0 && 
+                    `📦 ${enrichmentProgress.cached} cached, 🆕 ${enrichmentProgress.processing} new`
+                  }
+                </span>
+              </div>
             </div>
           )}
         </div>

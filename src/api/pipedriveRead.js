@@ -955,7 +955,7 @@ export const fetchPersonAddressForActivity = async (activity) => {
 };
 
 // GET: Enrich activities with person addresses and geocoded coordinates
-export const enrichActivitiesWithAddresses = async (activities) => {
+export const enrichActivitiesWithAddresses = async (activities, onProgress = null) => {
   try {
     console.log(`🏠 Enriching ${activities.length} activities with addresses...`);
     
@@ -975,7 +975,7 @@ export const enrichActivitiesWithAddresses = async (activities) => {
     console.log(`📦 Using cached data for ${alreadyCached.length} activities, enriching ${activitiesToEnrich.length} new activities`);
     
     const enrichedActivities = [];
-    const batchSize = 3; // Reduced batch size for better rate limiting
+    const batchSize = 20; // Increased batch size - Pipedrive allows bursts in 2-second windows
     let geocodedCount = 0;
     
     // Add cached activities first
@@ -997,6 +997,18 @@ export const enrichActivitiesWithAddresses = async (activities) => {
       const batch = activitiesToEnrich.slice(i, i + batchSize);
       
       console.log(`📍 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(activitiesToEnrich.length/batchSize)} (${batch.length} activities)`);
+      
+      // Report progress if callback provided
+      if (onProgress) {
+        onProgress({
+          current: alreadyCached.length + i,
+          total: activities.length,
+          currentBatch: Math.floor(i/batchSize) + 1,
+          totalBatches: Math.ceil(activitiesToEnrich.length/batchSize),
+          cached: alreadyCached.length,
+          processing: activitiesToEnrich.length
+        });
+      }
       
       const batchResults = await Promise.all(
         batch.map(async (activity) => {
@@ -1077,10 +1089,23 @@ export const enrichActivitiesWithAddresses = async (activities) => {
       
       enrichedActivities.push(...batchResults);
       
-      // Longer delay between batches to avoid rate limits
+      // Small delay between batches to respect burst limits (2-second window)
       if (i + batchSize < activitiesToEnrich.length) {
-        console.log('⏳ Waiting 1 second between batches...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log('⏳ Waiting 200ms between batches...');
+        await new Promise(resolve => setTimeout(resolve, 200)); // Much faster!
+      }
+      
+      // Final progress update for this batch
+      if (onProgress && i + batchSize >= activitiesToEnrich.length) {
+        onProgress({
+          current: activities.length,
+          total: activities.length,
+          currentBatch: Math.ceil(activitiesToEnrich.length/batchSize),
+          totalBatches: Math.ceil(activitiesToEnrich.length/batchSize),
+          cached: alreadyCached.length,
+          processing: activitiesToEnrich.length,
+          complete: true
+        });
       }
     }
     
