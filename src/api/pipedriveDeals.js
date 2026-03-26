@@ -953,22 +953,8 @@ export const calculateDealDistances = (deal, inspectionActivities) => {
         });
       }
     } else {
-      console.warn('⚠️ No valid coordinates found for activity:', {
-        activityId: activity.id,
-        subject: activity.subject,
-        hasCoordinates: !!activity.coordinates,
-        hasPersonAddress: !!activity.personAddress,
-        hasLatLng: !!(activity.lat && activity.lng),
-        hasLocationLatLng: !!(activity.location_lat && activity.location_lng),
-        debugCoords: {
-          coordinates: activity.coordinates,
-          personAddress: activity.personAddress,
-          lat: activity.lat,
-          lng: activity.lng,
-          location_lat: activity.location_lat,
-          location_lng: activity.location_lng
-        }
-      });
+      // Silently skip activities without coordinates - this is expected for some activities
+      // console.warn('⚠️ No valid coordinates found for activity:', activity.id);
     }
   }
 

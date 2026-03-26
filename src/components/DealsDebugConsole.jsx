@@ -369,6 +369,75 @@ const DealsDebugConsole = ({
     }
   }, []);
 
+  // Force manual address lookup for a deal
+  const handleForceLookup = async (deal) => {
+    console.log(`🔍 Force lookup for deal ${deal.id}: ${deal.title}`);
+    
+    // Extract address from deal title if it has a dash
+    if (deal.title && deal.title.includes('-')) {
+      const parts = deal.title.split('-');
+      if (parts.length >= 2) {
+        const potentialAddress = parts.slice(1).join('-').trim();
+        
+        // Basic validation
+        if (potentialAddress && 
+            potentialAddress.length > 10 && 
+            /\d/.test(potentialAddress) && // Has numbers
+            /[a-zA-Z]/.test(potentialAddress)) { // Has letters
+          
+          console.log(`✅ Extracted address from title: ${potentialAddress}`);
+          
+          // Geocode the address
+          try {
+            const { geocodeAddress } = await import('../services/geocoding.js');
+            const coordinates = await geocodeAddress(potentialAddress);
+            
+            if (coordinates) {
+              // Update the deal in state with new address and coordinates
+              setDeals(prevDeals => prevDeals.map(d => 
+                d.id === deal.id 
+                  ? { ...d, address: potentialAddress, coordinates, addressSource: 'force_lookup_title' }
+                  : d
+              ));
+              
+              // Also update in localStorage cache if exists
+              const cacheKey = `pipedrive_deals_${selectedRegion}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) {
+                try {
+                  const cachedData = JSON.parse(cached);
+                  if (cachedData.data) {
+                    cachedData.data = cachedData.data.map(d => 
+                      d.id === deal.id 
+                        ? { ...d, address: potentialAddress, coordinates, addressSource: 'force_lookup_title' }
+                        : d
+                    );
+                    localStorage.setItem(cacheKey, JSON.stringify(cachedData));
+                  }
+                } catch (e) {
+                  console.error('Error updating cache:', e);
+                }
+              }
+              
+              alert(`Address found and geocoded: ${potentialAddress}`);
+            } else {
+              alert(`Address found but could not geocode: ${potentialAddress}`);
+            }
+          } catch (geocodeError) {
+            console.error('Geocoding error:', geocodeError);
+            alert(`Address found but geocoding failed: ${potentialAddress}`);
+          }
+        } else {
+          alert('No valid address found in deal title after dash');
+        }
+      } else {
+        alert('Deal title does not contain a dash separator');
+      }
+    } else {
+      alert('Deal title is missing or does not contain a dash');
+    }
+  };
+
   // Fetch deals when component opens or settings change
   useEffect(() => {
     if (isOpen) {
@@ -767,11 +836,20 @@ const DealsDebugConsole = ({
                       
 
                       {/* Address Row */}
-                      {deal.address && (
+                      {deal.address ? (
                           <div className="text-xs text-gray-500 flex items-center gap-1">
                             <MapPin className="w-3 h-3" />
                             {deal.address}
                           </div>
+                      ) : (
+                          <button
+                            onClick={() => handleForceLookup(deal)}
+                            className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded hover:bg-orange-200 flex items-center gap-1"
+                            title="Manually check for address in deal title and custom fields"
+                          >
+                            <MapPin className="w-3 h-3" />
+                            Force Address Lookup
+                          </button>
                       )}
                     </div>
 

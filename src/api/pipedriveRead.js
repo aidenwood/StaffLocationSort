@@ -570,6 +570,10 @@ export const fetchPersonAddressForActivity = async (activity) => {
   try {
     const client = createPipedriveClient();
     
+    // We'll collect the best address from multiple sources
+    let bestAddress = null;
+    let addressSource = null;
+    
     // Hash key for Person address in Pipedrive
     const PERSON_ADDRESS_HASH = '6fa72064159f058167dcdab4ae78eb140eae6f05';
     
@@ -611,7 +615,8 @@ export const fetchPersonAddressForActivity = async (activity) => {
         if (person[PERSON_ADDRESS_HASH] && typeof person[PERSON_ADDRESS_HASH] === 'string') {
           const address = String(person[PERSON_ADDRESS_HASH]).trim();
           if (address && !address.includes('Lead Gen') && !address.includes('Advertising') && !address.includes('Region:')) {
-            return address;
+            bestAddress = address;
+            addressSource = 'person_hash';
           }
         }
         
@@ -683,20 +688,22 @@ export const fetchPersonAddressForActivity = async (activity) => {
         
         // If address is an object, get the value
         if (typeof address === 'object' && address) {
-          return address.value || address.formatted_address || address;
+          bestAddress = address.value || address.formatted_address || address;
+          addressSource = 'person_object';
+        } else if (address) {
+          bestAddress = address;
+          addressSource = 'person_field';
         }
-        
-        return address || null;
       }
     }
     
     // If no person address found, check deal for address
-    const dealId = activity.deal_id || (activity.deal && activity.deal.id);
-    if (dealId) {
+    const dealIdForAddress = activity.deal_id || (activity.deal && activity.deal.id);
+    if (!bestAddress && dealIdForAddress) {
       try {
-        console.log(`📋 No person address found for activity ${activity.id}, checking deal ${dealId}`);
+        console.log(`📋 No person address found for activity ${activity.id}, checking deal ${dealIdForAddress}`);
         const client = createPipedriveClient();
-        const dealResponse = await client.get(`/deals/${dealId}`);
+        const dealResponse = await client.get(`/deals/${dealIdForAddress}`);
         
         if (dealResponse.data.success && dealResponse.data.data) {
           const deal = dealResponse.data.data;
@@ -706,7 +713,7 @@ export const fetchPersonAddressForActivity = async (activity) => {
           const PERSON_ADDRESS_HASH = '6fa72064159f058167dcdab4ae78eb140eae6f05';
           
           // Debug: Log deal fields to see what's available
-          console.log(`🔍 Deal ${dealId} fields:`, Object.keys(deal).filter(key => key.includes('address') || key.length === 40));
+          console.log(`🔍 Deal ${dealIdForAddress} fields:`, Object.keys(deal).filter(key => key.includes('address') || key.length === 40));
           
           // FIRST: Check if deal has person data with address
           if (deal.person_id && deal.person_id.value) {
@@ -718,7 +725,8 @@ export const fetchPersonAddressForActivity = async (activity) => {
               const address = String(dealPerson[PERSON_ADDRESS_HASH]).trim();
               if (address && !address.includes('Lead Gen') && !address.includes('Advertising')) {
                 console.log(`✅ Found address in deal's person hash field: ${address.substring(0, 50)}...`);
-                return address;
+                bestAddress = address;
+                addressSource = 'deal_person_hash';
               }
             }
             
@@ -734,7 +742,9 @@ export const fetchPersonAddressForActivity = async (activity) => {
                     !value.includes('Lead Gen') &&
                     !value.includes('Advertising')) {
                   console.log(`✅ Found address in deal's person field ${key}: ${value.substring(0, 50)}...`);
-                  return value;
+                  bestAddress = value;
+                  addressSource = 'deal_person_field';
+                  break;
                 }
               }
             }
@@ -745,10 +755,11 @@ export const fetchPersonAddressForActivity = async (activity) => {
             const address = String(deal[DEAL_ADDRESS_HASH]).trim();
             if (address && !address.includes('Lead Gen') && !address.includes('Advertising')) {
               console.log(`✅ Found address in deal hash field ${DEAL_ADDRESS_HASH}: ${address.substring(0, 50)}...`);
-              return address;
+              bestAddress = address;
+                addressSource = 'deal_hash';
             }
           } else {
-            console.log(`⚠️ Deal hash field ${DEAL_ADDRESS_HASH} not found or empty in deal ${dealId}`);
+            console.log(`⚠️ Deal hash field ${DEAL_ADDRESS_HASH} not found or empty in deal ${dealIdForAddress}`);
           }
           
           // Check deal address fields
@@ -765,7 +776,9 @@ export const fetchPersonAddressForActivity = async (activity) => {
               const address = deal[fieldName].trim();
               if (address.length > 10 && !address.includes('Lead Gen') && !address.includes('Advertising')) {
                 console.log(`✅ Found address in deal.${fieldName}: ${address.substring(0, 50)}...`);
-                return address;
+                bestAddress = address;
+                addressSource = 'deal_field';
+                break;
               }
             }
           }
@@ -787,18 +800,20 @@ export const fetchPersonAddressForActivity = async (activity) => {
                   !value.includes('Email:') && !value.includes('Phone:') &&
                   !value.includes('@') && !value.startsWith('http')) {
                 console.log(`✅ Found address in deal custom field ${key}: ${value.substring(0, 50)}...`);
-                return value;
+                bestAddress = value;
+                addressSource = 'deal_custom_field';
+                break;
               }
             }
           }
         }
       } catch (dealError) {
-        console.warn(`Could not fetch deal ${dealId} for activity ${activity.id}:`, dealError.message);
+        console.warn(`Could not fetch deal ${dealIdForAddress} for activity ${activity.id}:`, dealError.message);
       }
     }
     
     // If no person or deal address found, check organization
-    if (activity.org_id) {
+    if (!bestAddress && activity.org_id) {
       try {
         console.log(`📋 No person/deal address found for activity ${activity.id}, checking org ${activity.org_id}`);
         const client = createPipedriveClient();
@@ -822,7 +837,9 @@ export const fetchPersonAddressForActivity = async (activity) => {
               const address = org[fieldName].trim();
               if (address.length > 10 && !address.includes('Lead Gen') && !address.includes('Advertising')) {
                 console.log(`✅ Found address in org.${fieldName}: ${address.substring(0, 50)}...`);
-                return address;
+                bestAddress = address;
+                addressSource = 'org_field';
+                break;
               }
             }
           }
@@ -844,7 +861,9 @@ export const fetchPersonAddressForActivity = async (activity) => {
                   !value.includes('Lead Gen') && !value.includes('Advertising') &&
                   !value.includes('Email:') && !value.includes('Phone:')) {
                 console.log(`✅ Found address in org custom field ${key}: ${value.substring(0, 50)}...`);
-                return value;
+                bestAddress = value;
+                addressSource = 'org_custom_field';
+                break;
               }
             }
           }
@@ -854,9 +873,10 @@ export const fetchPersonAddressForActivity = async (activity) => {
       }
     }
     
-    // FINAL FALLBACK: Extract address from deal title for property inspections
+    // ALWAYS check deal title as it's often the most reliable source
     // Format: "Name - Address" or "Name- Address" or "Name -Address"
-    if (dealId || (activity.deal && activity.deal.title)) {
+    // This runs even if we found an address above, as deal title is often more accurate
+    if ((dealIdForAddress || (activity.deal && activity.deal.title))) {
       try {
         // Try to get deal title from various sources
         let dealTitle = null;
@@ -864,10 +884,11 @@ export const fetchPersonAddressForActivity = async (activity) => {
         // First check if deal title is already in activity data
         if (activity.deal && activity.deal.title) {
           dealTitle = activity.deal.title;
+          console.log(`🔍 Checking deal title for address extraction: "${dealTitle}"`);
         }
         
         // Otherwise check if we already have the deal data from earlier fetch
-        const cachedDealKey = `pipedrive_deal_${dealId}`;
+        const cachedDealKey = `pipedrive_deal_${dealIdForAddress}`;
         const cachedDeal = localStorage.getItem(cachedDealKey);
         if (cachedDeal) {
           try {
@@ -879,11 +900,12 @@ export const fetchPersonAddressForActivity = async (activity) => {
         }
         
         // If not cached, fetch the deal again (or use the one we already fetched)
-        if (!dealTitle) {
+        if (!dealTitle && dealIdForAddress) {
           const client = createPipedriveClient();
-          const dealResponse = await client.get(`/deals/${dealId}`);
+          const dealResponse = await client.get(`/deals/${dealIdForAddress}`);
           if (dealResponse.data.success && dealResponse.data.data) {
             dealTitle = dealResponse.data.data.title;
+            console.log(`🔍 Fetched deal title for address extraction: "${dealTitle}"`);
           }
         }
         
@@ -902,18 +924,30 @@ export const fetchPersonAddressForActivity = async (activity) => {
                 !potentialAddress.includes('@') && // Not email
                 !potentialAddress.startsWith('http')) { // Not URL
               
-              console.log(`✅ FALLBACK: Extracted address from deal title: ${potentialAddress}`);
+              console.log(`✅ DEAL TITLE: Extracted address from deal title: ${potentialAddress}`);
               console.log(`   Original title: ${dealTitle}`);
-              return potentialAddress;
+              // Deal title addresses are usually most accurate, so prefer them
+              bestAddress = potentialAddress;
+              addressSource = 'deal_title'
+            } else {
+              console.log(`❌ Failed validation for potential address: "${potentialAddress}"`);
+              console.log(`   Length: ${potentialAddress?.length}, Has numbers: ${/\d/.test(potentialAddress)}, Has letters: ${/[a-zA-Z]/.test(potentialAddress)}`);
             }
+          } else {
+            console.log(`❌ Deal title has no dash or not enough parts: "${dealTitle}"`);
           }
+        } else if (!dealTitle) {
+          console.log(`❌ No deal title found for activity ${activity.id}`);
         }
       } catch (titleError) {
         console.warn(`Could not extract address from deal title:`, titleError.message);
       }
     }
     
-    return null;
+    if (bestAddress) {
+      console.log(`🏠 Final address for activity ${activity.id}: ${bestAddress} (source: ${addressSource})`);
+    }
+    return bestAddress
   } catch (error) {
     console.warn(`Could not fetch address for activity ${activity.id}:`, error.message);
     return null;

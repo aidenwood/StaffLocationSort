@@ -1260,30 +1260,30 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
             <div className="flex bg-gray-100 rounded-md p-0.5">
               <button
                 onClick={() => setDealStageFilter('all')}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-xs rounded transition-colors font-medium ${
                   dealStageFilter === 'all'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-gray-700 text-white'
+                    : 'text-gray-600 hover:bg-gray-200'
                 }`}
               >
                 All
               </button>
               <button
                 onClick={() => setDealStageFilter('lead_to_book')}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-xs rounded transition-colors font-medium ${
                   dealStageFilter === 'lead_to_book'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-green-600 text-white'
+                    : 'text-gray-600 hover:bg-green-100 hover:text-green-700'
                 }`}
               >
                 To Book
               </button>
               <button
                 onClick={() => setDealStageFilter('lead_interested')}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-xs rounded transition-colors font-medium ${
                   dealStageFilter === 'lead_interested'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-blue-100 hover:text-blue-700'
                 }`}
               >
                 Interested
@@ -1415,30 +1415,30 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
               <div className="flex bg-gray-100 rounded-md p-0.5">
                 <button
                   onClick={() => setDealStageFilter('all')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                  className={`px-2 py-1 text-xs rounded transition-colors font-medium ${
                     dealStageFilter === 'all'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-600 hover:bg-gray-200'
                   }`}
                 >
                   All Deals
                 </button>
                 <button
                   onClick={() => setDealStageFilter('lead_to_book')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                  className={`px-2 py-1 text-xs rounded transition-colors font-medium ${
                     dealStageFilter === 'lead_to_book'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-600 hover:bg-green-100 hover:text-green-700'
                   }`}
                 >
                   Lead to Book
                 </button>
                 <button
                   onClick={() => setDealStageFilter('lead_interested')}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
+                  className={`px-2 py-1 text-xs rounded transition-colors font-medium ${
                     dealStageFilter === 'lead_interested'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:bg-blue-100 hover:text-blue-700'
                   }`}
                 >
                   Lead Interested
