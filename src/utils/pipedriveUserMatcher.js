@@ -30,10 +30,8 @@ const ROSTER_DATA = [
 // Match roster with Pipedrive users
 export const matchUsersWithPipedrive = async () => {
   try {
-    console.log('🔍 Fetching Pipedrive users...');
     const pipedriveUsers = await fetchPipedriveUsers();
     
-    console.log(`📋 Found ${pipedriveUsers.length} users in Pipedrive`);
     
     const matches = [];
     const unmatched = [];
@@ -77,19 +75,13 @@ export const matchUsersWithPipedrive = async () => {
     });
     
     // Display results
-    console.log('\n✅ MATCHED USERS:');
     matches.forEach(match => {
-      console.log(`${match.rosterData.firstName} ${match.rosterData.lastName} -> ID: ${match.pipedriveUser.id} (${match.confidence} confidence)`);
-      console.log(`   Job: ${match.rosterData.jobTitle} | Region: ${match.rosterData.region} | Pipedrive: ${match.pipedriveUser.name}`);
     });
     
-    console.log('\n❌ UNMATCHED USERS:');
     unmatched.forEach(person => {
-      console.log(`${person.firstName} ${person.lastName} - ${person.jobTitle}`);
     });
     
     // Generate configuration code for roof inspectors
-    console.log('\n🔧 CONFIGURATION FOR ROOF INSPECTORS:');
     const roofInspectors = matches.filter(match => 
       match.rosterData.jobTitle.toLowerCase().includes('roof inspector')
     );
@@ -98,7 +90,6 @@ export const matchUsersWithPipedrive = async () => {
       const person = match.rosterData;
       const user = match.pipedriveUser;
       
-      console.log(`{
   id: ${user.id}, // ${person.firstName} ${person.lastName}'s Pipedrive user ID
   name: "${person.firstName} ${person.lastName}",
   firstName: "${person.firstName}",
@@ -116,10 +107,6 @@ export const matchUsersWithPipedrive = async () => {
   } catch (error) {
     console.error('❌ Error matching users:', error.message);
     
-    console.log('\n💡 TROUBLESHOOTING:');
-    console.log('1. Make sure your VITE_PIPEDRIVE_API_KEY is set in .env');
-    console.log('2. Check that your API key has permission to read users');
-    console.log('3. Ensure you can connect to Pipedrive API');
     
     return null;
   }
@@ -142,13 +129,9 @@ export const findUserByName = async (firstName, lastName) => {
              nameLower === fullNameLower;
     });
     
-    console.log(`\n🔍 Searching for: ${fullName}`);
     if (matches.length === 0) {
-      console.log('❌ No matches found');
     } else {
-      console.log(`✅ Found ${matches.length} possible matches:`);
       matches.forEach(match => {
-        console.log(`  ID: ${match.id} | Name: ${match.name} | Email: ${match.email || 'N/A'}`);
       });
     }
     
@@ -164,7 +147,6 @@ export const validateCurrentConfig = async () => {
   try {
     const pipedriveUsers = await fetchPipedriveUsers();
     
-    console.log('🔍 Validating current Pipedrive user configuration...');
     
     const validation = {
       testUser: null,
@@ -200,24 +182,17 @@ export const validateCurrentConfig = async () => {
     });
     
     // Display results
-    console.log('\n📊 VALIDATION RESULTS:');
     
     if (validation.testUser) {
-      console.log(`Test User: ${validation.testUser.exists ? '✅' : '❌'} ${testUser.name} (ID: ${testUser.id})`);
     } else {
-      console.log('Test User: ⚠️ Not configured');
     }
     
-    console.log(`\nInspectors: ${validation.inspectors.length} configured`);
     validation.inspectors.forEach(inspector => {
       const status = inspector.exists ? '✅' : '❌';
-      console.log(`  ${status} ${inspector.configured.name} (ID: ${inspector.configured.id})`);
     });
     
     if (validation.invalid.length > 0) {
-      console.log('\n⚠️ INVALID IDs (these users don\'t exist in Pipedrive):');
       validation.invalid.forEach(inspector => {
-        console.log(`  ${inspector.name} - ID: ${inspector.id}`);
       });
     }
     
@@ -231,15 +206,12 @@ export const validateCurrentConfig = async () => {
 
 // Helper to check if Aiden Wood exists in Pipedrive
 export const findAidenWood = async () => {
-  console.log('🔍 Looking for Aiden Wood in Pipedrive...');
   
   try {
     const matches = await findUserByName('Aiden', 'Wood');
     
     if (matches.length > 0) {
-      console.log('\n✅ Found Aiden Wood! Use this ID for the test user:');
       matches.forEach(match => {
-        console.log(`
 // Update TEST_USER in pipedriveUsers.js:
 TEST_USER: {
   id: ${match.id}, // Aiden Wood's Pipedrive user ID
@@ -250,11 +222,6 @@ TEST_USER: {
 }`);
       });
     } else {
-      console.log('❌ Aiden Wood not found in Pipedrive users');
-      console.log('💡 You may need to:');
-      console.log('1. Add Aiden Wood as a user in Pipedrive');
-      console.log('2. Use a different test user');
-      console.log('3. Check if the name is spelled differently');
     }
     
     return matches;

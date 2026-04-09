@@ -38,31 +38,31 @@ export const regionCenters = {
     lat: -27.5598, 
     lng: 151.9507, 
     name: 'R04 - GT (Gatton/Toowoomba)',
-    locations: ['Gatton', 'Toowoomba', 'Oakey', 'Stanthorpe', 'Tara', 'Warwick', 'Texas']
+    locations: ['Gatton', 'Toowoomba', 'Oakey']
   },
   'R05': { 
-    lat: -23.8000, 
-    lng: 150.5000, 
-    name: 'R05 - WST (Wide Service Territory)',
-    locations: ['Emerald', 'Rockhampton', 'Roma']
+    lat: -28.5000, 
+    lng: 151.5000, 
+    name: 'R05 - WST (Warwick/Stanthorpe/Texas)',
+    locations: ['Stanthorpe', 'Tara', 'Warwick', 'Texas']
   },
   'R06': { 
-    lat: -29.6891, 
-    lng: 152.9279, 
-    name: 'R06 - RER (Regional East)',
-    locations: ['Grafton', 'Port Macquarie', 'Coffs Harbour']
+    lat: -23.8000, 
+    lng: 148.5000, 
+    name: 'R06 - RER (Emerald/Rockhampton/Roma)',
+    locations: ['Emerald', 'Rockhampton', 'Roma']
   },
   'R07': { 
-    lat: -30.5000, 
-    lng: 151.6500, 
+    lat: -29.6891, 
+    lng: 152.9279, 
     name: 'R07 - GPM (Grafton/Port Macquarie)',
-    locations: ['Tamworth', 'Armidale', 'Glen Innes']
+    locations: ['Grafton', 'Port Macquarie', 'Coffs Harbour']
   },
   'R08': { 
     lat: -30.5000, 
     lng: 151.6500, 
     name: 'R08 - GA (Greater Armidale)',
-    locations: ['Grafton', 'Port Macquarie', 'Coffs Harbour']
+    locations: ['Tamworth', 'Armidale', 'Glen Innes']
   },
   'R09': { 
     lat: -32.9267, 
@@ -72,9 +72,9 @@ export const regionCenters = {
   },
   'R10': { 
     lat: -33.7488, 
-    lng: 151.2093, 
-    name: 'R10 - SP (Sydney/Penrith)',
-    locations: ['Sydney', 'Penrith', 'Parramatta', 'Liverpool', 'Campbelltown', 'Blacktown', 'Camden', 'Richmond', 'Windsor']
+    lng: 150.3120, 
+    name: 'R10 - SYD (Sydney/Penrith)',
+    locations: ['Penrith', 'Sydney', 'Parramatta', 'Liverpool', 'Campbelltown', 'Blacktown', 'Camden', 'Richmond', 'Windsor']
   }
 };
 

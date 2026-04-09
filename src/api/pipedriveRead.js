@@ -61,7 +61,6 @@ const checkInspectorNameMatch = (subject, inspectorName, inspectorAliases = []) 
   
   // Check main name
   if (checkNameMatch(inspectorName)) {
-    console.log(`✅ Name match found: "${nameInSubject}" matches main name "${normalizedInspectorName}"`);
     return true;
   }
   

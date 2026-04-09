@@ -495,19 +495,31 @@ const DealsDebugConsole = ({
   // Different positioning based on view mode
   const getModalClasses = () => {
     if (viewMode === 'split') {
-      // In split view, position over the left half (calendar section)
-      return "fixed left-0 top-0 bottom-0 w-1/2 bg-black bg-opacity-50 flex items-center justify-center z-50 lg:left-4 lg:top-4 lg:bottom-4 lg:w-[calc(50%-2rem)]";
+      // Desktop split view: position over the left half (calendar section)
+      // Mobile split view: use full screen but optimized for smaller height
+      return "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 lg:left-0 lg:top-0 lg:bottom-0 lg:w-1/2 lg:left-4 lg:top-4 lg:bottom-4 lg:w-[calc(50%-2rem)]";
+    } else if (viewMode === 'calendar') {
+      // Calendar only view - full screen modal
+      return "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+    } else if (viewMode === 'map') {
+      // Map only view - full screen modal
+      return "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
     } else {
-      // Full screen modal for calendar or map only views
+      // Default full screen modal
       return "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
     }
   };
 
   const getContentClasses = () => {
     if (viewMode === 'split') {
-      return "bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-2xl max-h-[90vh] m-4 flex flex-col";
+      // Split view: smaller modal for mobile, medium for desktop
+      return "bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-lg lg:max-w-2xl max-h-[85vh] lg:max-h-[90vh] m-2 lg:m-4 flex flex-col";
+    } else if (viewMode === 'calendar' || viewMode === 'map') {
+      // Single view: larger modal
+      return "bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-2xl lg:max-w-4xl max-h-[90vh] m-4 flex flex-col";
     } else {
-      return "bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-6xl max-h-[90vh] m-4 flex flex-col";
+      // Default: large modal
+      return "bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-4xl lg:max-w-6xl max-h-[90vh] m-4 flex flex-col";
     }
   };
 
@@ -911,4 +923,14 @@ const DealsDebugConsole = ({
   );
 };
 
-export default DealsDebugConsole;
+export default React.memo(DealsDebugConsole, (prevProps, nextProps) => {
+  // Only re-render if essential props change
+  return (
+    prevProps.isOpen === nextProps.isOpen &&
+    prevProps.selectedInspector === nextProps.selectedInspector &&
+    prevProps.selectedDate === nextProps.selectedDate &&
+    prevProps.inspectionActivities === nextProps.inspectionActivities &&
+    prevProps.dealStageFilter === nextProps.dealStageFilter &&
+    prevProps.context === nextProps.context
+  );
+});

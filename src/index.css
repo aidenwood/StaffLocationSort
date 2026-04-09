@@ -77,4 +77,47 @@
   .input {
     @apply border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
   }
+
+  /* Skeleton Loading Animations */
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  
+  .animate-shimmer {
+    animation: shimmer 2s linear infinite;
+  }
+  
+  .bg-size-200 {
+    background-size: 200% 100%;
+  }
+
+  /* Smooth transition from skeleton to content */
+  .calendar-cell {
+    transition: opacity 0.3s ease-in-out;
+  }
+
+  .skeleton-loading {
+    opacity: 0.7;
+  }
+
+  .content-loaded {
+    opacity: 1;
+  }
+
+  /* Fade in animation for deal buttons */
+  @keyframes fadeIn {
+    from { 
+      opacity: 0; 
+      transform: scale(0.95); 
+    }
+    to { 
+      opacity: 1; 
+      transform: scale(1); 
+    }
+  }
+
+  .deal-button {
+    animation: fadeIn 0.3s ease-out;
+  }
 }

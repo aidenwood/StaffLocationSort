@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addDays, subDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock, MapPin, User, Phone, Home, DollarSign, X, Target, ExternalLink } from 'lucide-react';
+import DealButtonSkeleton from './DealButtonSkeleton';
+import CalendarCellSkeleton from './CalendarCellSkeleton';
 // Mock data removed - activity type logic moved inline
 import { convertToAustralianTime } from '../utils/timezone';
 
@@ -18,6 +20,7 @@ const InspectorCalendar = ({
   inspectors = null,
   isLiveData = false,
   loading = false,
+  dealCountsLoading = false,
   isTimeout = false,
   error = null,
   hideNavigation = false,
@@ -769,7 +772,7 @@ const InspectorCalendar = ({
         <div className={`${fullScreen ? 'flex-1 min-h-0' : ''} overflow-auto`}>
           <div className="min-w-full">
             {/* Header Row - Sticky */}
-            <div className={`sticky top-0 z-20 grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
+            <div className={`sticky top-0 z-30 grid gap-px bg-gray-200 rounded-t-lg overflow-hidden ${
               viewMode === 1 ? 'grid-cols-1' : 
               viewMode === 3 ? 'grid-cols-3' : 
               viewMode === 5 ? 'grid-cols-5' :
@@ -836,7 +839,7 @@ const InspectorCalendar = ({
                           {/* Current Time Indicator */}
                           {isToday && timePosition !== null && (
                             <div 
-                              className="absolute left-0 right-0 h-0.5 bg-red-500 z-20 shadow-lg"
+                              className="absolute left-0 right-0 h-0.5 bg-red-500 z-25 shadow-lg"
                               style={{ top: `${timePosition}%` }}
                             >
                               <div className="absolute -left-1 -top-1 w-2 h-2 bg-red-500 rounded-full"></div>
@@ -859,6 +862,13 @@ const InspectorCalendar = ({
                               const isNonWorkingDay = rosterStatus && rosterStatus.status !== 'working';
                               const isGreyedOut = isNonWorkingDay || isPast;
                               const isAvailable = allActivities.length === 0 && !isLunchBreak(timeSlot) && !isNonWorkingDay && !isPast;
+                              
+                              // Check if this is work hours (7am-6pm) for skeleton loading
+                              const slotHour = parseInt(timeSlot.split(':')[0]);
+                              const isWorkHours = slotHour >= 7 && slotHour <= 18;
+                              
+                              // Check if this is outside work hours for fade effect
+                              const isOutsideWorkHours = slotHour < 7 || slotHour > 18;
 
                               return (
                                 <div
@@ -868,6 +878,8 @@ const InspectorCalendar = ({
                                       ? 'bg-gray-100 cursor-not-allowed opacity-50' 
                                       : isLunch
                                         ? 'bg-orange-50 border-orange-200'
+                                        : isOutsideWorkHours || isPast
+                                          ? 'opacity-40 bg-gray-50'
                                         : isAvailable 
                                           ? '' 
                                           : allActivities.length > 0
@@ -908,7 +920,7 @@ const InspectorCalendar = ({
                                   
                                   {/* Show count badge for multiple inspections */}
                                   {allActivities.length > 1 && (
-                                    <div className="absolute top-0 right-0 bg-orange-500 text-white text-xs rounded-full min-w-5 h-5 flex items-center justify-center font-bold shadow-md z-50">
+                                    <div className="absolute top-0 right-0 bg-orange-500 text-white text-xs rounded-full min-w-5 h-5 flex items-center justify-center font-bold shadow-md z-20">
                                       {allActivities.length}
                                     </div>
                                   )}
@@ -926,47 +938,61 @@ const InspectorCalendar = ({
                                     </div>
                                   )}
                                   
-                                  {/* Deal recommendation button - show for standard timeslots only when no activity */}
-                                  {!activity && !isGreyedOut && !isLunch && enableOpportunities && ['09:00', '11:00', '13:00', '15:00'].includes(timeSlot) && onShowDealsDebugConsole ? (
-                                    <div className="absolute inset-0 flex items-center justify-center" style={{ height: '64px', width: '100%' }}>
-                                      {(() => {
+                                  {/* Skeleton loader for calendar cells during loading */}
+                                  {loading && isWorkHours && (
+                                    <CalendarCellSkeleton />
+                                  )}
+                                  
+                                  {/* Deal recommendation button or skeleton - show for any empty timeslot when deals are available */}
+                                  {!activity && allActivities.length === 0 && !isGreyedOut && !isLunch && enableOpportunities && onShowDealsDebugConsole && isWorkHours ? (
+                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ 
+                                      height: '128px', // Full hour block (2x 64px)
+                                      width: '100%',
+                                      top: 0,
+                                      zIndex: 20
+                                    }}>
+                                      {dealCountsLoading ? (
+                                        <DealButtonSkeleton />
+                                      ) : (
+                                        (() => {
                                         const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
                                         const counts = timeSlotDealCounts[dayKey];
-                                        const within1km = counts?.within1km || 0;
-                                        const within2_5km = counts?.within2_5km || 0;
-                                        const within5km = counts?.within5km || 0;
-                                        const within10km = counts?.within10km || 0;
-                                        const within15km = counts?.within15km || 0;
-                                        const within30km = counts?.within30km || 0;
-                                        const radiusText = counts?.radiusText || '';
+                                        
+                                        // Get the cumulative counts directly (now calculated correctly)
+                                        const total1km = counts?.within1km || 0;
+                                        const total2_5km = counts?.within2_5km || 0;
+                                        const total5km = counts?.within5km || 0;
+                                        const total10km = counts?.within10km || 0;
+                                        const total15km = counts?.within15km || 0;
+                                        const total30km = counts?.within30km || 0;
                                         
                                         // Determine display count, color, and radius (purple gradient system)
                                         let displayCount = 0;
                                         let colorClass = "bg-purple-600 hover:bg-purple-700"; // Bright purple for 1km
                                         let selectedRadius = null;
                                         
-                                        if (within1km > 0) {
-                                          displayCount = within1km;
+                                        if (total1km > 0) {
+                                          displayCount = total1km;
                                           colorClass = "bg-purple-600 hover:bg-purple-700"; // Bright purple for closest
                                           selectedRadius = 1;
-                                        } else if (within2_5km > 0) {
-                                          displayCount = within2_5km;
+                                        } else if (total2_5km > 0) {
+                                          displayCount = total2_5km;
                                           colorClass = "bg-purple-500 hover:bg-purple-600"; // Medium-bright purple  
                                           selectedRadius = 2.5;
-                                        } else if (within5km > 0) {
-                                          displayCount = within5km;
+                                        } else if (total5km > 0) {
+                                          displayCount = total5km;
                                           colorClass = "bg-purple-400 hover:bg-purple-500"; // Medium purple
                                           selectedRadius = 5;
-                                        } else if (within10km > 0) {
-                                          displayCount = within10km;
+                                        } else if (total10km > 0) {
+                                          displayCount = total10km;
                                           colorClass = "bg-purple-300 hover:bg-purple-400"; // Light purple
                                           selectedRadius = 10;
-                                        } else if (within15km > 0) {
-                                          displayCount = within15km;
+                                        } else if (total15km > 0) {
+                                          displayCount = total15km;
                                           colorClass = "bg-purple-200 hover:bg-purple-300 text-purple-800"; // Very light purple with dark text
                                           selectedRadius = 15;
-                                        } else if (within30km > 0) {
-                                          displayCount = within30km;
+                                        } else if (total30km > 0) {
+                                          displayCount = total30km;
                                           colorClass = "bg-purple-100 hover:bg-purple-200 text-purple-700"; // Barely purple with dark text
                                           selectedRadius = 30;
                                         }
@@ -978,9 +1004,16 @@ const InspectorCalendar = ({
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
+                                              // Set reference inspection for the deals console to sort by
+                                              const dayKey = `${format(day, 'yyyy-MM-dd')}-${timeSlot}`;
+                                              const timeSlotData = timeSlotDealCounts[dayKey];
+                                              if (timeSlotData?.referenceInspection) {
+                                                window.dealsSortByInspection = timeSlotData.referenceInspection;
+                                              }
                                               onShowDealsDebugConsole(day, timeSlot, selectedRadius);
                                             }}
-                                            className={`${colorClass} text-white px-3 py-2 rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center gap-1`}
+                                            className={`${colorClass} text-white px-3 py-2 rounded-full text-sm font-bold shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center gap-1 pointer-events-auto cursor-pointer`}
+                                            style={{ position: 'relative', zIndex: 10 }}
                                             title={`${displayCount} deal${displayCount !== 1 ? 's' : ''} within ${selectedRadius}km - Click to see recommendations`}
                                           >
                                             <Target className="w-4 h-4" />
@@ -988,7 +1021,8 @@ const InspectorCalendar = ({
                                             <span className="text-xs">within {selectedRadius}km</span>
                                           </button>
                                         );
-                                      })()}
+                                        })()
+                                      )}
                                     </div>
                                   ) : null}
                                   
@@ -1057,4 +1091,16 @@ const InspectorCalendar = ({
   );
 };
 
-export default InspectorCalendar;
+export default React.memo(InspectorCalendar, (prevProps, nextProps) => {
+  // Custom comparison to prevent unnecessary re-renders
+  return (
+    prevProps.selectedDate === nextProps.selectedDate &&
+    prevProps.selectedInspector === nextProps.selectedInspector &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.enableOpportunities === nextProps.enableOpportunities &&
+    prevProps.activities === nextProps.activities &&
+    prevProps.timeSlotDealCounts === nextProps.timeSlotDealCounts &&
+    prevProps.rosterData === nextProps.rosterData &&
+    prevProps.hoveredAppointment === nextProps.hoveredAppointment
+  );
+});

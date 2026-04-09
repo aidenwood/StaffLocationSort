@@ -132,6 +132,57 @@ const createPipedriveClient = () => {
 
 // Regional deal filters mapping
 export const REGIONAL_DEAL_FILTERS = {
+  R01: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R01 Ready to Book",
+    regions: ["Brisbane", "Ipswich", "Logan", "Gold Coast", "Logan Central", "Loganholme", "Eagleby", "Beenleigh", "Southport", "Surfers Paradise", "Broadbeach", "Beaudesert"]
+  },
+  R02: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R02 Ready to Book",
+    regions: ["Gympie", "Maryborough", "Tin Can Bay"]
+  },
+  R03: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R03 Ready to Book", 
+    regions: ["Sunshine Coast", "Moreton Region", "Caloundra", "Maroochydore", "Nambour"]
+  },
+  R04: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R04 Ready to Book",
+    regions: ["Gatton", "Toowoomba", "Oakey"]
+  },
+  R05: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R05 Ready to Book",
+    regions: ["Stanthorpe", "Tara", "Warwick", "Texas"]
+  },
+  R06: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R06 Ready to Book",
+    regions: ["Emerald", "Rockhampton", "Roma"]
+  },
+  R07: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R07 Ready to Book",
+    regions: ["Grafton", "Port Macquarie", "Coffs Harbour"]
+  },
+  R08: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R08 Ready to Book",
+    regions: ["Tamworth", "Armidale", "Glen Innes"]
+  },
+  R09: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R09 Ready to Book",
+    regions: ["Newcastle", "Maitland", "Port Stephens", "Cessnock", "Lake Macquarie", "Central Coast", "Aberglasslyn", "Rutherford", "Mereweather", "Gwandalan"]
+  },
+  R10: {
+    filterId: 222491, // Using same filter for all regions temporarily
+    name: "R10 Ready to Book",
+    regions: ["Sydney", "Penrith", "Parramatta", "Liverpool", "Campbelltown", "Blacktown", "Camden", "Richmond", "Windsor"]
+  },
+  // Keep R1 for backwards compatibility
   R1: {
     filterId: 222491, // R1 region filter - Brisbane, Ipswich, Logan, Gold Coast
     name: "R1 Ready to Book",

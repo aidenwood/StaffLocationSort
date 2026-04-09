@@ -1025,4 +1025,15 @@ const GoogleMapsView = ({
   );
 };
 
-export default GoogleMapsView;
+export default React.memo(GoogleMapsView, (prevProps, nextProps) => {
+  // Custom comparison to prevent unnecessary re-renders
+  return (
+    prevProps.selectedDate === nextProps.selectedDate &&
+    prevProps.selectedInspector === nextProps.selectedInspector &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.enrichedDayActivities === nextProps.enrichedDayActivities &&
+    prevProps.dealsToShow === nextProps.dealsToShow &&
+    prevProps.potentialBooking === nextProps.potentialBooking &&
+    prevProps.hoveredAppointment === nextProps.hoveredAppointment
+  );
+});
