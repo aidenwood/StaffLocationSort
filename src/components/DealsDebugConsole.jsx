@@ -908,6 +908,17 @@ const DealsDebugConsole = ({
                         {deal.stageName}
                       </span>
                     )}
+                    {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
+                      <span className={`px-1.5 py-0.5 text-xs rounded flex items-center gap-1 font-medium ${getDistanceColor(deal.distanceInfo.minDistance)}`}>
+                        <Navigation className="w-2.5 h-2.5" />
+                        {deal.distanceInfo.minDistance.toFixed(1)}km
+                      </span>
+                    )}
+                    {deal.coordinates && (
+                      <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 rounded" title={`${deal.coordinates.lat?.toFixed(4)}, ${deal.coordinates.lng?.toFixed(4)}`}>
+                        📍 {deal.coordinates.lat?.toFixed(2)}, {deal.coordinates.lng?.toFixed(2)}
+                      </span>
+                    )}
                     {deal.person?.name && deal.person.name !== 'Unknown Customer' && (
                       <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
                         <User className="w-3 h-3" />
@@ -947,27 +958,11 @@ const DealsDebugConsole = ({
                     </div>
                   ) : null}
 
-                  {/* Continue with existing layout */}
-                  <div className="flex items-center gap-2 mb-2 text-xs text-gray-600">
-                    {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
-                        <span className={`px-1.5 py-0.5 text-xs rounded flex items-center gap-1 font-medium ${getDistanceColor(deal.distanceInfo.minDistance)}`}>
-                          <Navigation className="w-2.5 h-2.5" />
-                          {deal.distanceInfo.minDistance.toFixed(1)}km
-                        </span>
-                      )}
-                  </div>
 
                   {/* Pills and Actions Row */}
                   <div className="flex items-center justify-between gap-2">
                     {/* Left side pills */}
                     <div className="flex items-center gap-1 flex-wrap">
-                      
-                      
-                      {deal.coordinates && (
-                        <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700 rounded" title={`${deal.coordinates.lat?.toFixed(4)}, ${deal.coordinates.lng?.toFixed(4)}`}>
-                          📍 {deal.coordinates.lat?.toFixed(2)}, {deal.coordinates.lng?.toFixed(2)}
-                        </span>
-                      )}
                       
 
                       {/* Address Row */}
