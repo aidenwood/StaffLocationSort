@@ -501,6 +501,7 @@ const InspectionDashboard = ({ pipedriveData, refreshInspections }) => {
             onShowDealsDebugConsole={handleShowDealsDebugConsole}
             rosterData={rosterData}
             mobileViewMode={mobileViewMode}
+            dealStageFilter={dealStageFilter}
           />
         </ErrorBoundary>
 

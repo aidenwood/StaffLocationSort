@@ -9,6 +9,7 @@ import {
   groupDealsByProximity,
   REGIONAL_DEAL_FILTERS 
 } from '../api/pipedriveDeals.js';
+import { fetchPersonMostRecentActivity, fetchDealsRecentActivities } from '../api/pipedriveRead.js';
 
 const DealsDebugConsole = ({ 
   isOpen, 
@@ -61,6 +62,9 @@ const DealsDebugConsole = ({
   const [selectedDeals, setSelectedDeals] = useState([]); // For showing multiple selected deals on map
   const [showAll, setShowAll] = useState(false); // Show all deals in current radius on map
   const [lastFetchTime, setLastFetchTime] = useState(null); // Track when deals were last fetched
+  const [recentActivities, setRecentActivities] = useState({}); // Cache of recent activities by person ID
+  const [dealActivities, setDealActivities] = useState({}); // Cache of recent activities by deal ID
+  const [dealActivitiesLoading, setDealActivitiesLoading] = useState(false);
 
   // Helper function to handle radius changes and update map markers if toggle is on
   const handleRadiusChange = (newRadius) => {
@@ -102,6 +106,85 @@ const DealsDebugConsole = ({
       setSelectedDistanceFilter(context.radius);
     }
   }, [isOpen, context]);
+
+  // Fetch recent activities for persons in deals
+  const fetchRecentActivitiesForDeals = useCallback(async (deals) => {
+    if (!deals || deals.length === 0) return;
+
+    const activitiesToFetch = {};
+    
+    // Collect unique person IDs from deals
+    deals.forEach(deal => {
+      if (deal.person_id && !recentActivities[deal.person_id]) {
+        activitiesToFetch[deal.person_id] = true;
+      }
+    });
+
+    const personIds = Object.keys(activitiesToFetch);
+    if (personIds.length === 0) return;
+
+    console.log(`🔄 Fetching recent activities for ${personIds.length} persons...`);
+    
+    // Fetch activities for all persons (up to first 10 to avoid too many API calls)
+    const promises = personIds.slice(0, 10).map(async (personId) => {
+      try {
+        const activity = await fetchPersonMostRecentActivity(Number(personId));
+        return { personId, activity };
+      } catch (error) {
+        console.error(`Failed to fetch activity for person ${personId}:`, error);
+        return { personId, activity: null };
+      }
+    });
+
+    const results = await Promise.all(promises);
+    
+    // Update recent activities state
+    const newActivities = { ...recentActivities };
+    results.forEach(({ personId, activity }) => {
+      newActivities[personId] = activity;
+    });
+    
+    setRecentActivities(newActivities);
+    console.log(`✅ Fetched recent activities for ${results.length} persons`);
+  }, [recentActivities]);
+
+  // Fetch recent activities for deals
+  const fetchDealActivitiesForDeals = useCallback(async (deals) => {
+    if (!deals || deals.length === 0) return;
+
+    setDealActivitiesLoading(true);
+    
+    // Collect deal IDs that need activities fetched (limit to visible deals to avoid excessive API calls)
+    const dealIds = deals
+      .filter(deal => deal.id && !dealActivities[deal.id])
+      .slice(0, 20) // Limit to first 20 deals to respect rate limits
+      .map(deal => deal.id);
+
+    if (dealIds.length === 0) {
+      setDealActivitiesLoading(false);
+      return;
+    }
+
+    console.log(`🔄 Fetching recent activities for ${dealIds.length} deals...`);
+    
+    try {
+      const results = await fetchDealsRecentActivities(dealIds);
+      
+      // Update deal activities state
+      setDealActivities(prev => ({
+        ...prev,
+        ...results
+      }));
+      
+      const fetchedCount = Object.keys(results).length;
+      console.log(`✅ Fetched recent activities for ${fetchedCount} deals`);
+      
+    } catch (error) {
+      console.error('❌ Error fetching deal activities:', error);
+    } finally {
+      setDealActivitiesLoading(false);
+    }
+  }, [dealActivities]);
 
 
   // Get region for current inspector
@@ -215,12 +298,17 @@ const DealsDebugConsole = ({
         if (window.dealsSortByInspection) {
           sortingInspections = [window.dealsSortByInspection];
           // Auto-select this inspection in dropdown
-          setSelectedSortInspection(window.dealsSortByInspection.id.toString());
+          if (window.dealsSortByInspection.id) {
+            setSelectedSortInspection(window.dealsSortByInspection.id.toString());
+          } else {
+            // Handle region center reference inspections that don't have an id
+            setSelectedSortInspection('region-center');
+          }
           // Clear the window variable
           window.dealsSortByInspection = null;
         } else if (selectedSortInspection !== 'all') {
           // Use specific inspection from dropdown
-          const selectedInspection = inspectionActivities.find(a => a.id.toString() === selectedSortInspection);
+          const selectedInspection = inspectionActivities.find(a => a.id && a.id.toString() === selectedSortInspection);
           if (selectedInspection) {
             sortingInspections = [selectedInspection];
           }
@@ -278,6 +366,13 @@ const DealsDebugConsole = ({
       
       setDeals(processedDeals);
       setLastFetchTime(new Date()); // Track when deals were fetched
+      
+      // Fetch recent activities for persons in the deals
+      if (processedDeals.length > 0) {
+        fetchRecentActivitiesForDeals(processedDeals);
+        fetchDealActivitiesForDeals(processedDeals);
+      }
+      
       console.log(`✅ Loaded ${processedDeals.length} deals for region ${region}${sortByDistance ? ' (sorted by distance)' : ''}${dealStageFilter !== 'all' ? ` (filtered by ${dealStageFilter})` : ''}`);
       
     } catch (err) {
@@ -726,7 +821,7 @@ const DealsDebugConsole = ({
                 className="px-2 py-1 border border-gray-300 rounded text-xs"
               >
                 <option value="all">All</option>
-                {inspectionActivities.map(activity => (
+                {inspectionActivities.filter(activity => activity.id).map(activity => (
                   <option key={activity.id} value={activity.id.toString()}>
                     {activity.due_time} - {activity.personAddress?.split(',')[0] || activity.subject?.substring(0, 15)}
                   </option>
@@ -817,6 +912,12 @@ const DealsDebugConsole = ({
                       <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded">
                         <User className="w-3 h-3" />
                         {deal.person.name}
+                        {/* Show recent activity if available */}
+                        {recentActivities[deal.person_id] && (
+                          <span className="text-xs text-blue-600 ml-1" title={`Most recent activity: ${recentActivities[deal.person_id].subject || 'Activity'} - ${recentActivities[deal.person_id].due_date || recentActivities[deal.person_id].add_time}`}>
+                            ({recentActivities[deal.person_id].subject?.substring(0, 15) || 'Recent activity'}...)
+                          </span>
+                        )}
                       </div>
                     )}
                     {deal.person?.phone && (
@@ -825,7 +926,29 @@ const DealsDebugConsole = ({
                         {deal.person.phone}
                       </div>
                     )}
+                  </div>
 
+                  {/* Deal Recent Activity Row */}
+                  {(dealActivities[deal.id] && dealActivities[deal.id]?.subject) || (!dealActivities[deal.id] && dealActivitiesLoading) ? (
+                    <div className="mb-2">
+                      {dealActivities[deal.id] && dealActivities[deal.id]?.subject && (
+                        <span 
+                          className="px-2 py-1 text-xs rounded bg-indigo-50 text-indigo-700 border border-indigo-200 inline-flex items-center gap-1"
+                          title={`Most recent activity: ${dealActivities[deal.id].subject} ${dealActivities[deal.id].due_date ? `- ${dealActivities[deal.id].due_date}` : ''}`}
+                        >
+                          📅 {dealActivities[deal.id].subject}
+                        </span>
+                      )}
+                      {!dealActivities[deal.id] && dealActivitiesLoading && (
+                        <span className="px-2 py-1 text-xs rounded bg-gray-50 text-gray-500 border border-gray-200 inline-flex items-center gap-1">
+                          ⏳ Loading activity...
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* Continue with existing layout */}
+                  <div className="flex items-center gap-2 mb-2 text-xs text-gray-600">
                     {deal.distanceInfo && deal.distanceInfo.minDistance !== null && (
                         <span className={`px-1.5 py-0.5 text-xs rounded flex items-center gap-1 font-medium ${getDistanceColor(deal.distanceInfo.minDistance)}`}>
                           <Navigation className="w-2.5 h-2.5" />

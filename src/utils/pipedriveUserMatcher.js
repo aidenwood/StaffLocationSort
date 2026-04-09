@@ -23,7 +23,7 @@ const ROSTER_DATA = [
   { firstName: "Owen", lastName: "Telford", jobTitle: "Sales Representative - SEQ", region: "R1", location: "RICHLANDS, QLD" },
   { firstName: "Thomas", lastName: "Dennerley", jobTitle: "Sales Representative - SEQ", region: "R1", location: "LABRADOR, QLD" },
   { firstName: "Eric", lastName: "Knutsen", jobTitle: "Sales Representative / Roof Inspector", region: "", location: "SANDY FLAT, NSW" },
-  { firstName: "Finlay", lastName: "Coop", jobTitle: "Sales Representative/Roof Inspector", region: "", location: "ARMIDALE, NSW" },
+  { firstName: "Finlay", lastName: "Coop", jobTitle: "Sales Representative/Roof Inspector", region: "R08", location: "ARMIDALE, NSW" },
   { firstName: "Timothy", lastName: "McGill", jobTitle: "Sales Representative/Roof Inspector", region: "", location: "WHITEBRIDGE, NSW" }
 ];
 

@@ -21,11 +21,15 @@ const CalendarContainer = ({
   showOpportunities,
   onShowDealsDebugConsole,
   rosterData,
-  mobileViewMode
+  mobileViewMode,
+  dealStageFilter = 'all'
 }) => {
   const [timeSlotDealCounts, setTimeSlotDealCounts] = useState({});
   const [dealCountsLoading, setDealCountsLoading] = useState(false);
   const [initialDataLoading, setInitialDataLoading] = useState(true);
+  
+  // Persistent deals cache to avoid refetching on filter changes
+  const [dealsCache, setDealsCache] = useState({});
 
   // Memoize the calculation function with proper dependencies
   const calculateTimeSlotDealCounts = useCallback(async () => {
@@ -40,9 +44,6 @@ const CalendarContainer = ({
       // Get inspector's default region from profile as fallback
       const currentInspector = pipedriveInspectors?.find(i => i.id === selectedInspector);
       const defaultRegion = currentInspector?.region || 'R01';
-      
-      // Cache deals per region to avoid multiple fetches
-      let dealsCache = {};
       
       const counts = {};
       
@@ -98,12 +99,62 @@ const CalendarContainer = ({
           }
         }
         
-        if (!dealsCache[regionForDay]) {
-          const regionDeals = await getDealsForRegion(regionForDay, { limit: 200 });
-          dealsCache[regionForDay] = regionDeals || [];
+        let deals;
+        // Create cache key that includes stage filter to avoid conflicts
+        const cacheKey = dealStageFilter === 'all' ? `${regionForDay}_ALL` : regionForDay;
+        
+        if (!dealsCache[cacheKey]) {
+          console.log(`🔄 Calendar: Fetching deals for region ${regionForDay} (not in cache, filter: ${dealStageFilter})`);
+          
+          let regionDeals;
+          if (dealStageFilter === 'all') {
+            // ISSUE: All regions use Pipedrive filter 222491 which is "Ready to Book" only!
+            // This means "All Deals" still only shows "Lead to Book" deals from Pipedrive
+            // TODO: Need different filter ID for all deals, or modify getDealsForRegion to accept no filter
+            regionDeals = await getDealsForRegion(regionForDay, { limit: 500 });
+            console.log(`⚠️ Calendar: "All Deals" limited to Pipedrive filter 222491 ("Ready to Book"). Fetched ${regionDeals?.length || 0} deals.`);
+            console.log(`💡 To show true "All Deals": Need broader Pipedrive filter or no filter option in getDealsForRegion()`);
+          } else {
+            regionDeals = await getDealsForRegion(regionForDay, { limit: 200 });
+          }
+          
+          setDealsCache(prev => ({
+            ...prev,
+            [cacheKey]: regionDeals || []
+          }));
+          // Use the fresh data immediately
+          deals = regionDeals || [];
+        } else {
+          console.log(`📦 Calendar: Using cached deals for region ${regionForDay} (${dealsCache[cacheKey].length} deals, filter: ${dealStageFilter})`);
+          deals = dealsCache[cacheKey] || [];
         }
         
-        const deals = dealsCache[regionForDay] || [];
+        // Apply deal stage filter (same logic as DealsDebugConsole)
+        const originalDealsCount = deals.length;
+        if (dealStageFilter !== 'all' && deals.length > 0) {
+          deals = deals.filter(deal => {
+            if (!deal.stageName) return true; // Include deals without stage name
+            const stageLower = deal.stageName.toLowerCase();
+            
+            if (dealStageFilter === 'lead_to_book') {
+              return stageLower.includes('book') || 
+                     stageLower.includes('to book') || 
+                     stageLower.includes('ready') ||
+                     stageLower === 'lead to book';
+            } else if (dealStageFilter === 'lead_interested') {
+              return stageLower.includes('interested') || 
+                     stageLower.includes('lead interested') ||
+                     stageLower.includes('qualify') ||
+                     stageLower === 'lead interested';
+            }
+            return true;
+          });
+          
+          // Debug logging for deal filtering
+          if (originalDealsCount !== deals.length) {
+            console.log(`🎯 Calendar: Stage filter '${dealStageFilter}' reduced deals from ${originalDealsCount} to ${deals.length} for region ${regionForDay}`);
+          }
+        }
         
         // Get ALL activities for this specific day for the selected inspector
         const dayActivities = enrichedActivities.filter(a =>
@@ -180,9 +231,12 @@ const CalendarContainer = ({
           // Always use region center as fallback
           if (!referenceInspection && regionCenter) {
             referenceInspection = {
+              id: `region-center-${regionForDay}-${dayString}-${timeSlot}`,
               coordinates: { lat: regionCenter.lat, lng: regionCenter.lng },
               personAddress: `${regionCenter.name} Center`,
-              due_date: dayString
+              due_date: dayString,
+              due_time: timeSlot,
+              subject: `${regionCenter.name} Center Reference`
             };
           }
           
@@ -231,7 +285,7 @@ const CalendarContainer = ({
       console.error('❌ Error calculating time slot deal counts:', err);
       setDealCountsLoading(false);
     }
-  }, [selectedInspector, pipedriveInspectors, selectedDate, rosterData, showOpportunities]);
+  }, [selectedInspector, pipedriveInspectors, selectedDate, rosterData, showOpportunities, dealStageFilter]);
 
   // Get week start for dependency tracking - match calendar logic (Sunday start)
   const weekStart = useMemo(() => {
@@ -239,6 +293,7 @@ const CalendarContainer = ({
     return addDays(selectedDate, -currentDay); // Sunday of current week
   }, [selectedDate]);
   
+
   // Recalculate deal counts when dependencies change (throttled)
   useEffect(() => {
     if (!showOpportunities) {
@@ -248,11 +303,12 @@ const CalendarContainer = ({
 
     // Throttle to prevent excessive calls
     const timeoutId = setTimeout(() => {
+      console.log(`🔄 Calendar: Recalculating deal counts (filter: ${dealStageFilter})`);
       calculateTimeSlotDealCounts();
-    }, 500); // 500ms delay to batch rapid changes
+    }, 200); // Reduced delay for faster response
 
     return () => clearTimeout(timeoutId);
-  }, [selectedInspector, weekStart, showOpportunities, rosterData]);
+  }, [selectedInspector, weekStart, showOpportunities, rosterData, dealStageFilter]);
 
   // Handle initial loading state
   useEffect(() => {

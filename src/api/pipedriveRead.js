@@ -11,6 +11,10 @@ import {
   isTestUser
 } from '../config/pipedriveUsers.js';
 
+// Cache for recent activities to avoid repeated API calls
+const recentActivitiesCache = new Map();
+const RECENT_ACTIVITY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Helper function for flexible inspector name matching
 const checkInspectorNameMatch = (subject, inspectorName, inspectorAliases = []) => {
   if (!subject || !inspectorName) return false;
@@ -1763,4 +1767,190 @@ export const healthCheck = async () => {
       timestamp: new Date().toISOString()
     };
   }
+};
+
+/**
+ * Fetch the most recent activity for a person (READ-ONLY)
+ * @param {number} personId - Pipedrive person ID
+ * @returns {Promise<Object|null>} Most recent activity or null
+ */
+export const fetchPersonMostRecentActivity = async (personId) => {
+  if (!personId) return null;
+
+  // Check cache first
+  const cacheKey = `person-${personId}-recent-activity`;
+  const cached = recentActivitiesCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < RECENT_ACTIVITY_CACHE_TTL) {
+    return cached.activity;
+  }
+
+  try {
+    const client = createPipedriveClient();
+    
+    // Fetch activities for the person
+    const response = await client.get(`/persons/${personId}/activities`, {
+      params: {
+        start: 0,
+        limit: 50, // Get recent activities
+        sort: 'id DESC' // Try to get most recent first (though Pipedrive sorts by id, not date)
+      }
+    });
+    
+    if (!response.data.success || !response.data.data) {
+      return null;
+    }
+    
+    const activities = response.data.data;
+    
+    if (activities.length === 0) {
+      return null;
+    }
+    
+    // Sort activities by date on our end since Pipedrive doesn't support date sorting
+    const sortedActivities = activities.sort((a, b) => {
+      // Try due_date first, then marked_as_done_time, then add_time
+      const dateA = a.due_date || a.marked_as_done_time || a.add_time;
+      const dateB = b.due_date || b.marked_as_done_time || b.add_time;
+      
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      
+      return new Date(dateB) - new Date(dateA); // Most recent first
+    });
+    
+    const mostRecentActivity = sortedActivities[0];
+    
+    // Cache the result
+    recentActivitiesCache.set(cacheKey, {
+      activity: mostRecentActivity,
+      timestamp: Date.now()
+    });
+    
+    return mostRecentActivity;
+    
+  } catch (error) {
+    console.error(`❌ Error fetching recent activity for person ${personId}:`, error.message);
+    return null;
+  }
+};
+
+/**
+ * Fetch the most recent activity for a deal using API v1 (READ-ONLY)
+ * @param {number} dealId - Pipedrive deal ID
+ * @returns {Promise<Object|null>} Most recent activity or null
+ */
+export const fetchDealMostRecentActivity = async (dealId) => {
+  if (!dealId) return null;
+
+  // Check cache first
+  const cacheKey = `deal-${dealId}-recent-activity`;
+  const cached = recentActivitiesCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < RECENT_ACTIVITY_CACHE_TTL) {
+    return cached.activity;
+  }
+
+  try {
+    const client = createPipedriveClient();
+    
+    // Use v1 endpoint for deal activities (v2 endpoint not supported by proxy)
+    const response = await client.get(`/deals/${dealId}/activities`, {
+      params: {
+        start: 0,
+        limit: 50,
+        sort: 'id DESC'
+      }
+    });
+    
+    if (!response.data.success || !response.data.data || response.data.data.length === 0) {
+      // Cache null result to avoid repeated calls for deals with no activities
+      recentActivitiesCache.set(cacheKey, {
+        activity: null,
+        timestamp: Date.now()
+      });
+      return null;
+    }
+    
+    // Sort activities by date (most recent first) since v1 API doesn't guarantee order
+    const activities = response.data.data;
+    const sortedActivities = activities.sort((a, b) => {
+      const dateA = a.due_date || a.add_time || '';
+      const dateB = b.due_date || b.add_time || '';
+      return new Date(dateB) - new Date(dateA); // Most recent first
+    });
+    
+    const mostRecentActivity = sortedActivities[0];
+    
+    // Cache the result
+    recentActivitiesCache.set(cacheKey, {
+      activity: mostRecentActivity,
+      timestamp: Date.now()
+    });
+    
+    return mostRecentActivity;
+    
+  } catch (error) {
+    console.error(`❌ Error fetching recent activity for deal ${dealId}:`, error.message);
+    return null;
+  }
+};
+
+/**
+ * Fetch recent activities for multiple deals in batch (READ-ONLY)
+ * @param {Array<number>} dealIds - Array of Pipedrive deal IDs
+ * @returns {Promise<Object>} Object mapping deal IDs to their recent activities
+ */
+export const fetchDealsRecentActivities = async (dealIds) => {
+  if (!dealIds || dealIds.length === 0) return {};
+
+  const results = {};
+  const dealIdsToFetch = [];
+  
+  // Check cache first for each deal
+  dealIds.forEach(dealId => {
+    const cacheKey = `deal-${dealId}-recent-activity`;
+    const cached = recentActivitiesCache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < RECENT_ACTIVITY_CACHE_TTL) {
+      results[dealId] = cached.activity;
+    } else {
+      dealIdsToFetch.push(dealId);
+    }
+  });
+
+  if (dealIdsToFetch.length === 0) {
+    return results;
+  }
+
+  // Batch fetch activities with rate limiting consideration
+  const batchSize = 5; // Process 5 deals at a time to respect rate limits
+  
+  for (let i = 0; i < dealIdsToFetch.length; i += batchSize) {
+    const batch = dealIdsToFetch.slice(i, i + batchSize);
+    
+    // Use Promise.allSettled to handle individual failures gracefully
+    const batchResults = await Promise.allSettled(
+      batch.map(dealId => fetchDealMostRecentActivity(dealId))
+    );
+    
+    // Process results
+    batch.forEach((dealId, index) => {
+      const result = batchResults[index];
+      if (result.status === 'fulfilled') {
+        results[dealId] = result.value;
+      } else {
+        console.warn(`Failed to fetch activity for deal ${dealId}:`, result.reason);
+        results[dealId] = null;
+      }
+    });
+    
+    // Small delay between batches to respect rate limits (2-second window)
+    if (i + batchSize < dealIdsToFetch.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  return results;
 };
